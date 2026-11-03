@@ -1,0 +1,123 @@
+.fire-planning-page label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.fire-planning-page input {
+  min-width: 0;
+  width: 100%;
+}
+.fire-planning-page p {
+  overflow-wrap: anywhere;
+}
+.fire-currency {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-block: 24px;
+}
+.fire-currency label {
+  min-width: 180px;
+}
+.fire-currency span,
+.fire-source {
+  color: var(--muted);
+  font-size: 13px;
+}
+.fire-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin-block: 24px;
+}
+.fire-table-scroll {
+  overflow-x: auto;
+  margin-block: 24px;
+}
+.fire-table-scroll table {
+  border-collapse: collapse;
+  min-width: 1000px;
+  width: 100%;
+}
+.fire-table-scroll caption {
+  text-align: start;
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+.fire-table-scroll td,
+.fire-table-scroll th {
+  border-bottom: 1px solid var(--border);
+  padding: 12px;
+  text-align: start;
+}
+.fire-table-scroll td input {
+  width: 110px;
+}
+.fire-table-scroll small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.fire-actions,
+.fire-year-add,
+.fire-lookup {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: end;
+  margin-block: 24px;
+}
+.fire-year-add label {
+  max-width: 180px;
+}
+.fire-lookup label {
+  flex: 1;
+  max-width: 520px;
+}
+.fire-observations {
+  margin-top: 48px;
+}
+.fire-history {
+  margin-block: 24px;
+}
+.fire-history-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-block: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.fire-history-row time {
+  flex: 1;
+  min-width: 160px;
+}
+.fire-history-row small {
+  color: var(--muted);
+}
+.fire-request-id {
+  overflow-wrap: anywhere;
+  font-family: var(--mono, monospace);
+}
+.fire-pending {
+  margin-block: 24px;
+}
+@media (max-width: 640px) {
+  .fire-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fire-history-row time {
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 400px) {
+  .fire-fields {
+    grid-template-columns: 1fr;
+  }
+  .fire-lookup label {
+    flex-basis: 100%;
+  }
+}

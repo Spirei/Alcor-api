@@ -1,0 +1,133 @@
+.portfolio-page {
+  max-width: var(--content-width, 960px);
+}
+.portfolio-page .page-heading,
+.portfolio-actions,
+.portfolio-tabs,
+.portfolio-receipt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.portfolio-page .page-heading {
+  justify-content: space-between;
+}
+.portfolio-tabs,
+.portfolio-actions {
+  margin: 20px 0;
+}
+.portfolio-table {
+  overflow-x: auto;
+}
+.portfolio-table table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+  white-space: nowrap;
+}
+.portfolio-table th,
+.portfolio-table td {
+  text-align: left;
+  padding: 12px;
+}
+.portfolio-table small {
+  display: block;
+  opacity: 0.6;
+  margin-top: 4px;
+}
+.portfolio-brokers {
+  list-style: none;
+  padding: 0;
+}
+.portfolio-brokers li {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+.portfolio-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.portfolio-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.portfolio-form input,
+.portfolio-form select {
+  width: 100%;
+  min-width: 0;
+}
+.portfolio-form button {
+  grid-column: 1/-1;
+  justify-self: end;
+}
+.portfolio-proof > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 0;
+}
+.portfolio-proof dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .portfolio-form {
+    grid-template-columns: 1fr;
+  }
+  .portfolio-brokers li {
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+.portfolio-form .ledger-confirmation {
+  grid-column: 1/-1;
+  flex-direction: row;
+  align-items: center;
+}
+.portfolio-form .ledger-confirmation input {
+  width: auto;
+}
+
+.portfolio-page dialog > .portfolio-form {
+  padding: 24px;
+}
+.portfolio-page dialog > .portfolio-proof {
+  margin: 0;
+  padding: 16px 24px;
+}
+.portfolio-page dialog > p {
+  margin: 0 24px 16px;
+}
+.portfolio-page dialog > .button {
+  margin: 0 24px 24px;
+}
+
+.broker-currencies {
+  grid-column: 1/-1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.broker-currencies label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.broker-currencies input {
+  width: auto;
+}
+.broker-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

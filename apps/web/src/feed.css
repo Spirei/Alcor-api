@@ -1,0 +1,18 @@
+.feed-page { max-width: 960px; margin-inline: auto; }
+.feed-toolbar,.feed-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.feed-toolbar { margin-block:16px; }
+.feed-page label,.feed-fields { display:grid; gap:8px; min-width:0; }
+.feed-fields { gap:16px; }
+.feed-page input[type=checkbox] { width:auto; }
+.feed-post,.feed-job { padding:20px 0; border-bottom:1px solid var(--border-color,#e5e7eb); }
+.feed-post-heading { display:flex; justify-content:space-between; gap:16px; align-items:baseline; }
+.feed-post h2 { font-size:16px; margin:0; }
+.feed-post h2 button { font:inherit; background:none; border:0; color:inherit; padding:0; text-align:left; cursor:pointer; }
+.feed-post time,.feed-page small { font-size:12px; }
+.feed-plain-text,.feed-post p { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.65; }
+.feed-page textarea { width:100%; min-height:96px; }
+.feed-agent { display:flex; gap:10px; align-items:center; margin-block:16px; }
+.feed-agent img { width:36px; height:36px; border-radius:50%; object-fit:cover; }
+.feed-page details { margin-block:16px; }
+.feed-pending code { overflow-wrap:anywhere; }
+.feed-profile-image { width:72px; height:72px; border-radius:50%; object-fit:cover; }

@@ -1,0 +1,12 @@
+.portfolio-analysis { margin-block: 12px; }
+.portfolio-analysis label { display: grid; gap: 6px; }
+.portfolio-analysis .analysis-totals { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 16px; margin-block: 20px; }
+.portfolio-analysis dl>div { min-width: 0; }
+.portfolio-analysis dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.portfolio-analysis td { vertical-align: top; }
+.portfolio-analysis td small { display: block; overflow-wrap: anywhere; }
+.portfolio-analysis details { margin-block: 10px; }
+.portfolio-analysis h3 { font-size: 14px; margin-top: 20px; }
+.portfolio-analysis figure { margin: 16px 0; }
+.portfolio-analysis figure svg { display: block; width: 100%; max-width: 720px; height: auto; color: var(--text-primary, #4b5563); }
+.portfolio-analysis figcaption { font-size: 12px; }

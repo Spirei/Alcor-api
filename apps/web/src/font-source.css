@@ -1,0 +1,42 @@
+.font-source-panel {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.font-source-panel > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.font-source-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+.font-source-body form,
+.font-source-secrets,
+.font-source-recovery {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.font-source-body label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.font-source-body input:not([type="checkbox"]) {
+  width: 100%;
+  min-width: 0;
+}
+.font-source-ack {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 8px;
+}
+.font-source-id {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.font-source-body button {
+  justify-self: start;
+}

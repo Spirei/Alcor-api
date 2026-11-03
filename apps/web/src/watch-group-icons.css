@@ -1,0 +1,69 @@
+.watch-group-icons {
+  margin-top: 44px;
+}
+.watch-icon-fields,
+.watch-icon-lookup,
+.watch-icon-version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-block: 24px;
+}
+.watch-icon-fields label,
+.watch-icon-lookup label {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 180px;
+  max-width: 520px;
+}
+.watch-icon-fields {
+  align-items: end;
+}
+.watch-icon-fields .select-menu-trigger {
+  min-width: 180px;
+  max-width: 100%;
+}
+.watch-icon-lookup {
+  align-items: end;
+}
+.watch-icon-version span,
+.watch-group-icons dd {
+  overflow-wrap: anywhere;
+}
+.watch-icon-version small,
+.watch-group-icons figcaption {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.watch-group-icons dl {
+  display: grid;
+  gap: 10px;
+}
+.watch-group-icons dd {
+  margin: 0;
+}
+.watch-group-icons dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.watch-group-icons figure {
+  margin: 20px 0;
+  max-width: 320px;
+}
+.watch-group-icons figure img {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+@media (max-width: 640px) {
+  .watch-icon-fields label,
+  .watch-icon-lookup label {
+    flex-basis: 100%;
+  }
+  .watch-icon-version span {
+    width: 100%;
+  }
+}

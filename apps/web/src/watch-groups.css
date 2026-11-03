@@ -1,0 +1,132 @@
+.watch-groups-page label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.watch-groups-page input {
+  width: 100%;
+  min-width: 0;
+}
+.watch-groups-page p,
+.watch-groups-page dd {
+  overflow-wrap: anywhere;
+}
+.watch-group-create,
+.watch-group-filters,
+.watch-group-assign,
+.watch-group-lookup,
+.watch-group-pagination,
+.watch-group-row-actions,
+.watch-group-member-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.watch-group-create,
+.watch-group-lookup {
+  align-items: end;
+  margin-block: 24px;
+}
+.watch-group-create label,
+.watch-group-lookup label {
+  flex: 1;
+  max-width: 520px;
+  min-width: 180px;
+}
+.watch-group-search {
+  max-width: 520px;
+  margin-block: 24px;
+}
+.watch-group-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(90px, 0.5fr) minmax(
+      160px,
+      1fr
+    );
+  align-items: end;
+  gap: 16px;
+  padding-block: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.watch-group-kind {
+  color: var(--muted);
+  font-size: 13px;
+  align-self: center;
+}
+.watch-group-row-actions {
+  grid-column: 1/-1;
+}
+.watch-group-row label {
+  font-size: 13px;
+  color: var(--muted);
+}
+.watch-group-member-heading {
+  justify-content: space-between;
+  margin-top: 44px;
+}
+.watch-group-member-heading h2 {
+  margin: 0;
+}
+.watch-group-filters,
+.watch-group-assign,
+.watch-group-pagination {
+  margin-block: 24px;
+}
+.watch-group-filters .select-menu-trigger,
+.watch-group-assign .select-menu-trigger {
+  min-width: 170px;
+  max-width: 100%;
+}
+.watch-group-records .watch-group-record {
+  display: grid;
+  grid-template-columns: 22px minmax(120px, 1fr) minmax(100px, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding-block: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.watch-group-records input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+.watch-group-record strong,
+.watch-group-record small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.watch-group-record small,
+.watch-group-record > span:last-child,
+.watch-group-pagination span,
+.watch-group-assign > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.watch-group-receipt dl {
+  display: grid;
+  gap: 10px;
+}
+.watch-group-receipt dd {
+  margin: 0;
+}
+.watch-group-receipt dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .watch-group-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .watch-group-kind {
+    margin-top: -6px;
+  }
+  .watch-group-records .watch-group-record {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  .watch-group-record > span:last-child {
+    grid-column: 2;
+  }
+  .watch-group-lookup label {
+    flex-basis: 100%;
+  }
+}

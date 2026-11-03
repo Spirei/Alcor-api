@@ -1,0 +1,135 @@
+name: Publish AlcorApi
+run-name: AlcorApi release ${{ inputs.request_id || github.sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Deployment page receipt UUID
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: alcor-api-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: npm ci
+      - run: uv run python tools/bootstrap-redis.py
+      - run: uv run pytest -q
+      - run: npm run test:web
+      - run: npm run build
+      - run: uv run python tools/validate-deployment.py --root .
+      - name: Release identity
+        id: identity
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          h=hashlib.sha256()
+          for path in sorted(Path('migrations').glob('*.sql')):
+              h.update(path.name.encode()+b'\0'+path.read_bytes()+b'\0')
+          values={'version':json.loads(Path('package.json').read_text())['version'], 'schema':h.hexdigest(), 'image':'ghcr.io/'+os.environ['REPOSITORY'].lower()}
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              for key,value in values.items(): print(key+'='+value,file=out)
+          PY
+      - name: Reuse an existing release for this commit
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.identity.outputs.version }}
+          SCHEMA: ${{ steps.identity.outputs.schema }}
+          IMAGE: ${{ steps.identity.outputs.image }}
+          REVISION: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re,urllib.request,urllib.error
+          tag='alcor-v'+os.environ['VERSION']+'-'+os.environ['REVISION']
+          request=urllib.request.Request('https://api.github.com/repos/'+os.environ['GH_REPO']+'/releases/tags/'+tag,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+          exists=False
+          try:
+              with urllib.request.urlopen(request,timeout=15) as response: record=json.load(response)
+          except urllib.error.HTTPError as exc:
+              if exc.code!=404: raise
+          else:
+              release=json.loads(record['body'])
+              assert not record['draft'] and not record['prerelease']
+              assert record['target_commitish']==os.environ['REVISION']
+              assert release['version']==os.environ['VERSION'] and release['schema_hash']==os.environ['SCHEMA'] and release['revision']==os.environ['REVISION']
+              assert re.fullmatch(re.escape(os.environ['IMAGE'])+r'@sha256:[a-f0-9]{64}',release['image'])
+              exists=True
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out: print('reuse='+str(exists).lower(),file=out)
+          PY
+      - uses: docker/setup-buildx-action@v3
+        if: steps.existing.outputs.reuse != 'true'
+      - uses: docker/login-action@v3
+        if: steps.existing.outputs.reuse != 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push updater
+        if: steps.existing.outputs.reuse != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.updater
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.identity.outputs.image }}-updater:latest
+            ${{ steps.identity.outputs.image }}-updater:sha-${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ steps.identity.outputs.version }}
+            SOURCE_REVISION=${{ github.sha }}
+      - uses: docker/build-push-action@v6
+        if: steps.existing.outputs.reuse != 'true'
+        id: image
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.identity.outputs.image }}:latest
+            ${{ steps.identity.outputs.image }}:sha-${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ steps.identity.outputs.version }}
+            SOURCE_REVISION=${{ github.sha }}
+            SCHEMA_HASH=${{ steps.identity.outputs.schema }}
+            PG_MAJOR=${{ vars.ALCOR_PG_MAJOR || '16' }}
+      - name: Publish immutable release manifest
+        if: steps.existing.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ steps.identity.outputs.image }}@${{ steps.image.outputs.digest }}
+          VERSION: ${{ steps.identity.outputs.version }}
+          SCHEMA: ${{ steps.identity.outputs.schema }}
+          REVISION: ${{ github.sha }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          Path('release-manifest.json').write_text(json.dumps({'version':os.environ['VERSION'],'image':os.environ['IMAGE'],'revision':os.environ['REVISION'],'schema_hash':os.environ['SCHEMA']}))
+          PY
+          gh release create "alcor-v${VERSION}-${REVISION}" --target "$REVISION" --title "AlcorApi ${VERSION}" --notes-file release-manifest.json --latest

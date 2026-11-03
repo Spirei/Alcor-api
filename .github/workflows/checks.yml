@@ -1,0 +1,54 @@
+name: Isolated platform checks
+on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: isolated-platform-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+          enable-cache: true
+      - run: python3 tools/audit-source.py
+      - run: uv sync --locked
+      - run: npm ci
+      - run: uv run python tools/bootstrap-redis.py
+      - run: uv run python tools/test-shard.py --index ${{ matrix.shard }} --count 3
+      - run: uv run alcor export-openapi
+        if: matrix.shard == 0
+      - run: npm run types:api
+        if: matrix.shard == 0
+      - run: git diff --exit-code -- contracts/platform.openapi.json apps/web/src/generated/api.d.ts
+        if: matrix.shard == 0
+      - run: npm run test:web
+        if: matrix.shard == 0
+      - run: npm run build
+        if: matrix.shard == 0
+      - run: uv run python tools/validate-deployment.py --root .
+        if: matrix.shard == 0
+      - run: docker build --build-arg APP_VERSION="$(node -p 'require("./package.json").version')" -f deploy/Dockerfile -t alcor-api:ci .
+        if: matrix.shard == 0
+  updater:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: docker build --build-arg SOURCE_REVISION="${{ github.sha }}" -f deploy/Dockerfile.updater -t alcor-api-updater:ci .
+      - run: ALCOR_TEST_DOCKER=1 uv run pytest -q --tb=short tests/test_updater_docker.py

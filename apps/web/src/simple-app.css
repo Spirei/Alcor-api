@@ -1,0 +1,98 @@
+.simple-app {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.simple-app nav,
+.simple-app .module-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+.simple-app nav [aria-current="page"] {
+  font-weight: 700;
+  outline: 2px solid currentColor;
+}
+.simple-app fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.simple-app label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+.simple-app label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+}
+.simple-app input:not([type="checkbox"]),
+.simple-app select {
+  max-width: 100%;
+  padding: 0.55rem;
+}
+.simple-metrics,
+.simple-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+}
+.simple-metrics > div,
+.simple-app article,
+.simple-app aside {
+  padding: 1rem;
+  border: 1px solid var(--border, #9995);
+  border-radius: 12px;
+  margin: 0.7rem 0;
+  overflow-wrap: anywhere;
+}
+.simple-metrics dd {
+  margin: 0.4rem 0;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.simple-app button {
+  margin: 0.2rem;
+  min-height: 36px;
+}
+.simple-app table {
+  width: 100%;
+  text-align: left;
+  border-collapse: collapse;
+}
+.simple-app td,
+.simple-app th {
+  padding: 0.5rem;
+  border-bottom: 1px solid #9994;
+}
+.simple-history-chart {
+  width: 100%;
+  max-height: 220px;
+}
+.simple-app .simple-save {
+  position: relative;
+  background: var(--surface, #8881);
+}
+.simple-app details {
+  margin: 1rem 0;
+}
+.simple-app figure {
+  margin: 1rem 0;
+}
+.simple-app figure svg {
+  width: 100%;
+}
+@media (max-width: 600px) {
+  .simple-app .simple-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .simple-app table {
+    display: block;
+    overflow: auto;
+  }
+  .simple-app nav {
+    gap: 0.2rem;
+  }
+}

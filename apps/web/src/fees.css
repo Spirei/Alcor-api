@@ -1,0 +1,82 @@
+.fees-page > label {
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+  margin-block: 24px;
+}
+.fees-period,
+.fees-plan-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+  margin-block: 24px;
+}
+.fees-page label {
+  min-width: 0;
+}
+.fees-period > label,
+.fees-plan-fields > label {
+  display: grid;
+  gap: 8px;
+}
+.fees-page label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fees-page input:not([type="checkbox"]),
+.fees-page select {
+  width: 100%;
+  min-width: 0;
+}
+.fees-plan-fields > details,
+.fees-page > section,
+.fees-period > label:has(input[type="checkbox"]) {
+  grid-column: 1 / -1;
+}
+.fees-plan-fields > button {
+  justify-self: start;
+  align-self: end;
+}
+.fees-page article {
+  margin-block: 16px;
+}
+.fees-page section > h2 {
+  margin-block: 24px 12px;
+}
+.fees-page p {
+  margin-block: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .fees-period,
+  .fees-plan-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+.fees-actual > label {
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+  margin-block: 16px;
+}
+.fees-actual select,
+.fees-actual textarea {
+  width: 100%;
+  min-width: 0;
+}
+.fees-actual-statement {
+  grid-column: 1/-1;
+}
+.fees-actual textarea {
+  resize: vertical;
+}
+
+.fees-baseline {
+  margin-block: 24px;
+}
+.fees-baseline > button {
+  margin-block: 16px;
+}

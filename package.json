@@ -1,0 +1,27 @@
+{
+  "name": "alcor-platform",
+  "private": true,
+  "version": "0.1.166",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "node tools/start-local.mjs",
+    "restart": "node tools/restart-local.mjs",
+    "dev:web": "npm run dev --workspace @alcor/web",
+    "build": "npm run build --workspace @alcor/web",
+    "typecheck": "npm run typecheck --workspace @alcor/web",
+    "types:api": "openapi-typescript contracts/platform.openapi.json -o apps/web/src/generated/api.d.ts",
+    "format": "prettier --write apps/web/src/*.ts apps/web/src/*.tsx apps/web/src/*.css apps/web/vite.config.ts apps/web/test/*.ts",
+    "test:web": "node --experimental-strip-types --test apps/web/test/*.test.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.10.0",
+    "prettier": "^3.9.10"
+  },
+  "overrides": {
+    "@redocly/openapi-core": {
+      "minimatch": "^11.0.1"
+    }
+  }
+}

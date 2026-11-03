@@ -1,0 +1,92 @@
+.reference-page {
+  max-width: var(--content-width, 960px);
+}
+.reference-page section {
+  margin: 28px 0;
+}
+.reference-page .page-heading,
+.reference-actions,
+.reference-receipt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.reference-page .page-heading {
+  justify-content: space-between;
+}
+.reference-actions h2 {
+  margin-right: auto;
+}
+.reference-actions label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reference-actions input[type="number"],
+.reference-actions input[inputmode="numeric"] {
+  width: 100px;
+}
+.reference-rates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 18px;
+  margin: 20px 0;
+}
+.reference-rates div {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--edge);
+}
+.reference-rates dd {
+  margin: 8px 0 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.reference-calendar {
+  max-height: 420px;
+  overflow: auto;
+  margin: 18px 0;
+}
+.reference-calendar table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  white-space: nowrap;
+}
+.reference-calendar th,
+.reference-calendar td {
+  padding: 12px;
+  border-bottom: 1px solid var(--edge);
+}
+.reference-page details {
+  margin: 16px 0;
+  font-size: 14px;
+}
+.reference-page code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.fx-provider-editor > label {
+  display: block;
+  margin: 12px 0;
+}
+.fx-provider-editor fieldset {
+  border: 0;
+  padding: 0;
+  margin: 16px 0;
+  display: grid;
+  gap: 12px;
+  max-width: 600px;
+}
+.fx-provider-editor fieldset > label {
+  display: grid;
+  gap: 8px;
+}
+.fx-provider-editor fieldset > label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+}
+.fx-provider-editor .button {
+  justify-self: start;
+}

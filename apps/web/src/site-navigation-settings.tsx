@@ -1,0 +1,7 @@
+import { useState } from 'react';
+import { legacyNavigation } from './site-navigation';
+export function SiteNavigationSettings({value,disabled,onChange}:{value:string[];disabled:boolean;onChange:(value:string[])=>void}){
+ const [addition,setAddition]=useState('');
+ function move(index:number,delta:number){const next=[...value],target=index+delta;if(target<0||target>=next.length)return;[next[index],next[target]]=[next[target],next[index]];onChange(next);}
+ return <details><summary>手机导航顺序</summary><ol>{value.map((key,index)=><li key={key}><span>{Object.hasOwn(legacyNavigation,key)?legacyNavigation[key].label:key+'（尚未对应当前模块）'}</span><button type="button" disabled={disabled||index===0} onClick={()=>move(index,-1)}>上移</button><button type="button" disabled={disabled||index===value.length-1} onClick={()=>move(index,1)}>下移</button><button type="button" disabled={disabled} onClick={()=>onChange(value.filter((_,i)=>i!==index))}>移出顺序</button></li>)}</ol><label>原导航入口<select disabled={disabled} value={addition} onChange={event=>setAddition(event.target.value)}><option value="">选择入口</option>{Object.entries(legacyNavigation).filter(([key])=>!value.includes(key)).map(([key,item])=><option key={key} value={key}>{item.label} · {key}</option>)}</select></label><button type="button" disabled={disabled||!addition} onClick={()=>{onChange([...value,addition]);setAddition('');}}>加入顺序</button></details>;
+}

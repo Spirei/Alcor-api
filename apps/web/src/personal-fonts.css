@@ -1,0 +1,83 @@
+.personal-fonts-panel {
+  border-top: 1px solid var(--edge);
+  margin-block: 24px;
+  padding-block: 16px;
+}
+.personal-fonts-head,
+.personal-fonts-upload,
+.personal-fonts-read,
+.personal-fonts-lookup,
+.personal-fonts-metadata {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block: 16px;
+}
+.personal-fonts-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.personal-fonts-head span,
+.personal-fonts-metadata {
+  color: var(--muted);
+  font-size: 13px;
+}
+.personal-fonts-upload label,
+.personal-fonts-lookup label {
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+  flex: 1;
+}
+.personal-fonts-upload label {
+  max-width: 500px;
+}
+.personal-fonts-upload,
+.personal-fonts-lookup {
+  align-items: end;
+}
+.personal-fonts-panel input[type="file"] {
+  max-width: 100%;
+}
+.personal-fonts-read .select-menu-trigger {
+  max-width: 100%;
+  min-width: 200px;
+}
+.personal-fonts-sample {
+  font-size: 28px;
+  padding-block: 20px;
+  overflow-wrap: anywhere;
+}
+.personal-fonts-panel dd {
+  margin: 4px 0 12px;
+  overflow-wrap: anywhere;
+}
+.personal-fonts-panel dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .personal-fonts-upload label,
+  .personal-fonts-lookup label {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+  .personal-fonts-read .select-menu-trigger {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.personal-font-runtime-error {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

@@ -1,0 +1,73 @@
+.resource-page label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.resource-page input,
+.resource-page select {
+  width: 100%;
+  min-width: 0;
+}
+.resource-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-block: 24px;
+}
+.resource-page nav,
+.resource-upload,
+.resource-pages,
+.resource-editor > div {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-block: 20px;
+}
+.resource-upload label {
+  flex: 1;
+  min-width: 180px;
+  max-width: 560px;
+}
+.resource-upload button {
+  align-self: end;
+}
+.resource-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.resource-row a,
+.resource-row button,
+.resource-page p,
+.resource-page nav span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.resource-editor {
+  display: grid;
+  gap: 20px;
+  max-width: 640px;
+  margin-block: 32px;
+}
+.resource-editor > div {
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .resource-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .resource-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .resource-row > span {
+    grid-column: 1;
+  }
+  .resource-row > button:last-child {
+    grid-column: 2;
+    grid-row: 1/3;
+  }
+}

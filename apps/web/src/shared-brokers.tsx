@@ -1,0 +1,38 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, ApiError, type Session } from "./api";
+import { requestId } from "./request-id";
+
+type Group={id:string;name:string;alias?:string};
+type State={revision:number;groups:Group[]};
+type Command={requestId:string;expectedRevision:number;groups:Group[]};
+type Preview={requestId:string;previewId:string;revision:number;groups:Group[];beforeGroups:Group[];renamed:{id:string;from:string;to:string}[];removed:{id:string;name:string}[];affectedUnassignedRecords:number;expiresAt:string};
+type Receipt={requestId:string;state:string;revision?:number};
+const root="/admin/shared-brokers";
+export function SharedBrokerSettings({session}:{session:Session}) {return <Content key={JSON.stringify([session.instance_id,session.user.id,session.user.role,session.receipt_scope,session.csrf,session.expires_at])} session={session}/>;}
+function Content({session}:{session:Session}) {
+  const key="shared-brokers:"+JSON.stringify([session.instance_id,session.user.id,session.user.role,session.receipt_scope]);
+  const [state,setState]=useState<State|null>(null),[groups,setGroups]=useState<Group[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
+  const [proof,setProof]=useState<{value:Preview;command:Command;epoch:number}|null>(null),[ack,setAck]=useState(false);
+  const [pending,setPending]=useState<string|null>(()=>{try{const id=sessionStorage.getItem(key);return id&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)?id:null;}catch{return null;}});
+  const epoch=useRef(0),alive=useRef(true),initialized=useRef(false);
+  function invalidate(){epoch.current++;setProof(null);setAck(false);}
+  const report=useCallback((failure:unknown)=>{if(failure instanceof ApiError&&[401,403].includes(failure.status)){epoch.current++;setState(null);setGroups([]);setProof(null);setAck(false);setPending(null);try{sessionStorage.removeItem(key);}catch{/* Retired locally. */}}setError(failure instanceof Error?failure.message:"共享目录操作失败");},[key]);
+  const load=useCallback(async(reset=false)=>{const generation=epoch.current;try{const value=await api<State>(root);if(alive.current&&generation===epoch.current){if(!initialized.current||reset){setState(value);initialized.current=true;setGroups(value.groups.map(row=>({...row})));}}}catch(failure){if(alive.current&&generation===epoch.current)report(failure);}},[report]);
+  useEffect(()=>{alive.current=true;void load();const visibility=()=>{epoch.current++;setProof(null);setAck(false);if(!document.hidden)void load();};document.addEventListener('visibilitychange',visibility);return()=>{alive.current=false;epoch.current++;setProof(null);setAck(false);document.removeEventListener('visibilitychange',visibility);};},[load]);
+  useEffect(()=>{if(!proof)return;const timer=window.setTimeout(()=>{if(epoch.current===proof.epoch){invalidate();setError("共享目录预览已过期");}},Math.max(0,Date.parse(proof.value.expiresAt)-Date.now()));return()=>window.clearTimeout(timer);},[proof]);
+  function edit(next:Group[]){invalidate();setGroups(next);setMessage("");}
+  function move(index:number,direction:number){const next=[...groups],destination=index+direction;if(destination<0||destination>=next.length)return;[next[index],next[destination]]=[next[destination],next[index]];edit(next);}
+  function remember(id:string|null){try{if(id)sessionStorage.setItem(key,id);else sessionStorage.removeItem(key);setPending(id);return true;}catch{if(!id)setPending(null);else setError("无法保留原请求编号，未提交共享目录");return !id;}}
+  async function prepare(){if(!state||busy||pending||document.hidden)return;invalidate();setBusy(true);setError("");setMessage("");const generation=epoch.current,command:Command={requestId:requestId(),expectedRevision:state.revision,groups:groups.map(row=>({id:row.id.trim().toLowerCase(),name:row.name.trim()||"未命名券商",...(row.alias?.trim()?{alias:row.alias.trim()}:{})}))};try{const value=await api<Preview>(root+'/preview',{method:'POST',body:JSON.stringify(command)},session.csrf);if(alive.current&&generation===epoch.current&&Date.parse(value.expiresAt)>Date.now())setProof({value,command,epoch:generation});}catch(failure){if(alive.current&&generation===epoch.current)report(failure);}finally{setBusy(false);}}
+  function accept(value:Receipt,id:string){if(value.requestId!==id||!['completed','closed'].includes(value.state))throw new Error("原共享目录请求仍待核对");remember(null);invalidate();setMessage(value.state==='closed'?"原请求已关闭":"共享目录已保存");if(value.state==='completed')void load(true);}
+  async function commit(){const current=proof;if(!current||!ack||busy||pending||document.hidden||current.epoch!==epoch.current||Date.parse(current.value.expiresAt)<=Date.now())return;if(!remember(current.value.requestId))return;const generation=epoch.current;setBusy(true);setError("");try{const value=await api<Receipt>(root+'/operations',{method:'POST',body:JSON.stringify({...current.command,previewId:current.value.previewId})},session.csrf);if(alive.current&&generation===epoch.current)accept(value,current.value.requestId);}catch(failure){if(alive.current&&generation===epoch.current){report(failure);invalidate();}}finally{setBusy(false);}}
+  async function resolve(close=false){if(!pending||busy||document.hidden)return;const id=pending,generation=epoch.current;setBusy(true);setError("");try{const value=await api<Receipt>(root+'/operations/'+id+(close?'/close':''),close?{method:'POST',body:'{}'}:{},close?session.csrf:undefined);if(alive.current&&generation===epoch.current)accept(value,id);}catch(failure){if(alive.current&&generation===epoch.current)report(failure);}finally{setBusy(false);}}
+  const current=proof&&proof.epoch===epoch.current?proof:null;
+  return <div className="form-grid">
+    {error&&<p role="alert" className="error">{error}</p>}{message&&<p role="status">{message}</p>}
+    <fieldset disabled={busy||!!pending}><legend>共享券商名称与别名</legend>{groups.map((group,index)=><div key={group.id}><label>名称<input value={group.name} onChange={event=>edit(groups.map((row,i)=>i===index?{...row,name:event.target.value}:row))}/></label><label>别名<input value={group.alias||''} onChange={event=>edit(groups.map((row,i)=>i===index?{...row,alias:event.target.value}:row))}/></label><button disabled={index===0} onClick={()=>move(index,-1)}>上移</button><button disabled={index===groups.length-1} onClick={()=>move(index,1)}>下移</button><button onClick={()=>edit(groups.filter((_,i)=>i!==index))}>移除</button></div>)}<button onClick={()=>edit([...groups,{id:'shared-'+requestId().replaceAll('-',''),name:'',alias:''}])}>添加共享券商</button></fieldset>
+    <button disabled={busy||!!pending||!state} onClick={()=>void prepare()}>预览目录变更</button><button disabled={busy||!!pending} onClick={()=>{invalidate();void load(true);}}>撤销草稿并重读</button>
+    {current&&<><ol>{current.value.groups.map(group=><li key={group.id}>{group.name}{group.alias?` · ${group.alias}`:''}</li>)}</ol>{current.value.renamed.map(row=><p key={row.id}>{row.from} → {row.to}</p>)}{current.value.removed.map(row=><p key={row.id}>移除 {row.name}</p>)}{current.value.groups.length===0&&<p role="alert">将清空共享券商目录</p>}<p>影响未绑定记录标签 {current.value.affectedUnassignedRecords} 条</p><label><input type="checkbox" checked={ack} disabled={busy||!!pending} onChange={event=>setAck(event.target.checked)}/>确认共享目录变更；个人账户关系与金融字段保持不变</label><button disabled={busy||!!pending||!ack} onClick={()=>void commit()}>确认保存共享目录</button></>}
+    {pending&&<div><p role="status">共享目录结果待核对</p><code>{pending}</code><button disabled={busy} onClick={()=>void resolve()}>查询原请求</button><button disabled={busy} onClick={()=>void resolve(true)}>关闭未执行请求</button></div>}
+  </div>;
+}

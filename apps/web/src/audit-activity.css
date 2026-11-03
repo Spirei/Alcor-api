@@ -1,0 +1,22 @@
+.audit-activity .module-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-block: 20px;
+}
+.audit-activity .module-actions input {
+  min-width: 160px;
+  max-width: 420px;
+  flex: 1;
+}
+.audit-activity-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.audit-activity-range .button[aria-pressed="true"] {
+  background: var(--soft);
+  font-weight: 600;
+}

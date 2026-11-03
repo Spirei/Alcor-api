@@ -1,0 +1,108 @@
+.watch-group-source {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding-top: 18px;
+}
+.watch-group-source > summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.watch-group-source-body {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+.watch-group-source-body p {
+  margin: 0;
+}
+.watch-group-source-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.watch-group-source-controls label {
+  display: grid;
+  gap: 7px;
+  min-width: 160px;
+  flex: 1;
+}
+.watch-group-source-body dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.watch-group-source-body dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.watch-group-source-body input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.watch-group-source-table {
+  overflow: auto;
+}
+.watch-group-source-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.watch-group-source-table th,
+.watch-group-source-table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.watch-group-source-table small {
+  display: block;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+.watch-group-source-proof {
+  display: grid;
+  gap: 14px;
+}
+.watch-group-source-body .import-fields {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.watch-group-source-body .import-fields > label {
+  flex: 1;
+  min-width: 140px;
+}
+.watch-group-source-body .import-actions {
+  margin-top: 12px;
+}
+@media (max-width: 560px) {
+  .watch-group-source-controls > * {
+    max-width: 100%;
+  }
+  .watch-group-source-table td {
+    min-width: 92px;
+  }
+}
+
+.watch-group-source-icon-body {
+  display: grid;
+  gap: 16px;
+  padding-top: 16px;
+}
+.watch-group-source-icons > summary {
+  cursor: pointer;
+}
+.watch-group-source-body .watch-group-source-replace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.watch-group-source-body .watch-group-source-replace input {
+  width: 18px;
+  height: 18px;
+}

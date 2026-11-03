@@ -1,0 +1,17 @@
+.celebs-page { max-width:1100px; margin-inline:auto; }
+.celebs-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.celebs-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:20px; }
+.celebs-list>article { padding:20px; border:1px solid var(--border-color,#e5e7eb); border-radius:14px; }
+.celebs-person-heading { display:flex; align-items:center; gap:12px; }
+.celebs-person-heading h2 { font-size:16px; margin:0; }
+.celebs-image,.celebs-image-placeholder { display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; width:40px; height:40px; border-radius:50%; object-fit:cover; }
+.celebs-image-placeholder { font-size:12px; background:var(--background-secondary,#f3f4f6); }
+.celebs-fields,.celebs-fields label { display:grid; gap:8px; min-width:0; }
+.celebs-fields { gap:16px; }
+.celebs-fields input[type=checkbox] { width:auto; }
+.celebs-fields textarea { min-height:140px; width:100%; font-family:monospace; }
+.celebs-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:16px; }
+.celebs-summary dd { margin:4px 0 0; }
+.celebs-page figure { margin:16px 0; }
+.celebs-page svg { max-width:720px; width:100%; height:auto; color:var(--text-primary,#4b5563); }
+.celebs-page td small { display:block; }

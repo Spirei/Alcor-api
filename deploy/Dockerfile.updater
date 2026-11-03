@@ -1,0 +1,11 @@
+FROM python:3.12-slim-bookworm
+ARG APP_VERSION
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.version=${APP_VERSION} org.opencontainers.image.revision=${SOURCE_REVISION}
+WORKDIR /updater
+RUN mkdir -m 0700 /state
+COPY deploy/container-updater.py /updater/container-updater.py
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+EXPOSE 8081
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3).read()"]
+ENTRYPOINT ["python", "/updater/container-updater.py"]

@@ -1,0 +1,263 @@
+.users-table-shell {
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 20px;
+  background: var(--bg);
+}
+.users-table {
+  min-width: 900px;
+  table-layout: fixed;
+  white-space: normal;
+}
+.user-name-col {
+  width: 29%;
+}
+.user-email-col {
+  width: 20%;
+}
+.user-role-col {
+  width: 10%;
+}
+.user-date-col {
+  width: 17%;
+}
+.user-count-col {
+  width: 6%;
+}
+.user-actions-col {
+  width: 18%;
+}
+.users-table th {
+  padding: 13px 14px;
+  background: color-mix(in srgb, var(--soft) 65%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.users-table td {
+  padding: 20px 14px;
+  color: var(--muted);
+  font-size: 13px;
+  vertical-align: middle;
+}
+.users-table :is(th, td):first-child {
+  padding-left: 18px;
+}
+.users-table :is(th, td):last-child {
+  padding-right: 18px;
+}
+.users-table tr:last-child td {
+  border-bottom: none;
+}
+.users-table tbody tr {
+  transition: background 160ms;
+}
+.users-table tbody tr:hover {
+  background: color-mix(in srgb, var(--soft) 55%, transparent);
+}
+.directory-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.directory-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 18px;
+}
+.directory-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.directory-avatar .avatar-status-dot {
+  width: 11px;
+  height: 11px;
+  border-width: 3px;
+  z-index: 1;
+  top: -2px;
+  right: -2px;
+}
+.directory-name {
+  min-width: 0;
+}
+.directory-name-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.directory-name-line strong {
+  font-size: 15px;
+  color: var(--ink);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.directory-handle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--faint);
+}
+.directory-handle > span {
+  margin: 0 3px;
+}
+.user-tag {
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.user-tag.current {
+  color: #2187ed;
+  background: color-mix(in srgb, #2187ed 12%, transparent);
+  border-color: transparent;
+}
+.user-tag.inactive {
+  border-style: dashed;
+}
+.user-role {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.user-role.admin {
+  color: #2187ed;
+  background: color-mix(in srgb, #2187ed 12%, transparent);
+  border-color: transparent;
+}
+.directory-email {
+  overflow-wrap: anywhere;
+}
+.directory-date {
+  white-space: nowrap;
+  font-size: 11px !important;
+  font-variant-numeric: tabular-nums;
+}
+.user-numeric {
+  text-align: right;
+}
+.directory-records {
+  font-variant-numeric: tabular-nums;
+}
+.directory-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.user-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 33px;
+  flex-shrink: 0;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+}
+.user-action:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.user-action:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .users-table {
+    min-width: 0;
+    display: block;
+  }
+  .users-table colgroup,
+  .users-table thead {
+    display: none;
+  }
+  .users-table tbody,
+  .users-table tr {
+    display: block;
+    width: 100%;
+  }
+  .users-table tr {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--edge);
+  }
+  .users-table tr:last-child {
+    border-bottom: 0;
+  }
+  .users-table td,
+  .users-table :is(th, td):first-child,
+  .users-table :is(th, td):last-child {
+    display: block;
+    width: 100%;
+    padding: 5px 16px;
+    border: 0;
+    text-align: left;
+  }
+  .users-table td[data-label]::before {
+    content: attr(data-label);
+    display: inline-block;
+    min-width: 66px;
+    color: var(--faint);
+    font-size: 11px;
+  }
+  .users-table .directory-identity {
+    margin-bottom: 9px;
+  }
+  .directory-actions {
+    justify-content: flex-end;
+    margin-top: 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .users-table tbody tr {
+    transition: none;
+  }
+}
+
+.admin-credential-recovery {
+  border-top: 1px solid var(--edge);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+.admin-credential-recovery > summary {
+  cursor: pointer;
+}
+.admin-credential-fields {
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+}
+.admin-credential-fields form {
+  display: grid;
+  gap: 10px;
+}
+.admin-credential-fields form > p {
+  margin-block: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.admin-credential-fields form > button {
+  justify-self: start;
+}

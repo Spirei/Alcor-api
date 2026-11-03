@@ -1,0 +1,229 @@
+import { randomBytes } from "crypto";
+import { getDb } from "./db";
+import { stockAccountError } from "./stockAccount";
+import { importIdentity } from "./importIdentity";
+import type { Activity, Market, RecordInput, StockRecord } from "./types";
+
+function uid() {
+  return "r-" + randomBytes(8).toString("hex");
+}
+
+function rowToRecord(row: Record<string, unknown>): StockRecord {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    code: String(row.code),
+    market: row.market as Market,
+    ...(row.account_market ? { accountMarket: String(row.account_market) } : {}),
+    price: row.price as number,
+    cost: row.cost === null ? "" : (row.cost as number),
+    qty: row.qty === null ? "" : (row.qty as number),
+    group: String(row.group_name ?? ""),
+    ...(row.broker_account_id ? {brokerAccountId:String(row.broker_account_id)} : {}),
+    watchGroupId: row.watch_group_id ? String(row.watch_group_id) : "",
+    watchGroupSort: Number(row.watch_group_sort) || 0,
+    note: String(row.note ?? ""),
+    source: row.source ? String(row.source) : undefined,
+    updatedAt: String(row.updated_at),
+    revision: Number(row.revision)
+  };
+}
+
+export function listRecords(userId: string): StockRecord[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM records WHERE user_id = ? ORDER BY updated_at DESC")
+    .all(userId) as Record<string, unknown>[];
+  return rows.map(rowToRecord);
+}
+
+export function readRecord(userId: string, id: string): StockRecord | null {
+  const row = getDb().prepare("SELECT * FROM records WHERE user_id=? AND id=?").get(userId, id);
+  return row ? rowToRecord(row as Record<string, unknown>) : null;
+}
+
+function resolveBroker(userId:string,input:RecordInput,old?:StockRecord|null) {
+  if (input.brokerAccountId === undefined && old?.brokerAccountId && input.group === old.group) {
+    input={...input,brokerAccountId:old.brokerAccountId};
+  }
+  if (input.brokerAccountId === undefined) return input;
+  if (typeof input.brokerAccountId !== 'string') throw new Error('券商账户无效');
+  if (!input.brokerAccountId) return {...input,group:input.group};
+  const account=getDb().prepare('SELECT name FROM broker_accounts WHERE id=? AND user_id=?').get(input.brokerAccountId,userId) as {name:string}|undefined;
+  if(!account)throw new Error('券商账户不存在');
+  return {...input,group:account.name};
+}
+
+export function createRecord(userId: string, input: RecordInput): StockRecord {
+  const db = getDb();
+  const routeError = stockAccountError(input.market, input.accountMarket);
+  if (routeError) throw new Error(routeError);
+  input=resolveBroker(userId,input);
+  const id = uid();
+  const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
+  db.prepare(`
+    INSERT INTO records (id, user_id, name, code, market, account_market, price, cost, qty, group_name, broker_account_id, watch_group_id, note, source, updated_at)
+    VALUES (@id, @userId, @name, @code, @market, @accountMarket, @price, @cost, @qty, @group, @brokerAccountId, @watchGroupId, @note, @source, @updatedAt)
+  `).run({
+    id,
+    userId,
+    name: input.name,
+    code,
+    market: input.market,
+    accountMarket: input.accountMarket ?? "",
+    price: input.price,
+    cost: input.cost === "" ? null : input.cost,
+    qty: input.qty === "" ? null : input.qty,
+    group: input.group,
+    brokerAccountId: input.brokerAccountId ?? "",
+    watchGroupId: input.watchGroupId ?? "",
+    note: input.note,
+    source: input.source ?? "",
+    updatedAt: new Date().toISOString()
+  });
+  return listRecords(userId).find((r) => r.id === id) as StockRecord;
+}
+
+export function updateRecord(id: string, userId: string, input: RecordInput): StockRecord | null {
+  const db = getDb();
+  const routeError = stockAccountError(input.market, input.accountMarket);
+  if (routeError) throw new Error(routeError);
+  const exists = readRecord(userId,id);
+  if (!exists) return null;
+  input=resolveBroker(userId,input,exists);
+  const code = importIdentity(input.code, input.market).code || input.code.trim().toUpperCase();
+  db.prepare(`
+    UPDATE records
+    SET name = @name, code = @code, market = @market, account_market = CASE WHEN @market='HK' THEN COALESCE(@accountMarket,account_market) ELSE '' END, price = @price,
+        cost = @cost, qty = @qty, group_name = @group, broker_account_id = @brokerAccountId, watch_group_id = COALESCE(@watchGroupId, watch_group_id), note = @note, source = @source, updated_at = @updatedAt
+    WHERE id = @id AND user_id = @userId
+  `).run({
+    id,
+    userId,
+    name: input.name,
+    code,
+    market: input.market,
+    accountMarket: input.accountMarket === undefined ? null : input.accountMarket,
+    price: input.price,
+    cost: input.cost === "" ? null : input.cost,
+    qty: input.qty === "" ? null : input.qty,
+    group: input.group,
+    brokerAccountId: input.brokerAccountId ?? "",
+    watchGroupId: input.watchGroupId === undefined ? null : input.watchGroupId,
+    note: input.note,
+    source: input.source ?? "",
+    updatedAt: new Date().toISOString()
+  });
+  const row = db.prepare("SELECT * FROM records WHERE id = ? AND user_id = ?").get(id, userId);
+  return row ? rowToRecord(row as Record<string, unknown>) : null;
+}
+
+export function deleteRecord(id: string, userId: string): boolean {
+  const result = getDb().prepare("DELETE FROM records WHERE id = ? AND user_id = ?").run(id, userId);
+  return result.changes > 0;
+}
+
+export function deleteRecordsByIds(userId: string, ids: string[]): number {
+  if (ids.length === 0) return 0;
+  const marks = ids.map(() => "?").join(",");
+  const result = getDb()
+    .prepare(`DELETE FROM records WHERE user_id = ? AND id IN (${marks})`)
+    .run(userId, ...ids);
+  return result.changes;
+}
+
+export function logActivity(
+  userId: string,
+  action: Activity["action"],
+  stockName: string,
+  stockCode: string,
+  extra?: { market?: string; price?: number | ""; cost?: number | ""; qty?: number | "" }
+) {
+  getDb().prepare(`
+    INSERT INTO activities (id, user_id, action, stock_name, stock_code, market, price, cost, qty, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "a-" + randomBytes(8).toString("hex"),
+    userId,
+    action,
+    stockName,
+    stockCode,
+    extra?.market ?? "",
+    extra?.price === "" || extra?.price === undefined ? null : Number(extra.price),
+    extra?.cost === "" || extra?.cost === undefined ? null : Number(extra.cost),
+    extra?.qty === "" || extra?.qty === undefined ? null : Number(extra.qty),
+    new Date().toISOString()
+  );
+}
+
+export function listActivities(userId: string, limit = 50): Activity[] {
+  const rows = getDb()
+    .prepare(`
+      SELECT a.*, u.nickname, u.username, u.avatar
+      FROM activities a JOIN users u ON u.id = a.user_id
+      WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT ?
+    `)
+    .all(userId, limit) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    action: r.action as Activity["action"],
+    userName: String(r.nickname || r.username || ""),
+    userAvatar: String(r.avatar || ""),
+    stockName: String(r.stock_name),
+    stockCode: String(r.stock_code),
+    market: (r.market as Activity["market"]) || "OTHER",
+    price: r.price === null || r.price === undefined ? null : Number(r.price),
+    cost: r.cost === null || r.cost === undefined ? null : Number(r.cost),
+    qty: r.qty === null || r.qty === undefined ? null : Number(r.qty),
+    createdAt: String(r.created_at)
+  }));
+}
+
+export function listSecurityLogs(limit = 200, userId?: string): import("@/lib/types").SystemLog[] {
+  const db = getDb();
+  const rows = (userId
+    ? db.prepare(`SELECT s.*, COALESCE(u.nickname, u.username, '系统') AS user_name FROM security_audit s LEFT JOIN users u ON u.id = s.user_id WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT ?`).all(userId, limit)
+    : db.prepare(`SELECT s.*, COALESCE(u.nickname, u.username, '系统') AS user_name FROM security_audit s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.created_at DESC LIMIT ?`).all(limit)
+  ) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    event: String(r.event),
+    detail: String(r.detail || ""),
+    ip: String(r.ip || ""),
+    createdAt: String(r.created_at),
+    userName: String(r.user_name || "系统")
+  }));
+}
+
+export function listSystemLogs(limit = 200): import("@/lib/types").SystemLog[] {
+  return listSecurityLogs(limit);
+}
+
+export function clearAllRecords(userId: string): { records: number; orders: number; activities: number; fundTransactions: number } {
+  const db = getDb();
+  return db.transaction(() => {
+    const orders = db.prepare("DELETE FROM trade_orders WHERE user_id = ?").run(userId).changes;
+    const records = db.prepare("DELETE FROM records WHERE user_id = ?").run(userId).changes;
+    const activities = db.prepare("DELETE FROM activities WHERE user_id = ?").run(userId).changes;
+    const fundTransactions = db.prepare("DELETE FROM fund_transactions WHERE user_id = ?").run(userId).changes;
+    return { records, orders, activities, fundTransactions };
+  })();
+}
+
+export function renameRecordGroup(oldName: string, newName: string) {
+  getDb().prepare("UPDATE records SET group_name = ? WHERE group_name = ? AND NOT EXISTS (SELECT 1 FROM broker_accounts b WHERE b.user_id=records.user_id AND (b.name=records.group_name OR LOWER(b.name)=LOWER(?)))").run(newName, oldName, newName);
+}
+
+export function clearRecordGroup(name: string) {
+  getDb().prepare("UPDATE records SET group_name = '' WHERE group_name = ? AND NOT EXISTS (SELECT 1 FROM broker_accounts b WHERE b.user_id=records.user_id AND b.name=records.group_name)").run(name);
+}
+
+export function parseMarket(value: string): Market {
+  const v = String(value ?? "").trim();
+  return v ? (v as Market) : "OTHER";
+}
+
+export function toNumberOrEmpty(value: unknown): number | "" {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = Number(value);
+  return Number.isFinite(n) ? n : "";
+}

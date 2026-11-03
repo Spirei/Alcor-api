@@ -1,0 +1,79 @@
+.legacy-import-page {
+  width: min(1040px, 100%);
+  margin: auto;
+}
+.legacy-import-page .import-block {
+  border-top: 1px solid var(--border);
+  padding: 26px 0;
+}
+.legacy-import-page .import-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.legacy-import-page label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.legacy-import-page .import-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 20px;
+}
+.legacy-import-page .import-list {
+  display: grid;
+  gap: 0;
+}
+.legacy-import-page .import-row {
+  border-bottom: 1px solid var(--border);
+  padding: 18px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: start;
+}
+.legacy-import-page .import-row p {
+  margin: 5px 0;
+}
+.legacy-import-page .import-row .import-actions {
+  margin-top: 0;
+}
+.legacy-import-page h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 18px;
+}
+.legacy-import-page .import-id {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--muted);
+}
+.legacy-import-page .import-empty {
+  color: var(--muted);
+}
+.legacy-import-page details {
+  margin-top: 12px;
+}
+.legacy-import-page pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  max-height: 360px;
+  overflow: auto;
+}
+.legacy-import-page .import-pending {
+  padding: 18px 0;
+}
+@media (max-width: 620px) {
+  .legacy-import-page .import-fields {
+    grid-template-columns: 1fr;
+  }
+  .legacy-import-page .import-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+}

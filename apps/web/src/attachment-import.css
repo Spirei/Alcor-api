@@ -1,0 +1,112 @@
+.attachment-import-panel {
+  margin-top: 44px;
+  border-top: 1px solid var(--border);
+  padding-top: 28px;
+}
+.attachment-import-heading,
+.attachment-import-capture,
+.attachment-import-catalog,
+.attachment-import-controls,
+.attachment-import-summary,
+.attachment-import-lookup,
+.attachment-import-close,
+.attachment-import-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-block: 20px;
+}
+.attachment-import-heading h2 {
+  margin: 0;
+}
+.attachment-import-heading > span,
+.attachment-import-window,
+.attachment-import-summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.attachment-import-capture .select-menu-trigger,
+.attachment-import-catalog .select-menu-trigger {
+  min-width: 200px;
+  max-width: 100%;
+}
+.attachment-import-check {
+  display: flex !important;
+  align-items: center;
+}
+.attachment-import-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+.attachment-import-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-block: 16px;
+}
+.attachment-import-item > div {
+  flex: 1;
+  min-width: 160px;
+}
+.attachment-import-item strong,
+.attachment-import-item small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.attachment-import-item small {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 6px;
+}
+.attachment-import-preview {
+  padding-block: 20px;
+}
+.attachment-import-preview > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.attachment-import-preview span {
+  overflow-wrap: anywhere;
+}
+.attachment-import-preview small {
+  color: var(--muted);
+}
+.attachment-import-panel dl {
+  display: grid;
+  gap: 10px;
+}
+.attachment-import-panel dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.attachment-import-panel dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.attachment-import-lookup {
+  align-items: end;
+}
+.attachment-import-lookup label {
+  flex: 1;
+  max-width: 520px;
+  min-width: 180px;
+}
+@media (max-width: 640px) {
+  .attachment-import-lookup label {
+    flex-basis: 100%;
+  }
+  .attachment-import-item > div {
+    flex-basis: 100%;
+  }
+  .attachment-import-catalog .select-menu-trigger {
+    min-width: 0;
+    width: 100%;
+  }
+}

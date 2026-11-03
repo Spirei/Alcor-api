@@ -1,0 +1,277 @@
+import { BrokerGroupNameConflict } from "@/lib/settings";
+import { NextResponse } from "next/server";
+import fs from "node:fs";
+import { clientSettings } from "@/lib/settingsClient";
+import { getAuthUser, isAdmin } from "@/lib/auth";
+import { getSiteSettings, normalizeFutuHost, updateSiteSettings } from "@/lib/settings";
+import { syncRecordGroups } from "@/lib/brokers";
+import { localPathOf, removeFileIfUnused } from "@/lib/fileCleanup";
+import { ModelSettingsConflictError } from "@/lib/modelSettingsRevision";
+import { configuredModelServices, prepareModelServices } from "@/lib/modelServices";
+import { validateModelEndpoint } from "@/lib/modelEndpoint";
+import { readLimitedJson, RequestBodyTooLargeError } from "@/lib/requestBody";
+import { publicVerificationOrigin } from "@/lib/emailVerification";
+import { isConnectionIconUrl } from "@/lib/appConnectionBrand";
+import { normalizeAppConnectionOrigin } from "@/lib/appConnectionChecks";
+import { SmtpDestinationError } from "@/lib/smtpConfig";
+import { assertSocialPatch, SocialConfigError } from "@/lib/socialChannels";
+
+export async function GET(request: Request) {
+  const user = getAuthUser(request);
+  if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  const settings = getSiteSettings();
+  return NextResponse.json({ settings: clientSettings(settings, isAdmin(user)) }, { headers: { "Cache-Control": "no-store" } });
+}
+
+export async function PUT(request: Request) {
+  const user = getAuthUser(request);
+  if (!user) return NextResponse.json({ error: "未登录" }, { status: 401 });
+  if (!isAdmin(user)) return NextResponse.json({ error: "需要管理员权限" }, { status: 403 });
+
+  let body: Record<string, any> | null;
+  try {
+    body = await readLimitedJson<Record<string, any>>(request, 512 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return NextResponse.json({ error: "请求内容过大" }, { status: 413 });
+    throw error;
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "无效的请求体" }, { status: 400 });
+  if (body.xueqiuCookie !== undefined && (typeof body.xueqiuCookie !== "string" || body.xueqiuCookie.length > 16384 || /[\u0000-\u001f\u007f]/.test(body.xueqiuCookie))) return NextResponse.json({ error: "Cookie 格式无效或过长，请复制完整的单行 Cookie" }, { status: 400 });
+  if (body.clearXueqiuCookie !== undefined && typeof body.clearXueqiuCookie !== "boolean") return NextResponse.json({ error: "无效的 Cookie 清除请求" }, { status: 400 });
+  if (body.clearXueqiuCookie === true && typeof body.xueqiuCookie === "string" && body.xueqiuCookie.trim()) return NextResponse.json({ error: "不能同时替换和清除 Cookie" }, { status: 400 });
+
+  // Administrator-configured gateways may be private; credentials must not be embedded in browser-visible URLs.
+  const URL_KEYS = [
+    "quoteApiUrl", "searchApiUrl", "chartApiUrl", "currencyApiUrl",
+    "earningsApiUrl", "cnEarningsApiUrl", "hkEarningsApiUrl", "usLogoApiUrl", "cnLogoApiUrl", "trumpArchiveApiUrl", "translationApiUrl"
+  ] as const;
+  for (const k of URL_KEYS) {
+    if (body[k] !== undefined) {
+      const value = String(body[k]).trim();
+      if (value) {
+        let url: URL | null = null;
+        try { url = new URL(value); } catch { /* invalid input */ }
+        if (value.length > 2048 || /\s/.test(value) || !url || !["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+          return NextResponse.json({ error: `${k} 必须是有效的 http(s) 地址，不能包含用户名或密码` }, { status: 400 });
+        }
+      }
+    }
+  }
+  if (body.llmApiUrl !== undefined) {
+    const value = String(body.llmApiUrl).trim();
+    if (value.length > 2048 || (value && !validateModelEndpoint(value))) {
+      return NextResponse.json({ error: "模型 API 地址必须是有效的 http(s) 地址" }, { status: 400 });
+    }
+  }
+  if (body.llmModel !== undefined && String(body.llmModel).trim().length > 160) {
+    return NextResponse.json({ error: "模型 ID 不能超过 160 个字符" }, { status: 400 });
+  }
+  if (body.smtpPort !== undefined && (!/^\d{1,5}$/.test(String(body.smtpPort).trim()) || Number(body.smtpPort) > 65535)) {
+    return NextResponse.json({ error: "SMTP 端口必须是 1-65535 的数字" }, { status: 400 });
+  }
+  if (body.smtpFromEmail !== undefined && String(body.smtpFromEmail).trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(body.smtpFromEmail).trim())) {
+    return NextResponse.json({ error: "发件邮箱格式不正确" }, { status: 400 });
+  }
+  if (body.emailLinkOrigin !== undefined && String(body.emailLinkOrigin).trim() && !publicVerificationOrigin(String(body.emailLinkOrigin))) {
+    return NextResponse.json({ error: "验证链接地址须为公网 HTTPS 域名，可带端口，不能使用内网 IP、路径或参数" }, { status: 400 });
+  }
+  const llmProvider = body.llmProvider === "openai-compatible" ? "custom" : body.llmProvider;
+  if (llmProvider !== undefined && !["deepseek", "openai", "custom"].includes(llmProvider)) {
+    return NextResponse.json({ error: "不支持的模型提供方" }, { status: 400 });
+  }
+
+  const before = getSiteSettings();
+  const legacy = configuredModelServices({ ...before, modelServices: [], modelServicesInitialized: false })[0];
+  const replacedLegacyKey = typeof body.llmApiKey === "string" && Boolean(body.llmApiKey.trim()) && body.llmApiKey.trim() !== "********";
+  const legacyDestinationChanged = (llmProvider !== undefined && llmProvider !== before.llmProvider)
+    || (body.llmApiUrl !== undefined && validateModelEndpoint(String(body.llmApiUrl).trim()) !== validateModelEndpoint(before.llmApiUrl));
+  if (legacy?.apiKey && legacyDestinationChanged && !replacedLegacyKey) return NextResponse.json({ error: "旧版模型地址或提供方已更改，请输入新配置的密钥；原配置未修改" }, { status: 400 });
+  if (body.deepseekApiUrl !== undefined && (before.deepseekApiKey || process.env.DEEPSEEK_API_KEY) && validateModelEndpoint(String(body.deepseekApiUrl).trim()) !== validateModelEndpoint(before.deepseekApiUrl)
+    && !(typeof body.deepseekApiKey === "string" && body.deepseekApiKey.trim() && body.deepseekApiKey.trim() !== "********")) return NextResponse.json({ error: "旧版 DeepSeek 地址已更改，请输入新地址的密钥；原配置未修改" }, { status: 400 });
+  let modelServices = undefined;
+  if (body.modelServices !== undefined) {
+    if (body.modelServicesRevision === undefined) return NextResponse.json({ error: "缺少模型配置版本，请刷新后重新编辑" }, { status: 428 });
+    if (body.modelServicesRevision !== undefined && (typeof body.modelServicesRevision !== "string" || !/^[a-f0-9]{64}$/.test(body.modelServicesRevision))) return NextResponse.json({ error: "模型配置版本无效，请刷新后重试" }, { status: 400 });
+    if (body.modelServicesRevision !== undefined && body.modelServicesRevision !== before.modelServicesRevision) return NextResponse.json({ error: new ModelSettingsConflictError().message }, { status: 409 });
+    try { modelServices = prepareModelServices(body.modelServices, before); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "模型服务格式无效" }, { status: 400 }); }
+  }
+
+  // Preserve unchanged legacy deployment settings, but never trust browser-only validation.
+  if (body.domain !== undefined && (typeof body.domain !== "string" || (body.domain.trim() !== before.domain.trim() && body.domain.trim() && !normalizeAppConnectionOrigin(body.domain, process.env.NODE_ENV !== "production")))) {
+    return NextResponse.json({ error: "连接地址须为公网 HTTPS 域名，可带端口，不含凭据、路径或参数" }, { status: 400 });
+  }
+  if (body.appDisplayName !== undefined && (typeof body.appDisplayName !== "string" || body.appDisplayName.trim().length > 80)) return NextResponse.json({ error: "App 名称最多 80 个字符" }, { status: 400 });
+  if (body.appDisplayIcon !== undefined && (typeof body.appDisplayIcon !== "string" || !isConnectionIconUrl(body.appDisplayIcon.trim()))) return NextResponse.json({ error: "App 图标请使用站内路径或 http(s) 图片地址" }, { status: 400 });
+  if (body.pwaIcon !== undefined && (typeof body.pwaIcon !== "string" || (body.pwaIcon && !/^\/uploads\/ico\/[^/\\]+$/.test(body.pwaIcon)))) return NextResponse.json({ error: "PWA 图标请使用上传的图片" }, { status: 400 });
+  let settings;
+  const patch = {
+    domain: body.domain !== undefined ? String(body.domain) : undefined,
+    title: body.title !== undefined ? String(body.title) : undefined,
+    ico: body.ico !== undefined ? String(body.ico) : undefined,
+    pwaIcon: body.pwaIcon !== undefined ? body.pwaIcon : undefined,
+    homepageBg: body.homepageBg !== undefined ? String(body.homepageBg) : undefined,
+    loginSideImage: body.loginSideImage !== undefined ? String(body.loginSideImage) : undefined,
+    siteLogo: body.siteLogo !== undefined ? String(body.siteLogo) : undefined,
+    appDisplayName: body.appDisplayName !== undefined ? body.appDisplayName : undefined,
+    appDisplayIcon: body.appDisplayIcon !== undefined ? body.appDisplayIcon : undefined,
+    logoText: body.logoText !== undefined ? String(body.logoText) : undefined,
+    logoFont:
+      body.logoFont === "diatype" || body.logoFont === "diatype-regular" || body.logoFont === "system"
+        ? body.logoFont
+        : undefined,
+    quoteSource:
+      body.quoteSource === "auto" || body.quoteSource === "futu" || body.quoteSource === "tencent"
+        ? body.quoteSource
+        : undefined,
+    futuHost: body.futuHost !== undefined ? normalizeFutuHost(String(body.futuHost)) : undefined,
+    futuPort: /^\d{1,5}$/.test(String(body.futuPort ?? "")) ? String(body.futuPort).trim() : undefined,
+    footerDesc: body.footerDesc !== undefined ? String(body.footerDesc) : undefined,
+    quoteApiUrl: body.quoteApiUrl !== undefined ? String(body.quoteApiUrl) : undefined,
+    searchApiUrl: body.searchApiUrl !== undefined ? String(body.searchApiUrl) : undefined,
+    chartApiUrl: body.chartApiUrl !== undefined ? String(body.chartApiUrl) : undefined,
+    currencyApiUrl: body.currencyApiUrl !== undefined ? String(body.currencyApiUrl) : undefined,
+    currencyRefreshPattern: body.currencyRefreshPattern !== undefined ? String(body.currencyRefreshPattern).slice(0, 200) : undefined,
+    earningsApiUrl: body.earningsApiUrl !== undefined ? String(body.earningsApiUrl) : undefined,
+    cnEarningsApiUrl: body.cnEarningsApiUrl !== undefined ? String(body.cnEarningsApiUrl) : undefined,
+    hkEarningsApiUrl: body.hkEarningsApiUrl !== undefined ? String(body.hkEarningsApiUrl) : undefined,
+    usLogoApiUrl: body.usLogoApiUrl !== undefined ? String(body.usLogoApiUrl) : undefined,
+    cnLogoApiUrl: body.cnLogoApiUrl !== undefined ? String(body.cnLogoApiUrl) : undefined,
+    trumpArchiveApiUrl: body.trumpArchiveApiUrl !== undefined ? String(body.trumpArchiveApiUrl) : undefined,
+    translationApiUrl: body.translationApiUrl !== undefined ? String(body.translationApiUrl) : undefined,
+    translationEnabled: typeof body.translationEnabled === "boolean" ? body.translationEnabled : undefined,
+    translationProvider: ["mymemory", "deepseek", "openai-compatible"].includes(body.translationProvider) ? body.translationProvider : undefined,
+    deepseekApiUrl: body.deepseekApiUrl !== undefined ? String(body.deepseekApiUrl) : undefined,
+    deepseekModel: body.deepseekModel !== undefined ? String(body.deepseekModel) : undefined,
+    deepseekApiKey: body.deepseekApiKey !== undefined ? String(body.deepseekApiKey) : undefined,
+    llmProvider: ["deepseek", "openai", "custom"].includes(llmProvider) ? llmProvider : undefined,
+    llmApiUrl: body.llmApiUrl !== undefined ? String(body.llmApiUrl).trim() : undefined,
+    llmModel: body.llmModel !== undefined ? String(body.llmModel).trim() : undefined,
+    llmApiKey: body.llmApiKey !== undefined ? String(body.llmApiKey) : undefined,
+    modelServices,
+    tradingSquareTrumpRefreshMinutes: Number.isFinite(Number(body.tradingSquareTrumpRefreshMinutes)) ? Number(body.tradingSquareTrumpRefreshMinutes) : undefined,
+    tradingSquareDuanRefreshMinutes: Number.isFinite(Number(body.tradingSquareDuanRefreshMinutes)) ? Number(body.tradingSquareDuanRefreshMinutes) : undefined,
+    xueqiuCookie: body.xueqiuCookie !== undefined ? String(body.xueqiuCookie) : undefined,
+    clearXueqiuCookie: body.clearXueqiuCookie === true,
+    homeNav: Array.isArray(body.homeNav) ? body.homeNav : undefined,
+    tabs: Array.isArray(body.tabs) ? body.tabs : undefined,
+    mobileNavigationOrder: Array.isArray(body.mobileNavigationOrder) ? body.mobileNavigationOrder : undefined,
+    groups: Array.isArray(body.groups) ? body.groups : undefined,
+    markets: Array.isArray(body.markets) ? body.markets : undefined,
+    marketLabels: Array.isArray(body.marketLabels) ? body.marketLabels : undefined,
+    marketBadges: body.marketBadges && typeof body.marketBadges === "object" ? body.marketBadges : undefined,
+    marketBadgesVisible: typeof body.marketBadgesVisible === "boolean" ? body.marketBadgesVisible : undefined,
+    assetMarketOrder: Array.isArray(body.assetMarketOrder) ? body.assetMarketOrder : undefined,
+    assetAnalysisOrder: body.assetAnalysisOrder && typeof body.assetAnalysisOrder === "object" ? body.assetAnalysisOrder : undefined,
+    indicesOrder: Array.isArray(body.indicesOrder) ? body.indicesOrder : undefined,
+    holdingColumns: Array.isArray(body.holdingColumns) ? body.holdingColumns : undefined,
+    ticker: body.ticker && typeof body.ticker === "object" ? body.ticker : undefined,
+    allowRegister: typeof body.allowRegister === "boolean" ? body.allowRegister : undefined,
+    stockIconCdn: typeof body.stockIconCdn === "boolean" ? body.stockIconCdn : undefined,
+    dbType: body.dbType === "sqlite" || body.dbType === "postgres" ? body.dbType : undefined,
+    pgHost: body.pgHost !== undefined ? String(body.pgHost) : undefined,
+    pgPort: body.pgPort !== undefined ? String(body.pgPort) : undefined,
+    pgDatabase: body.pgDatabase !== undefined ? String(body.pgDatabase) : undefined,
+    pgUser: body.pgUser !== undefined ? String(body.pgUser) : undefined,
+    pgPassword: body.pgPassword !== undefined ? String(body.pgPassword) : undefined,
+    smtpHost: body.smtpHost !== undefined ? String(body.smtpHost) : undefined,
+    smtpPort: body.smtpPort !== undefined ? String(body.smtpPort) : undefined,
+    smtpSecure: typeof body.smtpSecure === "boolean" ? body.smtpSecure : undefined,
+    smtpUser: body.smtpUser !== undefined ? String(body.smtpUser) : undefined,
+    smtpPassword: body.smtpPassword !== undefined ? String(body.smtpPassword) : undefined,
+    smtpFromName: body.smtpFromName !== undefined ? String(body.smtpFromName) : undefined,
+    smtpFromEmail: body.smtpFromEmail !== undefined ? String(body.smtpFromEmail) : undefined,
+    emailLinkOrigin: body.emailLinkOrigin !== undefined ? String(body.emailLinkOrigin) : undefined,
+    wechatEnabled: typeof body.wechatEnabled === "boolean" ? body.wechatEnabled : undefined,
+    wechatName: body.wechatName !== undefined ? String(body.wechatName).slice(0, 40) : undefined,
+    wechatSmartRobot: typeof body.wechatSmartRobot === "boolean" ? body.wechatSmartRobot : undefined,
+    wechatCorpId: body.wechatCorpId !== undefined ? String(body.wechatCorpId) : undefined,
+    wechatAgentId: body.wechatAgentId !== undefined ? String(body.wechatAgentId) : undefined,
+    wechatSecret: body.wechatSecret !== undefined ? String(body.wechatSecret) : undefined,
+    wechatProxyUrl: body.wechatProxyUrl !== undefined ? String(body.wechatProxyUrl) : undefined,
+    wechatToken: body.wechatToken !== undefined ? String(body.wechatToken) : undefined,
+    wechatAesKey: body.wechatAesKey !== undefined ? String(body.wechatAesKey) : undefined,
+    wechatAdminIds: body.wechatAdminIds !== undefined ? String(body.wechatAdminIds) : undefined,
+    wechatWebhook: body.wechatWebhook !== undefined ? String(body.wechatWebhook) : undefined,
+    telegramEnabled: typeof body.telegramEnabled === "boolean" ? body.telegramEnabled : undefined,
+    telegramName: body.telegramName !== undefined ? String(body.telegramName).slice(0, 40) : undefined,
+    telegramTypes: body.telegramTypes !== undefined ? String(body.telegramTypes) : undefined,
+    telegramBotUsername: body.telegramBotUsername !== undefined ? String(body.telegramBotUsername) : undefined,
+    telegramBotToken: body.telegramBotToken !== undefined ? String(body.telegramBotToken) : undefined,
+    telegramChatId: body.telegramChatId !== undefined ? String(body.telegramChatId) : undefined,
+    telegramUserIds: body.telegramUserIds !== undefined ? String(body.telegramUserIds) : undefined,
+    telegramAdminIds: body.telegramAdminIds !== undefined ? String(body.telegramAdminIds) : undefined,
+    telegramApiBase: body.telegramApiBase !== undefined ? String(body.telegramApiBase) : undefined,
+    feishuEnabled: typeof body.feishuEnabled === "boolean" ? body.feishuEnabled : undefined,
+    feishuName: body.feishuName !== undefined ? String(body.feishuName).slice(0, 40) : undefined,
+    feishuTypes: body.feishuTypes !== undefined ? String(body.feishuTypes) : undefined,
+    feishuAppId: body.feishuAppId !== undefined ? String(body.feishuAppId) : undefined,
+    feishuAppSecret: body.feishuAppSecret !== undefined ? String(body.feishuAppSecret) : undefined,
+    feishuOpenId: body.feishuOpenId !== undefined ? String(body.feishuOpenId) : undefined,
+    feishuChatId: body.feishuChatId !== undefined ? String(body.feishuChatId) : undefined,
+    feishuAdminIds: body.feishuAdminIds !== undefined ? String(body.feishuAdminIds) : undefined,
+    feishuVerificationToken: body.feishuVerificationToken !== undefined ? String(body.feishuVerificationToken) : undefined,
+    feishuEncryptKey: body.feishuEncryptKey !== undefined ? String(body.feishuEncryptKey) : undefined,
+    feishuWebhook: body.feishuWebhook !== undefined ? String(body.feishuWebhook) : undefined,
+    qqEnabled: typeof body.qqEnabled === "boolean" ? body.qqEnabled : undefined,
+    qqName: body.qqName !== undefined ? String(body.qqName).slice(0, 40) : undefined,
+    qqTypes: body.qqTypes !== undefined ? String(body.qqTypes) : undefined,
+    qqAppId: body.qqAppId !== undefined ? String(body.qqAppId) : undefined,
+    qqAppSecret: body.qqAppSecret !== undefined ? String(body.qqAppSecret) : undefined,
+    qqUserOpenId: body.qqUserOpenId !== undefined ? String(body.qqUserOpenId) : undefined,
+    qqGroupOpenId: body.qqGroupOpenId !== undefined ? String(body.qqGroupOpenId) : undefined,
+    qqAdminIds: body.qqAdminIds !== undefined ? String(body.qqAdminIds) : undefined,
+    discordEnabled: typeof body.discordEnabled === "boolean" ? body.discordEnabled : undefined,
+    discordName: body.discordName !== undefined ? String(body.discordName).slice(0, 40) : undefined,
+    discordTypes: body.discordTypes !== undefined ? String(body.discordTypes) : undefined,
+    discordBotToken: body.discordBotToken !== undefined ? String(body.discordBotToken) : undefined,
+    discordGuildId: body.discordGuildId !== undefined ? String(body.discordGuildId) : undefined,
+    discordChannelId: body.discordChannelId !== undefined ? String(body.discordChannelId) : undefined,
+    discordAdminIds: body.discordAdminIds !== undefined ? String(body.discordAdminIds) : undefined,
+    webPushEnabled: typeof body.webPushEnabled === "boolean" ? body.webPushEnabled : undefined,
+    webPushName: body.webPushName !== undefined ? String(body.webPushName).slice(0, 40) : undefined,
+    webPushTypes: body.webPushTypes !== undefined ? String(body.webPushTypes) : undefined,
+    webPushUsername: body.webPushUsername !== undefined ? String(body.webPushUsername) : undefined
+  };
+  try {
+    assertSocialPatch(before, patch);
+    settings = updateSiteSettings(patch, modelServices ? before.modelServicesRevision : undefined);
+  }
+  catch (error) {
+    if (error instanceof BrokerGroupNameConflict) return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof ModelSettingsConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof SmtpDestinationError || error instanceof SocialConfigError) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: "设置保存失败，本次修改未保存，请重试" }, { status: 500 });
+  }
+  if (Array.isArray(body.groups)) {
+    syncRecordGroups(before.groups, settings.groups);
+  }
+  if (modelServices) {
+    const activeIcons = new Set(settings.modelServices.flatMap(item => [item.icon, ...Object.values(item.icons || {})]).filter(Boolean));
+    before.modelServices.forEach(item => {
+      for (const icon of new Set([item.icon, ...Object.values(item.icons || {})])) {
+        if (icon && !activeIcons.has(icon)) removeFileIfUnused(icon);
+      }
+    });
+  }
+  // 网站形象 / 站点 Logo 替换后删除旧本地文件，保留唯一（不堆积 ico / background / logo）
+  ["ico", "pwaIcon", "homepageBg", "siteLogo", "appDisplayIcon"].forEach((k) => {
+    const oldVal = before[k as keyof typeof before];
+    const newVal = settings[k as keyof typeof settings];
+    if (typeof oldVal === "string" && typeof newVal === "string" && oldVal !== newVal) {
+      // 保护：仅当新值是「本地已存在的文件（真实上传）」或外部 URL 时才删旧文件；
+      // 新值是本地但文件不存在（如测试占位 / 异常写入）时保留旧文件，避免误删用户资源
+      const newIsLocal = /^\/uploads\//.test(newVal);
+      let newExists = !newIsLocal;
+      if (newIsLocal) {
+        try {
+          newExists = fs.existsSync(localPathOf(newVal));
+        } catch {
+          newExists = false;
+        }
+      }
+      if (newExists) removeFileIfUnused(oldVal);
+    }
+  });
+  return NextResponse.json({ settings: clientSettings(settings, true) }, { headers: { "Cache-Control": "no-store" } });
+}

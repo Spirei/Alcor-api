@@ -1,0 +1,10 @@
+{
+  "origin": "http://127.0.0.1:8088",
+  "token": "REPLACE_WITH_THE_SAME_RANDOM_RUNNER_TOKEN",
+  "image": "ghcr.io/replace-owner/alcor-api",
+  "project_directory": "/REPLACE/project-directory",
+  "state_directory": "/REPLACE/private-updater-state",
+  "docker": "/usr/local/bin/docker",
+  "docker_config": "/REPLACE/docker-config-directory",
+  "env_file": ".env"
+}
