@@ -1,16 +1,15 @@
 """Read the actual old serializer, preserving every old wallet-entry field/value."""
 import asyncio
 import json
-import os
 import re
 import subprocess
-from pathlib import Path
 
 from test_card_wallet import KEY, apply, owner
+from frozen_legacy import source_root
 
 
 async def test_old_typescript_wallet_entry_serializer_matches_http(client):
-    root=Path(os.environ['ALCOR_MARKET_LEGACY_ROOT'])
+    root=source_root('ALCOR_MARKET_LEGACY_ROOT', ['lib/cardWallet.ts'])
     source=(root/'lib/cardWallet.ts').read_text()
     function=re.search(r'function toBalanceEntry\(row: BalanceRow\): CardBalanceEntry \{.*?\n\}',source,re.DOTALL)
     assert function
@@ -54,7 +53,7 @@ async def test_old_put_wallet_returns_original_masked_details_snapshot_and_prese
 
 
 async def test_old_financial_note_string_trim_and_utf16_storage_match_actual_javascript(client):
-    root=Path(os.environ['ALCOR_MARKET_LEGACY_ROOT'])
+    root=source_root('ALCOR_MARKET_LEGACY_ROOT', ['app/api/cards/amounts/route.ts'])
     source=(root/'app/api/cards/amounts/route.ts').read_text()
     assert 'const note = String((body as { note?: unknown }).note ?? "").trim().slice(0, 100);' in source
     await owner(client)
