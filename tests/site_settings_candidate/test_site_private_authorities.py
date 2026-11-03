@@ -140,6 +140,8 @@ async def test_aggregate_wires_only_reviewed_global_metadata_and_never_reads_pri
 
     calls = []
     provider = uuid4()
+    owner = uuid4()
+    public_groups = [{"id": "synthetic-public-group", "name": "公开券商目录"}]
 
     class Result:
         def __init__(self, value):
@@ -149,11 +151,19 @@ async def test_aggregate_wires_only_reviewed_global_metadata_and_never_reads_pri
             return self.value
 
     class Connection:
-        async def execute(self, query):
+        async def execute(self, query, params=None):
             assert query.startswith("SELECT "), "read aggregation must not execute a mutator"
             calls.append(query)
             if "FROM site_settings" in query:
-                return Result({"revision": 4})
+                return Result({"revision": 4, "settings": {"appDisplayName": "Synthetic Public Display"}})
+            if "FROM shared_broker_directory" in query:
+                return Result({"groups": public_groups})
+            if "FROM business_notification_provider_revisions" in query:
+                from alcor_api.legacy_notification_settings import CREDENTIALS
+
+                assert role == "admin" and params[0] == owner and params[1] in CREDENTIALS
+                assert "WHERE owner_id=%s AND channel=%s" in query
+                return Result(None)
             assert "FROM fx_config" in query and role == "admin"
             assert "secret_cipher" not in query
             return Result(
@@ -213,15 +223,20 @@ async def test_aggregate_wires_only_reviewed_global_metadata_and_never_reads_pri
         app=SimpleNamespace(state=SimpleNamespace(db=Database(), connections=Connections()))
     )
     service = SimpleNamespace(mail=SimpleNamespace(settings=runtime(), configured=False))
-    value = await legacy_site_settings.aggregate(request, SimpleNamespace(role=role), service)
+    value = await legacy_site_settings.aggregate(request, SimpleNamespace(role=role, id=owner), service)
     if role == "admin":
         assert value["settings"]["currencyRefreshPattern"] == "09:00"
         assert value["settings"]["emailLinkOrigin"] == runtime().public_origin
         assert value["migration"]["sources"]["fxSchedule"]["providerRevision"] == str(provider)
     else:
-        assert value["settings"] == {"title": "Synthetic Public"}
+        from alcor_api.site_settings_layout import DEFAULTS as layout_defaults
+
+        assert value["settings"] == {"title": "Synthetic Public", **layout_defaults,
+                                     "appDisplayName": "Synthetic Public Display", "appDisplayIcon": "",
+                                     "groups": public_groups}
         assert value["migration"]["sources"]["private"] == {"state": "redacted"}
-        assert len(calls) == 2
+        assert len(calls) == 3
+        assert not any("business_notification_provider" in query or "fx_config" in query for query in calls)
     assert value["migration"]["status"] == "partial"
     assert "SyntheticPrivate9" not in str(value)
 

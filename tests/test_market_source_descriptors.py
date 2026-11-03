@@ -42,6 +42,7 @@ def test_only_explicit_non_secret_fields_and_installed_history_markets_are_expos
         "latestMarkets",
         "latestInstruments",
         "latestCapabilities",
+        "timestampZones",
         "latestSessions",
         "latestTimestampAuthority",
         "latestCacheAuthority",
@@ -61,7 +62,18 @@ def test_only_explicit_non_secret_fields_and_installed_history_markets_are_expos
     }
     assert value["historyFrames"] == ["day", "month"] and value["historyMarkets"] == ["US"]
     assert value["historyMinuteSessions"] == []
+    assert value["timestampZones"] == []
     assert "private-target" not in json.dumps(value)
+
+
+@pytest.mark.parametrize("zones,expected", [((), []), ((("US", "America/New_York"),), [{"market": "US", "timezone": "America/New_York"}])])
+def test_timestamp_zone_descriptor_preserves_only_explicit_tencent_configuration(zones, expected):
+    from dataclasses import replace
+
+    installed = replace(policy(), source="tencent", source_version="tencent-quotes-v1", timestamp_zones=zones)
+    assert public_policy(installed)["timestampZones"] == expected
+    assert public_policy(replace(policy(), timestamp_zones=zones))["timestampZones"] == []
+    assert "private-target" not in json.dumps(public_policy(installed))
 
 
 async def test_descriptor_rechecks_owner_and_returns_no_peer_or_target_configuration(monkeypatch):

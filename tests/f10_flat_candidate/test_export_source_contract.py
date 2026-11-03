@@ -1,16 +1,13 @@
 """Execute the frozen old export route without SQLite, network or business IO."""
 import json
-import os
 import subprocess
-from pathlib import Path
 
 from alcor_api.legacy_order_workbooks import DETAIL, HEADERS
+from frozen_legacy import source_root
 
 
 def test_frozen_old_route_workbook_columns_are_preserved():
-    configured=os.environ.get('ALCOR_MARKET_LEGACY_ROOT')
-    assert configured,'Explicit read-only legacy source required'
-    root=Path(configured)
+    root=source_root('ALCOR_MARKET_LEGACY_ROOT', ['app/api/v1/orders/export/route.ts'])
     source=root/'app/api/v1/orders/export/route.ts'
     assert source.is_file(),'Explicit read-only legacy source required'
     script=r'''

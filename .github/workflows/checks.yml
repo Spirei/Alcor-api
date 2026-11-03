@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,7 +26,7 @@ jobs:
       - run: uv sync --locked
       - run: npm ci
       - run: uv run python tools/bootstrap-redis.py
-      - run: uv run python tools/test-shard.py --index ${{ matrix.shard }} --count 3
+      - run: uv run python tools/test-shard.py --index ${{ matrix.shard }} --count 8
       - run: uv run alcor export-openapi
         if: matrix.shard == 0
       - run: npm run types:api
@@ -39,7 +39,13 @@ jobs:
         if: matrix.shard == 0
       - run: uv run python tools/validate-deployment.py --root .
         if: matrix.shard == 0
-      - run: docker build --build-arg APP_VERSION="$(node -p 'require("./package.json").version')" -f deploy/Dockerfile -t alcor-api:ci .
+      - name: 验证发布配置对应的镜像与数据库工具
+        env:
+          PG_MAJOR: ${{ vars.ALCOR_PG_MAJOR || '16' }}
+          REVISION: ${{ github.sha }}
+        run: |
+          docker build --build-arg APP_VERSION="$(node -p 'require("./package.json").version')" --build-arg SOURCE_REVISION="$REVISION" --build-arg PG_MAJOR="$PG_MAJOR" -f deploy/Dockerfile -t alcor-api:ci .
+          docker run --rm --network none --entrypoint "/usr/lib/postgresql/$PG_MAJOR/bin/pg_dump" alcor-api:ci --version
         if: matrix.shard == 0
   updater:
     runs-on: ubuntu-latest

@@ -7,7 +7,7 @@ import time
 import urllib.parse
 import urllib.request
 
-EXPECTED = {"foundation (0)", "foundation (1)", "foundation (2)", "updater"}
+EXPECTED = {*(f"foundation ({index})" for index in range(8)), "updater"}
 
 
 def select_run(runs, repository, revision):
@@ -25,14 +25,15 @@ def passed(run, jobs):
         return False
     if run.get("conclusion") != "success":
         raise ValueError("完整检查未成功，拒绝发布")
-    if len(jobs) != 4 or {j.get("name") for j in jobs} != EXPECTED:
+    if len(jobs) != len(EXPECTED) or {j.get("name") for j in jobs} != EXPECTED:
         raise ValueError("缺少规定的完整检查任务")
     for job in jobs:
         if job.get("status") != "completed" or job.get("conclusion") != "success":
             raise ValueError("检查任务尚未全部成功")
         steps = job.get("steps", [])
         required = ("Run ALCOR_TEST_DOCKER=1 uv run pytest" if job["name"] == "updater"
-                    else "Run uv run python tools/test-shard.py")
+                    else "Run uv run python tools/test-shard.py --index "
+                    + job["name"].removeprefix("foundation (").removesuffix(")") + " --count 8")
         if not any(s.get("name", "").startswith(required) and s.get("conclusion") == "success"
                    and s.get("status") == "completed" for s in steps):
             raise ValueError("缺少实际执行成功的测试步骤")

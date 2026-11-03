@@ -16,7 +16,8 @@ def evidence():
            "status": "completed", "conclusion": "success"}
     jobs = [{"name": name, "status": "completed", "conclusion": "success", "steps": [
         {"name": "Run ALCOR_TEST_DOCKER=1 uv run pytest -q" if name == "updater"
-         else "Run uv run python tools/test-shard.py --index 0 --count 3",
+         else "Run uv run python tools/test-shard.py --index "
+         + name.removeprefix("foundation (").removesuffix(")") + " --count 8",
          "status": "completed", "conclusion": "success"}]} for name in sorted(gate.EXPECTED)]
     return run, jobs
 
@@ -55,3 +56,7 @@ def test_missing_duplicate_skipped_or_failed_test_is_rejected():
         altered[0]["steps"][0]["conclusion"] = state
         with pytest.raises(ValueError):
             gate.passed(run, altered)
+    altered = copy.deepcopy(jobs)
+    altered[0]["steps"][0]["name"] = "Run uv run python tools/test-shard.py --index 7 --count 8"
+    with pytest.raises(ValueError):
+        gate.passed(run, altered)

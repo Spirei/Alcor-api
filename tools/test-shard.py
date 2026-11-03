@@ -48,7 +48,7 @@ def main():
     if args.plan_only:
         return 0
     return subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "--maxfail=1", "--tb=short", *sorted(groups[args.index])],
+        [sys.executable, "-m", "pytest", "-q", "--maxfail=1", "--durations=25", "--tb=short", *sorted(groups[args.index])],
         cwd=root, check=False,
     ).returncode
 
