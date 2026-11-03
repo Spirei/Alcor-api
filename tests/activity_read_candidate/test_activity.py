@@ -62,8 +62,9 @@ async def test_current_platform_and_legacy_Web_owner_admin_context_and_GET_never
  finally:await personal.aclose()
 
 async def test_anonymous_cross_origin_and_explicit_bearer_do_not_expose_admin_feed(client,admin,app,db):
+ # A supplied empty Authorization is malformed (401), never a cookie fallback.
  before=await hashes(db)
- for headers,status in [({'origin':'https://unapproved.example.invalid'},403),({'authorization':'Bearer unsupported'},403),({'authorization':''},403),({'x-csrf-token':'other-session-binding'},403)]:
+ for headers,status in [({'origin':'https://unapproved.example.invalid'},403),({'authorization':'Bearer unsupported'},403),({'authorization':''},401),({'x-csrf-token':'other-session-binding'},403)]:
   result=await client.get('/api/activities',headers=headers);assert result.status_code==status and result.headers.get('x-alcor-retire-context')=='true'
   if 'x-csrf-token' in headers:assert result.headers.get('x-alcor-session-changed')=='true'
  async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://testserver') as anonymous:

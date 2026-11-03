@@ -1,5 +1,5 @@
 name: Publish AlcorApi
-run-name: AlcorApi release ${{ inputs.request_id || github.sha }}
+run-name: 'feat: 发布 AlcorApi 统一迁移版本 · ${{ inputs.request_id || github.sha }}'
 on:
   workflow_dispatch:
     inputs:
@@ -19,23 +19,15 @@ jobs:
     permissions:
       contents: write
       packages: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: '0.12.23'
-          enable-cache: true
-      - run: uv sync --locked
-      - run: npm ci
-      - run: uv run python tools/bootstrap-redis.py
-      - run: uv run pytest -q
-      - run: npm run test:web
-      - run: npm run build
-      - run: uv run python tools/validate-deployment.py --root .
+      - name: 核实同一提交的完整检查
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: python3 tools/release-checks.py
       - name: Release identity
         id: identity
         env:
