@@ -109,3 +109,14 @@ export function workspaceNavigation<T extends { path: string }>(
   }
   return visible;
 }
+
+/** Resolve child pages without assigning inaccessible routes to a navigation group. */
+export function currentNavigationSection<T extends { path: string }>(
+  sections: readonly { key: string; items: readonly T[] }[],
+  pathname: string,
+): string | undefined {
+  const parent = pathname.startsWith("/connections/") || pathname === "/deploy-status"
+    ? "/"
+    : pathname;
+  return sections.find(section => section.items.some(item => item.path === parent))?.key;
+}

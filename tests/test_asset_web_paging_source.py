@@ -110,8 +110,12 @@ async def test_catalog_keeps_web_wildcards_separate_from_app_substrings():
             yield self
 
         async def execute(self, sql, args=None):
+            assert sql.lstrip().startswith("SELECT ")
             if "SELECT revision" in sql:
                 return Cursor({"revision": 0})
+            if sql == "SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL":
+                assert args is None
+                return Cursor([])
             assert "asset_catalog_tombstones" in sql
             return Cursor(rows)
 

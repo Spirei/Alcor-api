@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  currentNavigationSection,
   mobileNavigation,
   workspaceNavigation,
 } from "../src/site-navigation.ts";
@@ -80,4 +81,14 @@ test("mobile preferences order whole sections and entries without interleaving o
     workspaceNavigation(ordered).map((s) => s.label),
     ["资产", "管理", "系统"],
   );
+});
+
+test("child pages reveal their authorized parent category without fabricating entries", () => {
+  const sections = workspaceNavigation(["/", "/portfolio", "/shared-assets"].map(path => ({ path })));
+  assert.equal(currentNavigationSection(sections, "/connections/postgresql/explorer"), "system");
+  assert.equal(currentNavigationSection(sections, "/deploy-status"), "system");
+  assert.equal(currentNavigationSection(sections, "/shared-assets"), "management");
+  assert.equal(currentNavigationSection(sections, "/portfolio"), "assets");
+  assert.equal(currentNavigationSection(sections, "/not-registered"), undefined);
+  assert.equal(currentNavigationSection(workspaceNavigation([{ path: "/portfolio" }]), "/connections/redis"), undefined);
 });

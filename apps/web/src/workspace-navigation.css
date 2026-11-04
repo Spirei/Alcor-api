@@ -1,0 +1,60 @@
+.sidebar-navigation {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scroll-padding-block: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--faint) transparent;
+}
+.sidebar-navigation::-webkit-scrollbar { width: 4px; }
+.sidebar-navigation::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 4px; }
+.sidebar-section { flex-shrink: 0; min-width: 0; }
+.sidebar-section-heading { margin: 0; font: inherit; }
+.sidebar-section-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.sidebar-section-trigger:hover { color: var(--ink); background: var(--hover); }
+.sidebar-section-label { font-size: 12px; font-weight: 500; line-height: 20px; }
+.sidebar-section-icon { flex-shrink: 0; stroke-width: 1.6; }
+.sidebar-section-chevron { margin-left: auto; transform: rotate(-90deg); transition: transform 160ms ease; }
+.sidebar-section-trigger[aria-expanded="true"] .sidebar-section-chevron { transform: rotate(0); }
+.sidebar-section-links { display: flex; flex-direction: column; gap: 2px; }
+.sidebar-section-links[hidden] { display: none; }
+.sidebar-section-links a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: var(--text-size, 14px);
+  white-space: nowrap;
+}
+.sidebar-section-links a svg { stroke-width: 1.6; flex-shrink: 0; }
+.sidebar-section-links a:hover { background: var(--hover); }
+.sidebar-section-links a.active { background: var(--nav-selected, var(--selected)); color: var(--nav-selected-ink, var(--ink)); }
+@media (min-width: 801px) {
+  .collapsed .sidebar-section-trigger { padding: 8px 0; justify-content: center; }
+  .collapsed .sidebar-section-chevron { display: none; }
+  .collapsed .sidebar-section-links a { justify-content: center; padding: 10px 0; }
+  .collapsed .sidebar-section + .sidebar-section { border-top: 1px solid var(--edge); padding-top: 8px; }
+}
+:root[data-reduced-motion="true"] :is(.sidebar-section-trigger, .sidebar-section-chevron) { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduced-motion="false"]) :is(.sidebar-section-trigger, .sidebar-section-chevron) { transition: none; }
+}

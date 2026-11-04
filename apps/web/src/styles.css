@@ -291,53 +291,6 @@ small {
   color: var(--faint);
   white-space: nowrap;
 }
-.sidebar nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.sidebar-navigation {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior-y: contain;
-  scroll-padding-block: 8px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--faint) transparent;
-}
-.sidebar-navigation::-webkit-scrollbar { width: 5px; }
-.sidebar-navigation::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 5px; }
-.sidebar-section { flex-shrink: 0; }
-.sidebar-section + .sidebar-section { margin-top: 12px; }
-.sidebar-section-label {
-  margin: 0;
-  padding: 8px 10px 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 20px;
-}
-.sidebar nav a {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 42px;
-  padding: 10px;
-  border-radius: 8px;
-  font-size: calc(var(--text-size, 14px) * 1);
-  white-space: nowrap;
-}
-.sidebar nav a svg {
-  stroke-width: 1.6;
-  flex-shrink: 0;
-}
-.sidebar nav a:hover {
-  background: var(--hover);
-}
-.sidebar nav a.active {
-  background: var(--selected);
-}
 .sidebar-bottom {
   flex-shrink: 0;
   margin-top: auto;
@@ -2219,14 +2172,6 @@ dialog::backdrop {
   .collapsed .sidebar-search {
     padding: 10px;
     justify-content: center;
-  }
-  .collapsed .sidebar nav a {
-    justify-content: center;
-    padding: 10px 0;
-  }
-  .collapsed .sidebar-section + .sidebar-section {
-    border-top: 1px solid var(--edge);
-    padding-top: 12px;
   }
   .collapsed .sidebar-bottom {
     padding-left: 5px;

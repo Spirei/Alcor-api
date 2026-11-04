@@ -75,14 +75,21 @@ async def test_web_icon_service_reads_existing_rows_and_never_publishes_missing_
         async def fetchone(self):
             return self.row
 
+        async def fetchall(self):
+            return self.row
+
     class Catalog:
         @asynccontextmanager
         async def context(self):
             yield self
 
-        async def execute(self, sql, args):
-            assert "NOT EXISTS" in sql and "asset_catalog_tombstones" in sql
+        async def execute(self, sql, args=None):
             assert "SELECT" in sql and "INSERT" not in sql
+            if sql == "SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL":
+                assert args is None
+                return Cursor([])
+            known = sql.startswith("SELECT 1 FROM asset_catalog_entries WHERE")
+            assert known or "NOT EXISTS" in sql and "asset_catalog_tombstones" in sql
             calls.append(args)
             kind, code, _, market = args
             return Cursor(
