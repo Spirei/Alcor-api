@@ -1,4 +1,6 @@
 import asyncio
+import io
+import urllib.error
 from uuid import uuid4
 
 from alcor_api import deployments
@@ -132,6 +134,49 @@ async def test_build_unknown_is_durable_and_never_redispatched(client, admin, ap
     receipt = await client.get(P + "/builds/" + data["request_id"])
     assert receipt.json() == first.json()
     assert (await client.post(P + "/builds", json={"request_id": str(uuid4())})).status_code == 409
+
+
+async def test_explicit_github_rejections_are_failed_not_unknown_and_do_not_block_retry(client, admin, app, monkeypatch):
+    _release, calls, _headers = configure(app, monkeypatch)
+    prior = deployments.github_json
+    status = 403
+
+    def provider(settings, path, body=None):
+        if path.endswith("/dispatches"):
+            calls.append((path, body))
+            raise urllib.error.HTTPError("https://github.invalid/private", status, "private-token-value", {}, io.BytesIO(b"private-provider-body"))
+        return prior(settings, path, body)
+
+    monkeypatch.setattr(deployments, "github_json", provider)
+    for status in (401, 403, 404, 422, 429):
+        payload = {"request_id": str(uuid4())}
+        first = await client.post(P + "/builds", json=payload)
+        assert first.status_code == 202 and first.json()["status"] == "failed", first.text
+        assert "GitHub" in first.json()["message"] and "private" not in first.text
+        count = len(calls)
+        replay = await client.post(P + "/builds", json=payload)
+        assert replay.json()["status"] == "failed" and len(calls) == count
+        assert (await client.get(P + "/builds/" + payload["request_id"])).json()["status"] == "failed"
+    monkeypatch.setattr(deployments, "github_json", prior)
+    assert (await client.post(P + "/builds", json={"request_id": str(uuid4())})).json()["status"] == "submitted"
+
+
+async def test_github_server_error_keeps_uncertainty_and_prevents_redispatch(client, admin, app, monkeypatch):
+    _release, calls, _headers = configure(app, monkeypatch)
+    prior = deployments.github_json
+
+    def provider(settings, path, body=None):
+        if path.endswith("/dispatches"):
+            calls.append((path, body))
+            raise urllib.error.HTTPError("https://github.invalid", 503, "private", {}, io.BytesIO())
+        return prior(settings, path, body)
+
+    monkeypatch.setattr(deployments, "github_json", provider)
+    payload = {"request_id": str(uuid4())}
+    first = await client.post(P + "/builds", json=payload)
+    assert first.json()["status"] == "unknown"
+    assert (await client.post(P + "/builds", json=payload)).json() == first.json()
+    assert sum(path.endswith("/dispatches") for path, _ in calls) == 1
 
 
 async def test_revoked_admin_queued_update_cannot_execute(client, admin, app, monkeypatch):

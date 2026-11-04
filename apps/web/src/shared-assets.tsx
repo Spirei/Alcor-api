@@ -40,7 +40,7 @@ export function SharedAssetsPage({
   if (session.user.role !== "admin")
     return (
       <section>
-        <h1>共享素材</h1>
+        <h1>素材库</h1>
         <p role="alert">需要管理员权限</p>
       </section>
     );
@@ -437,7 +437,7 @@ function SharedAssetSession({
   return (
     <section className="shared-assets-page">
       <header className="page-heading">
-        <h1>共享素材</h1>
+        <h1>素材库</h1>
         <button
           className="button"
           disabled={busy || locked}
@@ -662,28 +662,31 @@ function SharedAssetSession({
           )}
         </section>
       )}
-      <form
-        className="shared-asset-lookup"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void check(lookup.trim());
-        }}
-      >
-        <label>
-          操作编号
-          <input
-            value={lookup}
-            disabled={locked}
-            onChange={(event) => setLookup(event.target.value)}
-          />
-        </label>
-        <button
-          className="button secondary"
-          disabled={busy || locked || !validAssetOperation(lookup.trim())}
+      <details className="asset-library-management">
+        <summary>操作回执查询</summary>
+        <form
+          className="shared-asset-lookup"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void check(lookup.trim());
+          }}
         >
-          查询回执
-        </button>
-      </form>
+          <label>
+            操作编号
+            <input
+              value={lookup}
+              disabled={locked}
+              onChange={(event) => setLookup(event.target.value)}
+            />
+          </label>
+          <button
+            className="button secondary"
+            disabled={busy || locked || !validAssetOperation(lookup.trim())}
+          >
+            查询回执
+          </button>
+        </form>
+      </details>
       <details onToggle={(event) => setCatalogOpened(event.currentTarget.open)}>
         <summary>素材目录登记与来源管理</summary>
         <AssetLookupCatalogPanel

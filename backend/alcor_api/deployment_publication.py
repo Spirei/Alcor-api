@@ -5,6 +5,7 @@ successful/skipped Actions job alone never proves a new image was published.
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException
 
@@ -14,11 +15,13 @@ WORKFLOW = ".github/workflows/docker-publish.yml"
 
 def preflight(settings, github, release_type):
     try:
-        for status in ACTIVE:
-            result = github(
-                settings,
-                f"/actions/workflows/docker-publish.yml/runs?branch=main&status={status}&per_page=100",
-            )
+        def active_runs(status):
+            return github(settings, f"/actions/workflows/docker-publish.yml/runs?branch=main&status={status}&per_page=100")
+
+        # These independent reads must not consume five sequential network timeouts.
+        with ThreadPoolExecutor(max_workers=len(ACTIVE)) as pool:
+            results = list(pool.map(active_runs, ACTIVE))
+        for result in results:
             runs = result["workflow_runs"]
             if not isinstance(runs, list) or len(runs) >= 100:
                 raise ValueError("incomplete active history")

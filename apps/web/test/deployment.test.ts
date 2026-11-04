@@ -5,7 +5,47 @@ import {
   selectedHeat,
   runState,
   formatTime,
+  buildReceiptMessage,
+  verificationOnly,
 } from "../src/deployment-view.ts";
+test("explicit build failure stays distinct from lost dispatch and verification-only jobs", () => {
+  assert.match(buildReceiptMessage({ status: "failed" }), /未接受/);
+  assert.match(buildReceiptMessage({ status: "unknown" }), /同一回执/);
+  assert.equal(
+    buildReceiptMessage({ status: "failed", message: "GitHub 权限不足" }),
+    "GitHub 权限不足",
+  );
+  const job = {
+    id: 1,
+    name: "publish",
+    status: "completed",
+    conclusion: "success",
+    started_at: null,
+    completed_at: null,
+    steps: ["核对同一提交的已有发布", "发布不可变版本清单"].map(
+      (name, number) => ({
+        name,
+        number,
+        status: "completed",
+        conclusion: "skipped",
+        started_at: null,
+        completed_at: null,
+      }),
+    ),
+  };
+  assert.equal(verificationOnly([job]), true);
+  assert.equal(verificationOnly([{ ...job, conclusion: "failure" }]), false);
+  assert.equal(
+    verificationOnly([
+      {
+        ...job,
+        steps: job.steps.map((s) => ({ ...s, conclusion: "success" })),
+      },
+    ]),
+    false,
+  );
+  assert.equal(verificationOnly(null), false);
+});
 
 test("deployment heatmap distinguishes unknown, zero, future and leap days", () => {
   const partial = heatCells(2024, { "2024-02-29": 2 }, false, "2024-10-31");

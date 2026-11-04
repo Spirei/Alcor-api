@@ -1,7 +1,3 @@
-import {
-  useDeploymentVerification,
-  requiresDeploymentVerification,
-} from "./deployment-verification";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
@@ -35,6 +31,8 @@ import {
   formatTime,
   formatDuration,
   workflowLabel,
+  buildReceiptMessage,
+  verificationOnly,
   type Deployment,
   type Release,
   type Receipt,
@@ -62,10 +60,6 @@ export function DeploymentSettings({
   session: Session;
   appearance: AppearanceController;
 }) {
-  const verification = useDeploymentVerification(session, () => {
-    state.reload();
-    setConfigOpen(false);
-  });
   const state = useResource<Deployment>("/deployment");
   const [busy, setBusy] = useState(false),
     [confirm, setConfirm] = useState(false);
@@ -79,9 +73,7 @@ export function DeploymentSettings({
     const params = new URLSearchParams(location.search);
     if (params.get("verify") === "github") {
       window.history.replaceState(null, "", "/deploy-status");
-      verification.request(() => {
-        window.location.assign(base + "/deployment/github/start");
-      });
+      window.location.assign(base + "/deployment/github/start");
     } else if (params.has("github_error")) {
       setMessage(params.get("github_error") || "GitHub 授权未完成");
       setConfigOpen(true);
@@ -89,6 +81,24 @@ export function DeploymentSettings({
       setMessage("GitHub 授权已保存");
   }, []);
   const data = state.data;
+  useEffect(() => {
+    if (data?.source && data.release?.revision === data.source.sha) {
+      if (buildPending.current) {
+        buildPending.current = null;
+        setMessage("当前 main 已有可用镜像，原构建回执保留在详情中");
+      }
+      return;
+    }
+    const last = data?.build_requests[0];
+    if (
+      !buildPending.current &&
+      last &&
+      ["dispatching", "unknown"].includes(last.status)
+    ) {
+      buildPending.current = last.request_id;
+      setMessage((previous) => previous || buildReceiptMessage(last));
+    }
+  }, [data?.build_requests, data?.release?.revision, data?.source?.sha]);
   useEffect(() => {
     if (!watchingUpdate) return;
     const receipt = data?.receipts.find((r) => r.request_id === watchingUpdate);
@@ -169,12 +179,7 @@ export function DeploymentSettings({
       setConfirm(false);
       state.reload();
     } catch (error) {
-      if (requiresDeploymentVerification(error) && pending.current) {
-        const attempt = pending.current;
-        pending.current = null;
-        setConfirm(false);
-        verification.request(() => update(attempt));
-      } else if (
+      if (
         error instanceof ApiError &&
         error.status === 404 &&
         pending.current
@@ -201,7 +206,12 @@ export function DeploymentSettings({
       const checking = !resumeId && !!buildPending.current;
       if (resumeId || !buildPending.current)
         buildPending.current = resumeId || requestId();
-      const result = await api<{ status: string; request_id: string }>(
+      setMessage(checking ? "正在查询原构建回执…" : "正在提交构建请求…");
+      const result = await api<{
+        status: string;
+        request_id: string;
+        message?: string;
+      }>(
         checking
           ? `/deployment/builds/${buildPending.current}`
           : "/deployment/builds",
@@ -212,21 +222,14 @@ export function DeploymentSettings({
               body: JSON.stringify({ request_id: buildPending.current }),
             },
         session.csrf,
+        120000,
       );
-      setMessage(
-        `${result.status === "submitted" ? "构建请求已提交" : "构建结果待核对"} · ${result.request_id}`,
-      );
-      buildPending.current = null;
+      setMessage(`${buildReceiptMessage(result)} · ${result.request_id}`);
+      if (["submitted", "failed"].includes(result.status))
+        buildPending.current = null;
       setBuildConfirm(false);
       state.reload();
     } catch (error) {
-      if (requiresDeploymentVerification(error) && buildPending.current) {
-        const attempt = buildPending.current;
-        buildPending.current = null;
-        setBuildConfirm(false);
-        verification.request(() => build(attempt));
-        return;
-      }
       setMessage(error instanceof Error ? error.message : "构建请求失败");
       if (
         error instanceof ApiError &&
@@ -242,9 +245,47 @@ export function DeploymentSettings({
   const buildState = runState(data?.build?.status, data?.build?.conclusion);
   const checkState = runState(data?.check?.status, data?.check?.conclusion);
   const activeBuild = !!data?.build && data.build.status !== "completed";
+  const checkedSource =
+    !!data?.source &&
+    data.check?.sha === data.source.sha &&
+    data.check?.conclusion === "success";
+  const verifyOnly = verificationOnly(data?.jobs);
   const sourceCurrent =
     !!data?.source && data.release?.revision === data.source.sha;
   const runtimeCurrent = !!data?.matches_release;
+  const lastBuildRequest = data?.build_requests[0];
+  const buildAge = lastBuildRequest
+    ? Date.now() - Date.parse(lastBuildRequest.created_at)
+    : Infinity;
+  const watchingBuild =
+    activeBuild ||
+    (!sourceCurrent &&
+      !!lastBuildRequest &&
+      ["dispatching", "submitted", "unknown"].includes(
+        lastBuildRequest.status,
+      ) &&
+      buildAge >= 0 &&
+      buildAge < 15 * 60000);
+  useEffect(() => {
+    if ((!watchingBuild && !watchingUpdate) || state.refreshing || state.error)
+      return;
+    const refreshVisible = () => {
+      if (!document.hidden) state.reload();
+    };
+    const timer = setTimeout(refreshVisible, 5000);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [
+    watchingBuild,
+    watchingUpdate,
+    state.refreshing,
+    state.updatedAt,
+    state.error,
+    state.reload,
+  ]);
   const repositoryUrl = data?.repository
     ? `https://github.com/${data.repository}`
     : null;
@@ -266,7 +307,6 @@ export function DeploymentSettings({
       <div className="deploy-container">
         <header className="deploy-header">
           <div>
-
             <h1>发布与更新</h1>
           </div>
           <div className="deploy-toolbar">
@@ -364,10 +404,7 @@ export function DeploymentSettings({
               ))}
               {data?.build_requests.map((r) => (
                 <p key={r.request_id}>
-                  {r.status === "submitted"
-                    ? "构建请求已提交"
-                    : "构建结果待核对"}{" "}
-                  · {r.request_id}
+                  {buildReceiptMessage(r)} · {r.request_id}
                 </p>
               ))}
             </details>
@@ -418,28 +455,34 @@ export function DeploymentSettings({
             <ChevronRight className="deploy-seam" />
             <button
               className="deploy-chip deploy-publish"
+              aria-busy={busy && !!buildPending.current}
               disabled={
                 busy ||
                 !data?.can_build ||
                 activeBuild ||
                 !!state.error ||
-                !!data?.source_error
+                !!data?.source_error ||
+                (!buildPending.current && (sourceCurrent || !checkedSource))
               }
               onClick={() =>
                 buildPending.current ? void build() : setBuildConfirm(true)
               }
             >
               <i
-                className={`deploy-dot ${activeBuild ? "pending" : sourceCurrent ? "good" : "neutral"}`}
+                className={`deploy-dot ${activeBuild || (busy && buildPending.current) ? "pending" : sourceCurrent ? "good" : "neutral"}`}
               />
               <IconPackageExport />
-              {buildPending.current
-                ? "核对构建回执"
-                : activeBuild
-                  ? "镜像构建中"
-                  : sourceCurrent
-                    ? "镜像已是最新"
-                    : "构建发布镜像"}
+              {busy && buildPending.current
+                ? "处理构建请求中…"
+                : buildPending.current
+                  ? "核对构建回执"
+                  : activeBuild
+                    ? "镜像构建中"
+                    : sourceCurrent
+                      ? "镜像已是最新"
+                      : !checkedSource
+                        ? "等待检查通过"
+                        : "构建发布镜像"}
             </button>
             <ChevronRight className="deploy-seam" />
             <button
@@ -458,7 +501,9 @@ export function DeploymentSettings({
               {pending.current
                 ? "核对更新回执"
                 : runtimeCurrent
-                  ? "容器已是最新"
+                  ? sourceCurrent
+                    ? "容器已是最新"
+                    : "等待新镜像"
                   : !data?.runner?.online
                     ? "执行器未连接"
                     : data?.release
@@ -484,6 +529,9 @@ export function DeploymentSettings({
           <div className="deploy-section-head deploy-card-head">
             <div>
               <h2 id="progress-title">镜像构建进度</h2>
+              {verifyOnly && (
+                <p className="deploy-message">仅验证构建 · 未发布镜像</p>
+              )}
               <p>
                 {data?.build
                   ? `${data.build.sha.slice(0, 7)} · ${data.jobs?.filter((j) => j.status === "completed").length ?? "—"} / ${data.jobs?.length ?? "—"} 阶段 · ${formatDuration(data.build.started_at, data.build.status === "completed" ? data.build.updated_at : data.checked_at)}`
@@ -657,7 +705,6 @@ export function DeploymentSettings({
           </div>
         </section>
         <DeploymentHeatmap data={activity.data} error={activity.error} />
-        {verification.dialog}
         {buildConfirm && data && (
           <Dialog title="确认构建发布" onClose={() => setBuildConfirm(false)}>
             <p>使用 {data.repository} 的 main 分支源码构建并发布镜像？</p>

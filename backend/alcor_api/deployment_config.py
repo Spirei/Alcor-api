@@ -13,7 +13,7 @@ from fastapi.responses import RedirectResponse
 from psycopg.types.json import Jsonb
 from pydantic import Field, SecretStr, field_validator
 
-from .admin_verification import VerificationInput, require_admin_verification, verify_admin_access
+from .admin_verification import VerificationInput, verify_admin_access
 from .connections import Vault
 from .deployments import Admin
 from .models import InputModel
@@ -109,8 +109,7 @@ async def save_config(data: ConfigInput, request: Request, who: Admin):
         else None
     )
     async with db.connection() as conn, conn.transaction():
-        await lock_mutation_identity(conn, who)
-        await require_admin_verification(conn, who, "deployment")
+        await lock_mutation_identity(conn, who, require_admin=True)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.deployment',0))")
         old = await (
             await conn.execute(
@@ -162,8 +161,7 @@ async def disconnect(data: DisconnectInput, request: Request, who: Admin):
     settings, db = request.app.state.settings, request.app.state.db
     fingerprint = digest("oauth-disconnect:" + str(data.revision))
     async with db.connection() as conn, conn.transaction():
-        await lock_mutation_identity(conn, who)
-        await require_admin_verification(conn, who, "deployment")
+        await lock_mutation_identity(conn, who, require_admin=True)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.deployment',0))")
         if data.request_id is not None:
             previous = await (
@@ -219,13 +217,7 @@ async def oauth_start_for(request, who, *, callback_path=CALLBACK, cookie_name=C
     callback = callback_url(settings, callback_path)
     state, nonce = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     async with db.connection() as conn, conn.transaction():
-        await lock_mutation_identity(conn, who)
-        try:
-            await require_admin_verification(conn, who, "deployment")
-        except HTTPException as exc:
-            if exc.headers and exc.headers.get("X-Alcor-Reauthentication") == "required":
-                return RedirectResponse("/deploy-status?verify=github", status_code=303)
-            raise
+        await lock_mutation_identity(conn, who, require_admin=True)
         config = await (
             await conn.execute("SELECT revision FROM deployment_configuration WHERE singleton FOR SHARE")
         ).fetchone()

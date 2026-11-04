@@ -1,20 +1,44 @@
 import { useEffect, useRef, useState } from "react";
-import { Grid2X2, List, Search, RefreshCw, ImageOff } from "lucide-react";
+import {
+  Grid2X2,
+  List,
+  Search,
+  RefreshCw,
+  ImageOff,
+  ChevronRight,
+} from "lucide-react";
 import { api, type Session } from "./api";
 import { Dialog } from "./dialog";
 import "./asset-library-browser.css";
 
 const categories = [
-  ["stock", "股票"],
-  ["market", "市场"],
-  ["flag", "国旗"],
-  ["broker", "券商"],
-  ["group", "分组"],
-  ["crypto", "加密资产"],
+  ["stock", "股票图标"],
+  ["crypto", "加密货币"],
   ["metal", "贵金属"],
+  ["market", "市场图标"],
+  ["flag", "国家/地区旗帜"],
+  ["broker", "券商图标"],
+  ["group", "分组图标"],
   ["icon", "图标"],
-  ["card", "卡面"],
+  ["card", "卡片"],
 ] as const;
+const pageSize = 10;
+const markets: Record<string, string> = {
+  US: "美股",
+  HK: "港股",
+  CN: "A股",
+  JP: "日股",
+  KR: "韩股",
+  SG: "新加坡",
+  UK: "英股",
+  DE: "德股",
+  FR: "法股",
+  AU: "澳股",
+  CA: "加拿大",
+  IN: "印度",
+  TW: "台湾",
+  BR: "巴西",
+};
 type Asset = {
   id: string;
   name: string;
@@ -71,7 +95,7 @@ export function AssetLibraryBrowser({
   const [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [page, setPage] = useState(1);
-  const [view, setView] = useState<"grid" | "list">("grid"),
+  const [view, setView] = useState<"grid" | "list">("list"),
     [dark, setDark] = useState(false);
   const [listing, setListing] = useState<Listing | null>(null),
     [busy, setBusy] = useState(false);
@@ -124,7 +148,7 @@ export function AssetLibraryBrowser({
       type,
       paged: "1",
       page: String(page),
-      pageSize: "36",
+      pageSize: String(pageSize),
       q: query,
     });
     if (market && type === "stock") params.set("market", market);
@@ -138,12 +162,12 @@ export function AssetLibraryBrowser({
         if (
           !value ||
           !Array.isArray(value.assets) ||
-          value.assets.length > 36 ||
+          value.assets.length > pageSize ||
           !Number.isSafeInteger(value.total) ||
           value.total < value.assets.length ||
           !Number.isSafeInteger(value.page) ||
           value.page < 1 ||
-          value.pageSize !== 36 ||
+          value.pageSize !== pageSize ||
           !value.assets.every(
             (a) =>
               a &&
@@ -186,7 +210,7 @@ export function AssetLibraryBrowser({
     session.csrf,
   ]);
   const shown = active && visible && !retired ? listing : null;
-  const pages = shown ? Math.max(1, Math.ceil(shown.total / 36)) : page;
+  const pages = shown ? Math.max(1, Math.ceil(shown.total / pageSize)) : page;
   return (
     <section className="asset-library" aria-label="素材浏览">
       <nav className="asset-library-tabs" aria-label="素材分类">
@@ -206,6 +230,27 @@ export function AssetLibraryBrowser({
         ))}
       </nav>
       <div className="asset-library-toolbar">
+        {type === "stock" && (
+          <div
+            className="asset-library-markets"
+            role="group"
+            aria-label="市场快捷筛选"
+          >
+            {["", "US", "HK", "CN", "JP", "KR"].map((m) => (
+              <button
+                type="button"
+                key={m}
+                aria-pressed={market === m}
+                onClick={() => {
+                  setMarket(m);
+                  setPage(1);
+                }}
+              >
+                {markets[m] || "全部"}
+              </button>
+            ))}
+          </div>
+        )}
         <label className="asset-library-search">
           <Search size={18} />
           <input
@@ -242,7 +287,9 @@ export function AssetLibraryBrowser({
               "TW",
               "BR",
             ].map((m) => (
-              <option key={m}>{m}</option>
+              <option key={m} value={m}>
+                {markets[m]} · {m}
+              </option>
             ))}
           </select>
         )}
@@ -297,17 +344,27 @@ export function AssetLibraryBrowser({
           ""
         )}
       </div>
+      {view === "list" && shown && shown.assets.length > 0 && (
+        <div className="asset-library-list-head" aria-hidden="true">
+          <span>序号</span>
+          <span>名称 / 代码</span>
+          <span>市场 / 分类</span>
+        </div>
+      )}
       <div
         className={`asset-library-items ${view} ${type === "card" ? "cards" : ""} ${dark ? "dark-preview" : ""}`}
         aria-busy={busy}
       >
-        {shown?.assets.map((asset) => (
+        {shown?.assets.map((asset, index) => (
           <button
             type="button"
             className="asset-library-item"
             key={asset.id}
             onClick={() => setSelected(asset)}
           >
+            <span className="asset-library-rank" aria-hidden="true">
+              {(page - 1) * pageSize + index + 1}
+            </span>
             <span className="asset-library-picture">
               <Thumbnail
                 key={
@@ -328,6 +385,16 @@ export function AssetLibraryBrowser({
                   categories.find(([key]) => key === type)?.[1]}
               </small>
             </span>
+            <span className="asset-library-market">
+              {markets[asset.market || ""] ||
+                asset.market ||
+                categories.find(([key]) => key === type)?.[1]}
+            </span>
+            <ChevronRight
+              className="asset-library-open"
+              size={15}
+              aria-hidden="true"
+            />
           </button>
         ))}
       </div>

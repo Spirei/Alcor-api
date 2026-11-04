@@ -5,6 +5,7 @@ import hashlib
 import json
 import secrets
 import urllib.request
+import urllib.error
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
@@ -13,7 +14,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__
-from .admin_verification import require_admin_verification
 from .models import InputModel
 from .security import Identity, administrator, lock_mutation_identity
 
@@ -100,7 +100,7 @@ def github_json(settings, path, body=None):
         def redirect_request(self, *args, **kwargs):
             return None
 
-    with urllib.request.build_opener(NoRedirect).open(request, timeout=4) as response:
+    with urllib.request.build_opener(NoRedirect).open(request, timeout=15 if body is not None else 4) as response:
         if response.status == 204:
             return {}
         data = response.read(1048577)
@@ -166,8 +166,8 @@ async def status(request: Request, who: Admin):
         ).fetchall()
         builds = await (
             await conn.execute(
-                "SELECT request_id,status,created_at FROM deployment_builds WHERE repository=%s ORDER BY created_at DESC LIMIT 10",
-                (settings.deployment_repository,),
+                "SELECT request_id,status,created_at FROM deployment_builds WHERE repository=%s AND owner_id=%s ORDER BY created_at DESC LIMIT 10",
+                (settings.deployment_repository, who.id),
             )
         ).fetchall()
         runner = await (
@@ -233,8 +233,7 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
     if not settings.deployment_runner_token:
         raise HTTPException(409, "尚未配置群晖更新执行器")
     async with db.connection() as conn, conn.transaction():
-        await lock_mutation_identity(conn, who)
-        await require_admin_verification(conn, who, "deployment")
+        await lock_mutation_identity(conn, who, require_admin=True)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.deployment',0))")
         await guard_generation(conn, settings)
         old = await (
@@ -377,8 +376,7 @@ async def build_source(data: BuildInput, request: Request, who: Admin):
     if not configured(settings) or not settings.deployment_github_token:
         raise HTTPException(409, "尚未配置发布权限")
     async with db.connection() as conn, conn.transaction():
-        await lock_mutation_identity(conn, who)
-        await require_admin_verification(conn, who, "deployment")
+        await lock_mutation_identity(conn, who, require_admin=True)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.build',0))")
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.deployment',0))")
         await guard_generation(conn, settings)
@@ -392,7 +390,8 @@ async def build_source(data: BuildInput, request: Request, who: Admin):
             return old
         active = await (
             await conn.execute(
-                "SELECT 1 FROM deployment_builds WHERE created_at>clock_timestamp()-interval '5 minutes'"
+                "SELECT 1 FROM deployment_builds WHERE repository=%s AND status<>'failed' AND created_at>clock_timestamp()-interval '5 minutes'",
+                (settings.deployment_repository,),
             )
         ).fetchone()
         if active:
@@ -410,6 +409,7 @@ async def build_source(data: BuildInput, request: Request, who: Admin):
         )
     # Commit acceptance first. A crash or a lost HTTP response must never cause redispatch.
     state = "submitted"
+    message = None
     try:
         await asyncio.to_thread(
             github_json,
@@ -417,6 +417,20 @@ async def build_source(data: BuildInput, request: Request, who: Admin):
             "/actions/workflows/docker-publish.yml/dispatches",
             {"ref": "main", "inputs": {"request_id": str(data.request_id)}},
         )
+    except urllib.error.HTTPError as exc:
+        # An explicit rejection is different from losing the dispatch response.
+        # Never surface provider bodies: they may contain credentials or private context.
+        if 400 <= exc.code < 500 and exc.code != 408:
+            state = "failed"
+            message = {
+                401: "GitHub 授权已失效，请重新配置发布 Token",
+                403: "GitHub 拒绝构建，请核对发布 Token 的 Actions 读写权限及仓库访问权限",
+                404: "GitHub 未找到发布工作流或授权无权访问仓库，请核对仓库与 Token",
+                422: "GitHub 拒绝了工作流参数，请核对 main 分支的发布工作流",
+                429: "GitHub 请求过于频繁，请稍后再试",
+            }.get(exc.code, "GitHub 未接受构建请求，请核对发布配置")
+        else:
+            state = "unknown"
     except (OSError, ValueError, KeyError, TypeError):
         state = "unknown"
     async with db.connection() as conn:
@@ -426,7 +440,7 @@ async def build_source(data: BuildInput, request: Request, who: Admin):
                 (state, who.id, data.request_id),
             )
         ).fetchone()
-    return row
+    return {**row, **({"message": message} if message else {})}
 
 
 @router.get("/builds/{request_id}")

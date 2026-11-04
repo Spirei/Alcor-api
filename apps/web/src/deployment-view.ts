@@ -69,6 +69,32 @@ export type Deployment = {
   runner: { online: boolean; observed_at: string } | null;
   receipts: Receipt[];
 };
+export function buildReceiptMessage(result: {
+  status: string;
+  message?: string;
+}) {
+  if (result.status === "failed")
+    return result.message || "GitHub 未接受构建请求，请核对发布授权后重试";
+  if (result.status === "submitted") return "构建请求已提交，等待 GitHub 运行";
+  if (result.status === "dispatching") return "正在联系 GitHub，请核对同一回执";
+  return "构建结果待核对，请查询同一回执";
+}
+export function verificationOnly(jobs: BuildJob[] | null | undefined) {
+  if (
+    !jobs?.length ||
+    !jobs.every((j) => j.status === "completed" && j.conclusion === "success")
+  )
+    return false;
+  const steps = jobs.flatMap((j) => j.steps);
+  return ["核对同一提交的已有发布", "发布不可变版本清单"].every((name) =>
+    steps.some(
+      (s) =>
+        s.name === name &&
+        s.status === "completed" &&
+        s.conclusion === "skipped",
+    ),
+  );
+}
 export type Tone = "good" | "bad" | "pending" | "neutral";
 export function runState(
   status?: string,
@@ -87,17 +113,15 @@ export function runState(
 }
 export function formatTime(value?: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return "—";
-  return (
-    new Intl.DateTimeFormat("zh-CN", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(value))
-  );
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
 }
 export function formatDuration(start?: string | null, end?: string | null) {
   if (

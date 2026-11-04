@@ -1,7 +1,3 @@
-import {
-  useDeploymentVerification,
-  requiresDeploymentVerification,
-} from "./deployment-verification";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, base, type Session } from "./api";
 import { PasswordField } from "./password-fields";
@@ -46,12 +42,6 @@ export function DeploymentConfigForm({
   session: Session;
   onClose: () => void;
 }) {
-  const verification = useDeploymentVerification(session, () => {
-    setToken("");
-    setRepository("");
-    invalidate();
-    onClose();
-  });
   const config = useDeploymentConfig(),
     invalidate = useDeploymentInvalidation();
   const [repository, setRepository] = useState(""),
@@ -75,11 +65,7 @@ export function DeploymentConfigForm({
     };
   }, []);
   function withdraw(error: unknown) {
-    if (
-      error instanceof ApiError &&
-      [401, 403].includes(error.status) &&
-      !requiresDeploymentVerification(error)
-    ) {
+    if (error instanceof ApiError && [401, 403].includes(error.status)) {
       setToken("");
       setRepository("");
       onClose();
@@ -116,20 +102,15 @@ export function DeploymentConfigForm({
       onClose();
     } catch (e) {
       if (!alive.current) return;
-      if (requiresDeploymentVerification(e) && snapshot) {
+      setError(e instanceof Error ? e.message : "保存失败");
+      if (
+        e instanceof ApiError &&
+        e.status >= 400 &&
+        e.status < 500 &&
+        e.status !== 404
+      )
         pending.current = null;
-        verification.request(() => save(snapshot));
-      } else {
-        setError(e instanceof Error ? e.message : "保存失败");
-        if (
-          e instanceof ApiError &&
-          e.status >= 400 &&
-          e.status < 500 &&
-          e.status !== 404
-        )
-          pending.current = null;
-        withdraw(e);
-      }
+      withdraw(e);
     } finally {
       if (alive.current) setBusy(false);
     }
@@ -150,12 +131,8 @@ export function DeploymentConfigForm({
       if (alive.current) invalidate();
     } catch (e) {
       if (!alive.current) return;
-      if (requiresDeploymentVerification(e))
-        verification.request(() => disconnect(revision));
-      else {
-        setError(e instanceof Error ? e.message : "撤销失败");
-        withdraw(e);
-      }
+      setError(e instanceof Error ? e.message : "撤销失败");
+      withdraw(e);
     } finally {
       if (alive.current) setBusy(false);
     }
@@ -179,7 +156,7 @@ export function DeploymentConfigForm({
                 onChange={(e) => setRepository(e.target.value)}
                 placeholder="owner/repository"
                 autoComplete="off"
-                disabled={busy || !!pending.current || verification.required}
+                disabled={busy || !!pending.current}
               />
             </label>
             <label htmlFor="deploy-token">
@@ -190,7 +167,7 @@ export function DeploymentConfigForm({
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="Actions: Read and write"
                 autoComplete="new-password"
-                disabled={busy || !!pending.current || verification.required}
+                disabled={busy || !!pending.current}
               />
             </label>
           </div>
@@ -235,14 +212,13 @@ export function DeploymentConfigForm({
             <button
               type="submit"
               className="deploy-save"
-              disabled={busy || !config.data || verification.required}
+              disabled={busy || !config.data}
             >
               {pending.current ? "核对保存回执" : "保存配置"}
             </button>
           </div>
         </form>
       </section>
-      {verification.dialog}
     </>
   );
 }

@@ -155,7 +155,7 @@ async def test_writes_without_original_proof_and_nonadmin_cannot_issue_commands(
         assert not await (await conn.execute("SELECT 1 FROM deployment_requests")).fetchone()
 
 
-async def test_aged_legacy_session_reauth_is_scope_and_session_bound(legacy, app, db):
+async def test_aged_legacy_admin_session_saves_without_extra_password(legacy, app, db):
     token = legacy.cookies["fire_session"]
     async with db.connection() as conn:
         await conn.execute(
@@ -167,12 +167,8 @@ async def test_aged_legacy_session_reauth_is_scope_and_session_bound(legacy, app
                 "SELECT created_at,expires_at FROM sessions WHERE token_hash=%s", (digest(token),)
             )
         ).fetchone()
-    denied = await save(legacy, token="SyntheticDeploySecret9")
-    assert denied.status_code == 403 and denied.headers["x-alcor-reauthentication"] == "required"
-    assert (await legacy.post(P + "/reauthenticate", json={"password": "Incorrect9Pass"})).status_code == 403
-    verified = await legacy.post(P + "/reauthenticate", json={"password": "Synthetic9Pass"})
-    assert verified.status_code == 204, verified.text
-    assert (await save(legacy, token="SyntheticDeploySecret9")).status_code == 200
+    accepted = await save(legacy, token="SyntheticDeploySecret9")
+    assert accepted.status_code == 200 and "x-alcor-reauthentication" not in accepted.headers
     async with db.connection() as conn:
         assert (
             await (
@@ -188,7 +184,7 @@ async def test_aged_legacy_session_reauth_is_scope_and_session_bound(legacy, app
                     (digest(token),),
                 )
             ).fetchone()
-        )["n"] == 1
+        )["n"] == 0
 
 
 async def test_legacy_oauth_uses_distinct_cookie_callback_original_session_and_one_exchange(

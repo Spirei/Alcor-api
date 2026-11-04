@@ -95,7 +95,7 @@ test("actual shared image SSR and original downloader enforce administrator curr
         );
         assert.equal((html.match(/<h1>/g) || []).length, 1);
         for (const label of [
-          "共享素材",
+          "素材库",
           "主页背景",
           "站点标志",
           "登录页图片",
