@@ -4,43 +4,11 @@
 .reference-page > .workspace-view > section {
   margin: 28px 0;
 }
-.reference-page .page-heading,
-.reference-actions,
 .reference-receipt {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-.reference-page .page-heading {
-  justify-content: space-between;
-}
-.reference-actions h2 {
-  margin-right: auto;
-}
-.reference-actions label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.reference-actions input[type="number"],
-.reference-actions input[inputmode="numeric"] {
-  width: 100px;
-}
-.reference-rates {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 18px;
-  margin: 20px 0;
-}
-.reference-rates div {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--edge);
-}
-.reference-rates dd {
-  margin: 8px 0 0;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
 }
 .reference-calendar {
   max-height: 420px;
@@ -57,10 +25,6 @@
 .reference-calendar td {
   padding: 12px;
   border-bottom: 1px solid var(--edge);
-}
-.reference-page details {
-  margin: 16px 0;
-  font-size: 14px;
 }
 .reference-page code {
   overflow-wrap: anywhere;

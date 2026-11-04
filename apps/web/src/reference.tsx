@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import { TradingMonth } from "./trading-month";
+import { MarketCalendar } from "./market-calendar";
 import {
   Activity,
   useCallback,
@@ -8,13 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { RefreshCw } from "lucide-react";
 import { api, ApiError, type Session } from "./api";
 import { ConnectionVerification } from "./connection-verification";
-import { SelectMenu } from "./select-menu";
 import { requestId } from "./request-id";
 import {
-  dayLabel,
   mayPoll,
   terminal,
   readOriginalReceipt,
@@ -24,7 +21,6 @@ import {
   type Receipt,
 } from "./reference-state";
 import "./reference.css";
-import { CalendarComparison } from "./calendar-comparison";
 import { FxObservations } from "./fx-observations";
 import { FxProviderEditor, type CustomProvider } from "./fx-provider-editor";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
@@ -87,6 +83,7 @@ type Day = {
   } | null;
 };
 export type Calendar = {
+  calendarVersion?: string;
   market: string;
   marketName?: string;
   timeZone?: string;
@@ -144,8 +141,6 @@ function ReferenceSession({
   }
   const currency=params.get("from") ?? "USD", amount=params.get("amount") ?? "100";
   const fxInputValue={from:/^[A-Z]{3}$/.test(currency)?currency:"USD",amount:amount.length<=44?amount:""};
-  const [calendarError,setCalendarError] = useState("");
-  const [calendarRefresh,setCalendarRefresh] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSaved,setSettingsSaved] = useState("");
   const [settingsTab, setSettingsTab] = useState<"provider" | "observations">(
@@ -154,13 +149,6 @@ function ReferenceSession({
   const [visible, setVisible] = useState(!document.hidden);
   const [rates, setRates] = useState<Rates | null>(null),
     [config, setConfig] = useState<Config | null>(null);
-  const [calendar, setCalendar] = useState<Calendar | null>(null),
-    [market, setMarket] = useState("CN"),
-    [year, setYear] = useState(String(new Date().getFullYear())),
-    [month, setMonth] = useState(
-      String(new Date().getMonth() + 1).padStart(2, "0"),
-    );
-  const [calendarMode, setCalendarMode] = useState("single");
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [receipt, setReceipt] = useState<Receipt | null>(null);
@@ -201,7 +189,6 @@ function ReferenceSession({
     epoch.current++;
     setRates(null);
     setConfig(null);
-    setCalendar(null);
     setReceipt(null);
     setHistory(null);
     setHistoryBusy(false);
@@ -326,43 +313,6 @@ function ReferenceSession({
         });
     }
   }, [active, visible, locked, load, session.user.role, failure]);
-  useEffect(() => {
-    setCalendar(null);
-    setCalendarError("");
-    if (
-      view !== "calendar" ||
-      !active ||
-      !visible ||
-      locked ||
-      calendarMode !== "single" ||
-      !/^\d{4}$/.test(year) ||
-      Number(year) < 2000 ||
-      Number(year) > 2100
-    )
-      return;
-    const controller = new AbortController();
-    const generation = epoch.current;
-    void api<{ data: Calendar }>(
-      `/reference/calendar?market=${market}&year=${year}`,
-      { signal: controller.signal },
-    )
-      .then((result) => {
-        if (
-          !controller.signal.aborted &&
-          mounted.current &&
-          live.current &&
-          generation === epoch.current
-        )
-          setCalendar(result.data);
-      })
-      .catch((reason) => {
-        if (!controller.signal.aborted && generation === epoch.current) {
-          if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) failure(reason);
-          setCalendarError(reason instanceof Error ? reason.message : "日历读取失败");
-        }
-      });
-    return () => controller.abort();
-  }, [active, visible, locked, market, year, failure, calendarMode, view, calendarRefresh]);
   const check = useCallback(async () => {
     if (!id || !live.current || locked || busy || polling.current) return;
     polling.current = true;
@@ -611,22 +561,7 @@ function ReferenceSession({
   }
   return (
     <section className="reference-page">
-      {view === "calendar" && (
-        <header className="page-heading">
-          <h1>休市日历</h1>
-          <button
-            className="button"
-            type="button"
-            onClick={() => setCalendarRefresh(value => value + 1)}
-            disabled={busy || locked}
-          >
-            <RefreshCw size={16} />
-            重新读取
-          </button>
-        </header>
-      )}
       {view === "rates" && !settingsOpen && !historyOpen && error && <p role="alert">{error}</p>}
-      {view === "calendar" && calendarError && <p role="alert">{calendarError}</p>}
       <WorkspaceTabs
         label="汇率与日历功能"
         value={view}
@@ -701,128 +636,7 @@ function ReferenceSession({
         )}
       </WorkspaceView>
       <WorkspaceView active={view === "calendar"} label="休市日历">
-        <section aria-label="交易日历">
-          <div className="reference-actions">
-            <h2>交易日历</h2>
-            <SelectMenu
-              label="日历范围"
-              value={calendarMode}
-              onChange={setCalendarMode}
-              options={[
-                { value: "single", label: "单市场" },
-                { value: "batch", label: "三市场对比" },
-              ]}
-            />
-            <SelectMenu
-              label="市场"
-              disabled={calendarMode === "batch"}
-              value={market}
-              onChange={setMarket}
-              options={[
-                { value: "CN", label: "A 股" },
-                { value: "HK", label: "港股" },
-                { value: "US", label: "美股" },
-              ]}
-            />
-            <SelectMenu
-              label="月份"
-              value={month}
-              onChange={setMonth}
-              options={Array.from({ length: 12 }, (_, index) => ({
-                value: String(index + 1).padStart(2, "0"),
-                label: `${index + 1}月`,
-              }))}
-            />
-            <label>
-              年份
-              <input
-                type="number"
-                min="2000"
-                max="2100"
-                value={year}
-                onChange={(event) => setYear(event.target.value)}
-              />
-            </label>
-          </div>
-          {calendarMode === "batch" ? (
-            <CalendarComparison
-              key={calendarRefresh}
-              year={year}
-              month={month}
-              active={active && visible && !locked && view === "calendar"}
-              onDenied={failure}
-            />
-          ) : calendar ? (
-            <>
-              <p role="status">
-                {calendar.coverage.status === "verified"
-                  ? "年度安排已收录"
-                  : "该年份年度安排未确认"}{" "}
-                · 临时停市和当日实际交易状态未知
-              </p>
-              <p>
-                {calendar.marketName || calendar.market} ·{" "}
-                {calendar.timeZone || "时区未知"}
-              </p>
-              <TradingMonth calendar={calendar} month={month} />
-              <details>
-                <summary>日期与收市明细</summary>
-                <div className="reference-calendar">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>日期</th>
-                        <th>安排</th>
-                        <th>名称</th>
-                        <th>收市时间（当地）</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {calendar.days
-                        .filter((day) => day.date.slice(5, 7) === month)
-                        .map((day) => (
-                          <tr key={day.date}>
-                            <td>{day.date}</td>
-                            <td>{dayLabel(day.status)}</td>
-                            <td>{day.name ?? "—"}</td>
-                            <td>
-                              {day.close
-                                ? `${day.close.continuous}${day.close.auction ? ` · ${day.close.auction.earliest}–${day.close.auction.latest}` : ""}`
-                                : day.isTradingDay === false
-                                  ? "不适用"
-                                  : "未知"}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-              <details>
-                <summary>来源</summary>
-                {calendar.sources.length ? (
-                  calendar.sources.map((source) => (
-                    <p key={source.id}>
-                      <a href={source.url} target="_blank" rel="noreferrer">
-                        {source.title}
-                      </a>
-                      {source.publishedAt && (
-                        <small>发布 {source.publishedAt}</small>
-                      )}
-                      {source.verifiedAt && (
-                        <small>核对 {source.verifiedAt}</small>
-                      )}
-                    </p>
-                  ))
-                ) : (
-                  <p>该年份尚未确认</p>
-                )}
-              </details>
-            </>
-          ) : (
-            <p>日历尚未取得</p>
-          )}
-        </section>
+        <MarketCalendar active={active && visible && !locked && view === "calendar"} onDenied={failure}/>
       </WorkspaceView>
       {historyOpen && (
         <Dialog

@@ -18,7 +18,7 @@ test("migrated presentation keeps source gaps, exact amounts and bounded media e
     await build({
       stdin: {
         contents:
-          'export {WorkspaceTabs,WorkspaceView} from "./src/workspace-ui";export {WorkspaceRoutes} from "./src/workspace-routes";export {MemoryRouter,Route,useLocation} from "react-router-dom";export {FireProgress} from "./src/fire-progress";export {FxConverter} from "./src/fx-converter";export {TradingMonth} from "./src/trading-month";export {ActivityTimeline} from "./src/activity-timeline";export {CardGallery} from "./src/card-gallery";',
+          'export {WorkspaceTabs,WorkspaceView} from "./src/workspace-ui";export {WorkspaceRoutes} from "./src/workspace-routes";export {MemoryRouter,Route,useLocation} from "react-router-dom";export {FireProgress} from "./src/fire-progress";export {FxConverter} from "./src/fx-converter";export {CalendarMonth} from "./src/market-calendar";export {ActivityTimeline} from "./src/activity-timeline";export {CardGallery} from "./src/card-gallery";',
         resolveDir: fileURLToPath(new URL("../", import.meta.url)),
         loader: "tsx",
       },
@@ -78,36 +78,39 @@ test("migrated presentation keeps source gaps, exact amounts and bounded media e
       "calendar generates dates but never infers market availability from weekday",
       () => {
         const html = render(
-          element(ui.TradingMonth, {
-            month: "11",
-            calendar: {
+          element(ui.CalendarMonth, {
+            year: 2026,
+            month: 11,
+            calendars: [{market:"US",
               year: 2026,
               days: [
                 { date: "2026-11-02", status: "trading", name: null },
                 { date: "2026-11-03", status: "holiday", name: "来源休市安排" },
               ],
-            },
+            }],
           }),
         );
-        assert.match(html, /2026\/11\/1 · 未确认/);
-        assert.match(html, /2026\/11\/2 · 交易日/);
-        assert.match(html, /2026\/11\/3 · 休市 · 来源休市安排/);
+        assert.match(html, /2026\/11\/1 · 美股：未确认/);
+        assert.match(html, /2026\/11\/2 · 美股：交易日/);
+        assert.match(html, /2026\/11\/3 · 美股：休市 · 来源休市安排/);
         assert.equal(
-          (html.match(/class="trading-month-day"/g) || []).length,
+          (html.match(/class="market-calendar-day"/g) || []).length,
           30,
         );
         const leap = render(
-          element(ui.TradingMonth, {
-            month: "02",
-            calendar: { year: 2024, days: [] },
+          element(ui.CalendarMonth, {
+            year: 2024,
+            month: 2,
+            calendars: [{market:"US", year: 2024, days: [] }],
           }),
         );
         assert.match(leap, /dateTime="2024-02-29"/);
         assert.equal(
           render(
-            element(ui.TradingMonth, {
-              month: "13",
-              calendar: { year: 2024, days: [] },
+            element(ui.CalendarMonth, {
+              year: 2024,
+              month: 13,
+              calendars: [{market:"US", year: 2024, days: [] }],
             }),
           ),
           "",
