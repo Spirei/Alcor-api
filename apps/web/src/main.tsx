@@ -15,6 +15,7 @@ import {
 } from "./financial-display";
 import { mobileNavigation } from "./site-navigation";
 import { WorkspaceNavigation } from "./workspace-navigation";
+import { WorkspaceRoutes } from "./workspace-routes";
 import "./workspace-ui.css";
 import {
   PublicSiteProvider,
@@ -134,7 +135,6 @@ import {
   NavLink,
   Navigate,
   Route,
-  Routes,
   useLocation,
   useNavigate,
 } from "react-router-dom";
@@ -2099,7 +2099,7 @@ function Workspace({
                           </div>
                         }
                       >
-                        <Routes location={path}>
+                        <WorkspaceRoutes path={path}>
                           <Route
                             path="/connections/postgresql/explorer"
                             element={<PostgresExplorer session={session} />}
@@ -2386,7 +2386,7 @@ function Workspace({
                               />
                             }
                           />
-                        </Routes>
+                        </WorkspaceRoutes>
                       </Suspense>
                     </ModulePanel>
                   </ViewActivity>

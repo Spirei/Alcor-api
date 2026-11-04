@@ -33042,6 +33042,25 @@
             "minItems": 1,
             "title": "Assetmarketorder"
           },
+          "fxOrder": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Fxorder"
+          },
+          "fxHidden": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Fxhidden"
+          },
           "mode": {
             "type": "string",
             "enum": [

@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { TradingMonth } from "./trading-month";
 import {
   Activity,
@@ -18,7 +19,6 @@ import {
   terminal,
   readOriginalReceipt,
   releaseRejectedRequest,
-  rateLabel,
   receiptKey,
   restoreRequest,
   type Receipt,
@@ -28,6 +28,13 @@ import { CalendarComparison } from "./calendar-comparison";
 import { FxObservations } from "./fx-observations";
 import { FxProviderEditor, type CustomProvider } from "./fx-provider-editor";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
+import {
+  SettingGroup,
+  SettingRow,
+  ToggleSwitch,
+  FormActions,
+} from "./workspace-forms";
+import { Dialog } from "./dialog";
 import { FxConverter } from "./fx-converter";
 
 type Rates = {
@@ -130,7 +137,20 @@ function ReferenceSession({
   session: Session;
   active: boolean;
 }) {
-  const [view, setView] = useState<"rates" | "calendar" | "source">("rates");
+  const [params,setParams] = useSearchParams();
+  const view = params.get("view") === "calendar" ? "calendar" : "rates";
+  function setView(value: "rates" | "calendar") {
+    setParams(previous => { const next=new URLSearchParams(previous); next.set("view",value); return next; });
+  }
+  const currency=params.get("from") ?? "USD", amount=params.get("amount") ?? "100";
+  const fxInputValue={from:/^[A-Z]{3}$/.test(currency)?currency:"USD",amount:amount.length<=44?amount:""};
+  const [calendarError,setCalendarError] = useState("");
+  const [calendarRefresh,setCalendarRefresh] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSaved,setSettingsSaved] = useState("");
+  const [settingsTab, setSettingsTab] = useState<"provider" | "observations">(
+    "provider",
+  );
   const [visible, setVisible] = useState(!document.hidden);
   const [rates, setRates] = useState<Rates | null>(null),
     [config, setConfig] = useState<Config | null>(null);
@@ -140,8 +160,7 @@ function ReferenceSession({
     [month, setMonth] = useState(
       String(new Date().getMonth() + 1).padStart(2, "0"),
     );
-  const [calendarMode, setCalendarMode] = useState("single"),
-    [observationsOpen, setObservationsOpen] = useState(false);
+  const [calendarMode, setCalendarMode] = useState("single");
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [receipt, setReceipt] = useState<Receipt | null>(null);
@@ -309,7 +328,9 @@ function ReferenceSession({
   }, [active, visible, locked, load, session.user.role, failure]);
   useEffect(() => {
     setCalendar(null);
+    setCalendarError("");
     if (
+      view !== "calendar" ||
       !active ||
       !visible ||
       locked ||
@@ -335,11 +356,13 @@ function ReferenceSession({
           setCalendar(result.data);
       })
       .catch((reason) => {
-        if (!controller.signal.aborted && generation === epoch.current)
-          failure(reason);
+        if (!controller.signal.aborted && generation === epoch.current) {
+          if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) failure(reason);
+          setCalendarError(reason instanceof Error ? reason.message : "日历读取失败");
+        }
       });
     return () => controller.abort();
-  }, [active, visible, locked, market, year, failure, calendarMode]);
+  }, [active, visible, locked, market, year, failure, calendarMode, view, calendarRefresh]);
   const check = useCallback(async () => {
     if (!id || !live.current || locked || busy || polling.current) return;
     polling.current = true;
@@ -438,8 +461,9 @@ function ReferenceSession({
   }
   async function save() {
     if (!config || busy || locked || !live.current) return;
+    setSettingsSaved("");
     const budget = Number(draft.dailyBudget);
-    if (!Number.isInteger(budget) || budget < 1 || budget > 1000) {
+    if (!/^\d{1,4}$/.test(draft.dailyBudget.trim()) || !Number.isInteger(budget) || budget < 1 || budget > 1000) {
       setError("每日额度须为 1–1000");
       return;
     }
@@ -473,6 +497,7 @@ function ReferenceSession({
           });
           dirty.current = false;
           setError("");
+          setSettingsSaved("接口设置已保存");
         } else {
           setError("设置已变化，草稿已保留，请核对后保存");
         }
@@ -575,21 +600,33 @@ function ReferenceSession({
       failure(reason);
     }
   }
+  function closeSettings() {
+    if (busy || verificationOpen) return;
+    if (config) setDraft({enabled:config.enabled,dailyBudget:String(config.daily_budget)});
+    dirty.current = false;
+    setCustomProvider(undefined);
+    setSettingsSaved("");
+    setError("");
+    setSettingsOpen(false);
+  }
   return (
     <section className="reference-page">
-      <header className="page-heading">
-        <h1>汇率与日历</h1>
-        <button
-          className="button"
-          type="button"
-          onClick={() => void load()}
-          disabled={busy || locked}
-        >
-          <RefreshCw size={16} />
-          重新读取
-        </button>
-      </header>
-      {error && <p role="alert">{error}</p>}
+      {view === "calendar" && (
+        <header className="page-heading">
+          <h1>休市日历</h1>
+          <button
+            className="button"
+            type="button"
+            onClick={() => setCalendarRefresh(value => value + 1)}
+            disabled={busy || locked}
+          >
+            <RefreshCw size={16} />
+            重新读取
+          </button>
+        </header>
+      )}
+      {view === "rates" && !settingsOpen && !historyOpen && error && <p role="alert">{error}</p>}
+      {view === "calendar" && calendarError && <p role="alert">{calendarError}</p>}
       <WorkspaceTabs
         label="汇率与日历功能"
         value={view}
@@ -597,226 +634,71 @@ function ReferenceSession({
         items={[
           { value: "rates", label: "汇率换算" },
           { value: "calendar", label: "休市日历" },
-          ...(session.user.role === "admin"
-            ? [{ value: "source" as const, label: "来源设置" }]
-            : []),
         ]}
       />
-      <WorkspaceView active={view === "rates"} label="汇率换算与观察">
-        <FxConverter rates={rates} />
-        <section aria-label="汇率">
-          <div className="reference-actions">
-            <h2>汇率 · 1 {rates?.base ?? "USD"}</h2>
-            <button
-              className="button"
-              type="button"
-              onClick={() => void refresh()}
-              disabled={busy || locked || id !== null || !rates?.refreshEnabled}
-            >
-              刷新报价
-            </button>
-          </div>
-          {rates ? (
-            <>
-              <dl className="reference-rates">
-                {[
-                  ...new Set([
-                    "USD",
-                    "CNY",
-                    "HKD",
-                    "JPY",
-                    "EUR",
-                    ...Object.keys(rates.rates),
-                  ]),
-                ].map((code) => (
-                  <div key={code}>
-                    <dt>{code}</dt>
-                    <dd>
-                      {rates.roundedCurrencies?.includes(code) ? "≈ " : ""}
-                      {Object.hasOwn(rates.rates, code)
-                        ? rateLabel(rates.rates, code)
-                        : "未知"}
-                      {rates.identityCurrencies?.includes(code) && (
-                        <small>基准恒等值，非外部报价</small>
-                      )}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <details>
-                <summary>来源</summary>
-                <p>{rates.source}</p>
-                <p>
-                  {rates.sourcePrecision === "date"
-                    ? "来源仅提供日期，日内时效未知"
-                    : rates.sourcePrecision
-                      ? `来源时间精度 ${rates.sourcePrecision}`
-                      : "来源时间精度未知"}
-                </p>
-                <p>
-                  报价时间：
-                  {rates.observationInstant ?? rates.observationDate ?? "未知"}
-                </p>
-                <p>
-                  接收时间：
-                  {rates.updatedAt === null
-                    ? "未取得"
-                    : new Date(rates.updatedAt).toLocaleString()}
-                </p>
-                {!!Object.keys(rates.exactRatios || {}).length && (
-                  <dl className="portfolio-proof">
-                    {Object.entries(rates.exactRatios || {}).map(
-                      ([code, ratio]) => (
-                        <div key={code}>
-                          <dt>{code} 原始比率</dt>
-                          <dd>
-                            {ratio.numerator} / {ratio.denominator}
-                          </dd>
-                        </div>
-                      ),
-                    )}
-                  </dl>
-                )}
-                {rates.budget && (
-                  <p>
-                    共享来源预算 · {rates.budget.dayUTC} UTC · 已用{" "}
-                    {rates.budget.used} / {rates.budget.limit} · 剩余{" "}
-                    {rates.budget.remaining}
-                  </p>
-                )}
-                {rates.quarantined === true && (
-                  <p role="status">
-                    恢复隔离中，仅可读取保留观察，不执行来源刷新
-                  </p>
-                )}
-              </details>
-            </>
-          ) : (
-            <p>暂无汇率</p>
-          )}
-          {id && (
-            <div className="reference-receipt">
+      <WorkspaceView active={view === "rates"} label="汇率换算">
+        <FxConverter
+          active={active && visible && view === "rates" && !locked}
+          rates={rates}
+          input={fxInputValue}
+          onInput={value => setParams(previous => { const next=new URLSearchParams(previous); next.set("from",value.from); next.set("amount",value.amount); return next; },{replace:true})}
+          onHistory={() => { setError(""); setHistoryOpen(true); }}
+          onSettings={
+            session.user.role === "admin"
+              ? () => {
+                  setSettingsTab("provider");
+                  setSettingsSaved("");
+                  setError("");
+                  setSettingsOpen(true);
+                }
+              : undefined
+          }
+          onRefresh={() => void refresh()}
+          refreshDisabled={
+            busy || locked || id !== null || !rates?.refreshEnabled
+          }
+        />
+        {id && (
+          <div className="reference-receipt">
+            <span>
+              {receipt
+                ? {
+                    queued: "等待处理",
+                    running: "正在读取",
+                    completed: "刷新完成",
+                    failed: "刷新失败",
+                    interrupted: "处理已中断",
+                  }[receipt.state]
+                : "结果待核对"}
+            </span>
+            {receipt?.error_code && (
               <span>
-                {receipt
-                  ? {
-                      queued: "等待处理",
-                      running: "正在读取",
-                      completed: "刷新完成",
-                      failed: "刷新失败",
-                      interrupted: "处理已中断",
-                    }[receipt.state]
-                  : "结果待核对"}
+                {receipt.error_code === "daily_budget"
+                  ? "每日额度已用完"
+                  : receipt.error_code === "provider_disabled"
+                    ? "供应商读取未启用"
+                    : "供应商读取未完成"}
               </span>
-              {receipt?.error_code && (
-                <span>
-                  {receipt.error_code === "daily_budget"
-                    ? "每日额度已用完"
-                    : receipt.error_code === "provider_disabled"
-                      ? "供应商读取未启用"
-                      : "供应商读取未完成"}
-                </span>
-              )}
-              <button
-                className="button"
-                type="button"
-                onClick={() => void check()}
-                disabled={locked}
-              >
-                查询原请求
-              </button>
-              {receipt && terminal(receipt.state) && (
-                <button className="button" type="button" onClick={finish}>
-                  完成
-                </button>
-              )}
-              <details>
-                <summary>请求编号</summary>
-                <code>{id}</code>
-              </details>
-            </div>
-          )}
-        </section>
-        <details
-          onToggle={(event) => setObservationsOpen(event.currentTarget.open)}
-        >
-          <summary>来源观察与原件</summary>
-          <Activity
-            mode={
-              observationsOpen && active && visible && !locked
-                ? "visible"
-                : "hidden"
-            }
-          >
-            <FxObservations
-              session={session}
-              disabled={busy || id !== null || locked}
-              onSelect={(observation) => {
-                selectedObservation.current = observation;
-                void load(observation);
-              }}
-              onDenied={failure}
-            />
-          </Activity>
-        </details>
-        <details
-          open={historyOpen}
-          onToggle={(e) => setHistoryOpen(e.currentTarget.open)}
-        >
-          <summary>刷新记录</summary>
-          <div className="reference-calendar">
-            <table>
-              <thead>
-                <tr>
-                  <th>请求时间</th>
-                  <th>状态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history?.items.map((entry) => (
-                  <tr key={entry.requestId}>
-                    <td>{new Date(entry.requestedAt).toLocaleString()}</td>
-                    <td>
-                      {{
-                        queued: "等待处理",
-                        running: "正在读取",
-                        completed: "已完成",
-                        failed: "失败",
-                        interrupted: "已中断",
-                      }[entry.state] || "待核对"}
-                    </td>
-                    <td>
-                      <button
-                        className="button small"
-                        type="button"
-                        disabled={locked || (!!id && id !== entry.requestId)}
-                        onClick={() => resume(entry)}
-                      >
-                        查询原请求
-                      </button>
-                      <details>
-                        <summary>请求编号</summary>
-                        <code>{entry.requestId}</code>
-                      </details>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!historyBusy && history?.items.length === 0 && <p>暂无刷新记录</p>}
-          {historyBusy && <p role="status">正在读取…</p>}
-          {history?.nextCursor && (
+            )}
             <button
               className="button"
               type="button"
-              disabled={historyBusy || locked}
-              onClick={() => void loadHistory(history.nextCursor!)}
+              onClick={() => void check()}
+              disabled={locked}
             >
-              更多记录
+              查询原请求
             </button>
-          )}
-        </details>
+            {receipt && terminal(receipt.state) && (
+              <button className="button" type="button" onClick={finish}>
+                完成
+              </button>
+            )}
+            <details>
+              <summary>请求编号</summary>
+              <code>{id}</code>
+            </details>
+          </div>
+        )}
       </WorkspaceView>
       <WorkspaceView active={view === "calendar"} label="休市日历">
         <section aria-label="交易日历">
@@ -864,6 +746,7 @@ function ReferenceSession({
           </div>
           {calendarMode === "batch" ? (
             <CalendarComparison
+              key={calendarRefresh}
               year={year}
               month={month}
               active={active && visible && !locked && view === "calendar"}
@@ -941,54 +824,241 @@ function ReferenceSession({
           )}
         </section>
       </WorkspaceView>
-      <WorkspaceView active={view === "source"} label="汇率来源设置">
-        {session.user.role === "admin" && config && (
-          <section aria-label="汇率供应商">
-            <h2>汇率供应商</h2>
-            <p>{config.custom ? "自定义来源" : "默认来源"}</p>
-            <FxProviderEditor
-              key={providerEditorEpoch}
-              active={active && visible}
-              disabled={busy || locked}
-              onChange={setCustomProvider}
-            />
-            <div className="reference-actions">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={draft.enabled}
-                  disabled={busy || locked}
-                  onChange={(event) => {
-                    dirty.current = true;
-                    setDraft({ ...draft, enabled: event.target.checked });
-                  }}
-                />
-                允许读取
-              </label>
-              <label>
-                每日额度
-                <input
-                  inputMode="numeric"
-                  value={draft.dailyBudget}
-                  disabled={busy || locked}
-                  onChange={(event) => {
-                    dirty.current = true;
-                    setDraft({ ...draft, dailyBudget: event.target.value });
-                  }}
-                />
-              </label>
+      {historyOpen && (
+        <Dialog
+          title="汇率刷新记录"
+          onClose={() => setHistoryOpen(false)}
+          className="fx-history-dialog"
+        >
+          <div className="dialog-content">
+            {error && <p className="notice error" role="alert">{error}</p>}
+            <div className="reference-calendar">
+              <table>
+                <thead>
+                  <tr>
+                    <th>请求时间</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history?.items.map((entry) => (
+                    <tr key={entry.requestId}>
+                      <td>{new Date(entry.requestedAt).toLocaleString()}</td>
+                      <td>
+                        {{
+                          queued: "等待处理",
+                          running: "正在读取",
+                          completed: "已完成",
+                          failed: "失败",
+                          interrupted: "已中断",
+                        }[entry.state] || "待核对"}
+                      </td>
+                      <td>
+                        <button
+                          className="button small"
+                          type="button"
+                          disabled={locked || (!!id && id !== entry.requestId)}
+                          onClick={() => resume(entry)}
+                        >
+                          查询原请求
+                        </button>
+                        <details>
+                          <summary>请求编号</summary>
+                          <code>{entry.requestId}</code>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!historyBusy && history?.items.length === 0 && <p>暂无刷新记录</p>}
+            {historyBusy && <p role="status">正在读取…</p>}
+            {history?.nextCursor && (
               <button
                 className="button"
                 type="button"
-                onClick={() => void save()}
-                disabled={busy || locked}
+                disabled={historyBusy || locked}
+                onClick={() => void loadHistory(history.nextCursor!)}
               >
-                保存
+                更多记录
               </button>
-            </div>
-          </section>
-        )}
-      </WorkspaceView>
+            )}
+          </div>
+        </Dialog>
+      )}
+      {settingsOpen && (
+        <Dialog
+          title="汇率接口设置"
+          onClose={closeSettings}
+          className="fx-settings-dialog"
+        >
+          <div className="dialog-content">
+            {error && <p className="notice error" role="alert">{error}</p>}
+            {settingsSaved && <p role="status">{settingsSaved}</p>}
+            <WorkspaceTabs
+              label="汇率设置"
+              value={settingsTab}
+              onChange={(value) => {
+                if (!busy) setSettingsTab(value);
+              }}
+              items={[
+                { value: "provider", label: "接口配置" },
+                { value: "observations", label: "来源与原件" },
+              ]}
+            />
+            <WorkspaceView active={settingsTab === "provider"} label="接口配置">
+              {session.user.role === "admin" && config && (
+                <form aria-label="汇率供应商" onSubmit={event => { event.preventDefault(); void save(); }}>
+                  <SettingGroup title="读取设置">
+                    <SettingRow
+                      title="允许读取"
+                      description="按设置的接口读取汇率报价"
+                    >
+                      <ToggleSwitch
+                        label="允许读取"
+                        checked={draft.enabled}
+                        disabled={busy || locked}
+                        onChange={(enabled) => {
+                          dirty.current = true;
+                          setSettingsSaved("");
+                          setDraft({ ...draft, enabled });
+                        }}
+                      />
+                    </SettingRow>
+                    <SettingRow
+                      title="每日请求额度"
+                      description="超过额度后保留已有报价"
+                    >
+                      <input
+                        aria-label="每日请求额度"
+                        inputMode="numeric"
+                        value={draft.dailyBudget}
+                        disabled={busy || locked}
+                        onChange={(event) => {
+                          dirty.current = true;
+                          setSettingsSaved("");
+                          setDraft({
+                            ...draft,
+                            dailyBudget: event.target.value,
+                          });
+                        }}
+                      />
+                    </SettingRow>
+                  </SettingGroup>
+                  <FxProviderEditor
+                    currentUrl={config.custom?.url ?? ""}
+                    key={providerEditorEpoch}
+                    active={
+                      active &&
+                      visible &&
+                      settingsOpen &&
+                      settingsTab === "provider"
+                    }
+                    disabled={busy || locked}
+                    onChange={setCustomProvider}
+                  />
+                  <FormActions>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={busy}
+                      onClick={closeSettings}
+                    >
+                      取消
+                    </button>
+                    <button
+                      className="button"
+                      type="submit"
+                      disabled={busy || locked}
+                    >
+                      {busy ? "正在保存…" : "保存设置"}
+                    </button>
+                  </FormActions>
+                </form>
+              )}
+              {!config && <p role="status">接口配置尚未取得</p>}
+            </WorkspaceView>
+            <WorkspaceView
+              active={settingsTab === "observations"}
+              label="来源与原件"
+            >
+              {rates && (
+                <section aria-label="当前报价来源">
+                  <p>{rates.source}</p>
+                  <p>
+                    {rates.sourcePrecision === "date"
+                      ? "来源仅提供日期，日内时效未知"
+                      : rates.sourcePrecision
+                        ? `来源时间精度 ${rates.sourcePrecision}`
+                        : "来源时间精度未知"}
+                  </p>
+                  <p>
+                    报价时间：
+                    {rates.observationInstant ??
+                      rates.observationDate ??
+                      "未知"}
+                  </p>
+                  <p>
+                    接收时间：
+                    {rates.updatedAt === null
+                      ? "未取得"
+                      : new Date(rates.updatedAt).toLocaleString()}
+                  </p>
+                  {!!Object.keys(rates.exactRatios || {}).length && (
+                    <dl className="portfolio-proof">
+                      {Object.entries(rates.exactRatios || {}).map(
+                        ([code, ratio]) => (
+                          <div key={code}>
+                            <dt>{code} 原始比率</dt>
+                            <dd>
+                              {ratio.numerator} / {ratio.denominator}
+                            </dd>
+                          </div>
+                        ),
+                      )}
+                    </dl>
+                  )}
+                  {rates.budget && (
+                    <p>
+                      共享来源预算 · {rates.budget.dayUTC} UTC · 已用{" "}
+                      {rates.budget.used} / {rates.budget.limit} · 剩余{" "}
+                      {rates.budget.remaining}
+                    </p>
+                  )}
+                  {rates.quarantined === true && (
+                    <p role="status">
+                      恢复隔离中，仅可读取保留观察，不执行来源刷新
+                    </p>
+                  )}
+                </section>
+              )}
+              <Activity
+                mode={
+                  settingsOpen &&
+                  settingsTab === "observations" &&
+                  active &&
+                  visible &&
+                  !locked
+                    ? "visible"
+                    : "hidden"
+                }
+              >
+                <FxObservations
+                  session={session}
+                  disabled={busy || id !== null || locked}
+                  onSelect={(observation) => {
+                    selectedObservation.current = observation;
+                    void load(observation);
+                  }}
+                  onDenied={failure}
+                />
+              </Activity>{" "}
+            </WorkspaceView>
+          </div>
+        </Dialog>
+      )}
       {verificationOpen && (
         <ConnectionVerification
           session={session}

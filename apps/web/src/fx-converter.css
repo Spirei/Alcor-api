@@ -1,0 +1,204 @@
+.fx-converter {
+  min-width: 0;
+}
+.fx-converter .workspace-page-heading {
+  margin-bottom: 6px;
+}
+.fx-converter .workspace-page-title {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fx-converter .workspace-page-title h1 {
+  margin-right: 4px;
+}
+.fx-help {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 18px;
+}
+.fx-currency-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.fx-currency-row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  min-width: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--edge);
+}
+.fx-currency-row:nth-child(odd) {
+  border-right: 1px solid var(--edge);
+}
+.fx-currency-row:last-child,
+.fx-currency-row:nth-last-child(2):nth-child(odd) {
+  border-bottom: 0;
+}
+.fx-currency-row.is-base {
+  background: var(--soft);
+}
+.fx-flag {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  line-height: 1;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.fx-currency-content {
+  flex: 1;
+  min-width: 0;
+}
+.fx-currency-content label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 3px;
+  line-height: 20px;
+}
+.fx-currency-content label strong {
+  font-size: 14px;
+  font-weight: 550;
+}
+.fx-currency-content label span,
+.fx-currency-content small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.fx-currency-content label span {
+  letter-spacing: 0.06em;
+}
+.fx-amount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.fx-amount > span {
+  color: var(--muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.fx-converter .fx-amount input {
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  height: 28px;
+  min-height: 28px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.fx-converter .fx-amount input::placeholder {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.fx-amount input:focus-visible {
+  outline: 0;
+  box-shadow: 0 1px var(--accent);
+}
+.fx-drag {
+  flex-shrink: 0;
+  width: 22px;
+  height: 28px;
+  color: var(--muted);
+  cursor: grab;
+  opacity: 0;
+}
+.fx-currency-row:is(:hover, :focus-within) .fx-drag {
+  opacity: 1;
+}
+.fx-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.fx-currency-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+.fx-currency-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--soft);
+  border-radius: 10px;
+  text-align: left;
+}
+
+.fx-currency-choice small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+.fx-currency-choice > svg {
+  margin-left: auto;
+}
+.fx-order-list > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--edge);
+}
+
+.fx-order-list strong {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+}
+.fx-order-list small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+@media (hover: none) {
+  .fx-drag {
+    opacity: 1;
+  }
+}
+@media (max-width: 520px) {
+  .fx-currency-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fx-currency-row:nth-child(odd) {
+    border-right: 0;
+  }
+  .fx-currency-row:nth-last-child(2):nth-child(odd) {
+    border-bottom: 1px solid var(--edge);
+  }
+  .fx-currency-row {
+    padding: 16px;
+  }
+  .fx-order-list {
+    font-size: 12px;
+  }
+}
+
+.fx-input-error { color: var(--danger, #c13030); font-size: 12px; margin: 0 0 16px; }
+.fx-currency-row .fx-drag { transition: opacity 160ms ease; }
+:root[data-reduced-motion="true"] .fx-currency-row .fx-drag { transition: none; }
+
+.fx-currency-content > small { display: block; line-height: 16px; margin-top: 2px; }

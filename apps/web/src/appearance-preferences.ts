@@ -1,3 +1,4 @@
+import { currencyCodes, defaultFxOrder } from "./fx-display.ts";
 import { brokerOrder } from "./asset-library-market.ts";
 import { libraryMarketOrder } from "./asset-library-market.ts";
 import {
@@ -33,6 +34,8 @@ export type Appearance = {
   version: 1;
   assetMarketOrder: string[];
   assetBrokerOrder: string[];
+  fxOrder: string[];
+  fxHidden: string[];
   mode: Mode;
   separateModes: boolean;
   shared: Palette;
@@ -104,6 +107,8 @@ export function defaultAppearance(): Appearance {
     version: 1,
     assetBrokerOrder: [],
     assetMarketOrder: libraryMarketOrder(null),
+    fxOrder: [...defaultFxOrder],
+    fxHidden: [],
     mode: "system",
     separateModes: false,
     shared: defaultPalette(),
@@ -184,6 +189,10 @@ export function parseAppearance(
     ...defaults,
     assetBrokerOrder: brokerOrder(p.assetBrokerOrder),
     assetMarketOrder: libraryMarketOrder(p.assetMarketOrder),
+    fxOrder: currencyCodes(p.fxOrder, defaultFxOrder).length
+      ? currencyCodes(p.fxOrder, defaultFxOrder)
+      : [...defaultFxOrder],
+    fxHidden: currencyCodes(p.fxHidden),
     mode: choice(p.mode, ["system", "light", "dark"], defaults.mode),
     shared: palette(p.shared),
     light: palette(p.light),
@@ -221,6 +230,10 @@ export function parseAppearance(
   ] as const) {
     if (typeof p[key] === "boolean") result[key] = p[key];
   }
+  if (result.fxOrder.every((code) => result.fxHidden.includes(code)))
+    result.fxHidden = result.fxHidden.filter(
+      (code) => code !== result.fxOrder[0],
+    );
   return result;
 }
 export function resolvedMode(

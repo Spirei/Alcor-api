@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .models import InputModel
 from .security import Identity, identity, lock_mutation_identity
@@ -48,6 +48,22 @@ class AppearancePreference(InputModel):
         if len(set(value)) != len(value):
             raise ValueError("市场不能重复")
         return value
+
+    fxOrder: list[Annotated[str, Field(pattern=r"^[A-Z]{3}$")]] = Field(default_factory=lambda: ["USD", "EUR", "HKD", "CNY", "JPY", "KRW", "SGD", "GBP", "AUD", "CAD", "TWD", "CHF", "INR", "BRL"], min_length=1, max_length=64)
+    fxHidden: list[Annotated[str, Field(pattern=r"^[A-Z]{3}$")]] = Field(default_factory=list, max_length=64)
+
+    @field_validator("fxOrder", "fxHidden")
+    @classmethod
+    def unique_currencies(cls, value):
+        if len(set(value)) != len(value):
+            raise ValueError("币种不能重复")
+        return value
+
+    @model_validator(mode="after")
+    def visible_fx_currency(self):
+        if not set(self.fxOrder) - set(self.fxHidden):
+            raise ValueError("至少保留一个显示币种")
+        return self
 
     mode: Literal["system", "light", "dark"]
     separateModes: bool
@@ -122,10 +138,14 @@ async def save_preferences(data: PreferenceChange, request: Request, who: Member
             if "appearance" in fields
             else old["appearance"]
         )
-        if appearance is not None and data.appearance is not None and "assetMarketOrder" not in data.appearance.model_fields_set and old["appearance"]:
-            appearance["assetMarketOrder"] = old["appearance"].get("assetMarketOrder", appearance["assetMarketOrder"])
-        if appearance is not None and data.appearance is not None and "assetBrokerOrder" not in data.appearance.model_fields_set and old["appearance"]:
-            appearance["assetBrokerOrder"] = old["appearance"].get("assetBrokerOrder", appearance["assetBrokerOrder"])
+        if appearance is not None and data.appearance is not None and old["appearance"]:
+            for key in ("assetMarketOrder", "assetBrokerOrder", "fxOrder", "fxHidden"):
+                if key not in data.appearance.model_fields_set:
+                    appearance[key] = old["appearance"].get(key, appearance[key])
+            try:
+                appearance = AppearancePreference.model_validate(appearance).model_dump()
+            except ValueError:
+                raise HTTPException(422, "外观与币种设置无效，请重新读取") from None
         if "appearance" in fields and appearance is not None:
             fonts = {appearance[mode]["font"] for mode in ("shared", "light", "dark")}
             fonts.add(appearance["contentFont"])

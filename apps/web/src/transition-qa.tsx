@@ -2,7 +2,8 @@
 import { useLayoutEffect } from "react";
 
 const enabled =
-  import.meta.env.VITE_UI_PERF === "1" &&
+  typeof location !== "undefined" &&
+  import.meta.env?.VITE_UI_PERF === "1" &&
   ["127.0.0.1", "localhost"].includes(location.hostname);
 const delay = enabled
   ? Math.min(1500, Math.max(0, Number(import.meta.env.VITE_UI_DELAY_MS) || 0))

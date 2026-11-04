@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { SelectMenu } from "./select-menu";
 export type CustomProvider =
   | { type: "builtin" }
@@ -17,16 +18,18 @@ export type CustomProvider =
     };
 export function FxProviderEditor({
   active,
+  currentUrl = "",
   disabled,
   onChange,
 }: {
   active: boolean;
+  currentUrl?: string;
   disabled: boolean;
   onChange: (value: CustomProvider | undefined) => void;
 }) {
   const [builtin, setBuiltin] = useState(false);
   const [replace, setReplace] = useState(false);
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(currentUrl);
   const [bearer, setBearer] = useState("");
   const [addresses, setAddresses] = useState("");
   const [base, setBase] = useState("");
@@ -45,6 +48,13 @@ export function FxProviderEditor({
       setUrl("");
       setBearer("");
       setReplace(false);
+      setBuiltin(false);
+      setAddresses("");
+      setBase("");
+      setField("");
+      setPrecision("date");
+      setPattern("");
+      setTimezone("");
     }
   }, [active]);
   useEffect(() => {
@@ -100,129 +110,192 @@ export function FxProviderEditor({
     approved,
     onChange,
   ]);
+  useEffect(() => {
+    if (active) setUrl(currentUrl);
+  }, [active, currentUrl]);
+  function edit() {
+    setBuiltin(false);
+    setReplace(true);
+  }
   return (
-    <details className="fx-provider-editor">
-      <summary>自定义来源</summary>
-      <label>
-        <input
-          type="checkbox"
-          checked={builtin}
-          disabled={disabled}
-          onChange={(e) => setBuiltin(e.target.checked)}
-        />
-        使用默认来源
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={replace}
-          disabled={disabled}
-          onChange={(e) => setReplace(e.target.checked)}
-        />
-        更换来源
-      </label>
-      {replace && !builtin && (
-        <fieldset disabled={disabled}>
-          <label>
-            来源地址
+    <div className="fx-provider-editor">
+      <div className="workspace-form-grid">
+        <label className="workspace-form-field fx-field-wide">
+          接口地址
+          <span className="workspace-secret-field">
             <input
               type={show ? "text" : "password"}
               autoComplete="off"
               maxLength={2048}
+              disabled={disabled}
               value={url}
+              placeholder={currentUrl ? "已配置接口地址" : "填写自定义接口地址"}
               onChange={(e) => {
+                edit();
                 setUrl(e.target.value);
                 setApproved(false);
               }}
             />
-          </label>
-          <button
-            className="button secondary small"
-            type="button"
-            aria-label={show ? "隐藏来源地址" : "显示来源地址"}
-            aria-pressed={show}
-            onClick={() => setShow(!show)}
-          >
-            {show ? "隐藏" : "显示"}
-          </button>
-          <label>
-            Bearer 凭据
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={show ? "隐藏来源地址" : "显示来源地址"}
+              aria-pressed={show}
+              onClick={() => setShow(!show)}
+            >
+              {show ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </span>
+        </label>
+        <label className="workspace-form-field fx-field-wide">
+          接口凭据 <small>Bearer，可选</small>
+          <span className="workspace-secret-field">
             <input
               type={showBearer ? "text" : "password"}
               autoComplete="off"
               maxLength={4096}
+              disabled={disabled}
               value={bearer}
-              onChange={(event) => setBearer(event.target.value)}
-            />
-          </label>
-          <button
-            className="button secondary small"
-            type="button"
-            aria-label={showBearer ? "隐藏 Bearer 凭据" : "显示 Bearer 凭据"}
-            aria-pressed={showBearer}
-            onClick={() => setShowBearer(!showBearer)}
-          >
-            {showBearer ? "隐藏" : "显示"}
-          </button>
-          <label>
-            批准的 IP 地址
-            <input
-              value={addresses}
+              placeholder="未填写新凭据"
               onChange={(e) => {
-                setAddresses(e.target.value);
-                setApproved(false);
+                edit();
+                setBearer(e.target.value);
               }}
             />
-          </label>
-          <label>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={showBearer ? "隐藏 Bearer 凭据" : "显示 Bearer 凭据"}
+              aria-pressed={showBearer}
+              onClick={() => setShowBearer(!showBearer)}
+            >
+              {showBearer ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </span>
+        </label>
+        <label className="workspace-form-field fx-field-wide">
+          接口服务器 IP
+          <input
+            disabled={disabled}
+            value={addresses}
+            placeholder="多个地址用空格或逗号分隔"
+            onChange={(e) => {
+              edit();
+              setAddresses(e.target.value);
+              setApproved(false);
+            }}
+          />
+        </label>
+        {replace && !builtin && (
+          <label className="workspace-confirmation fx-field-wide">
             <input
               type="checkbox"
+              disabled={disabled}
               checked={approved}
               onChange={(e) => setApproved(e.target.checked)}
             />
-            使用此地址、协议和端口
+            确认使用此接口地址、协议、端口及服务器 IP
           </label>
-          <label>
-            响应缺失时的基准币种
+        )}
+      </div>
+      <section className="fx-format-settings" aria-label="响应与定时设置">
+        <h3>响应与定时设置</h3>
+        <div className="workspace-form-grid">
+          <label className="workspace-form-field">
+            响应缺省基准币种
             <input
+              disabled={disabled}
               value={base}
               maxLength={3}
-              onChange={(e) => setBase(e.target.value.toUpperCase())}
+              placeholder="如 USD"
+              onChange={(e) => {
+                edit();
+                setBase(e.target.value.toUpperCase());
+              }}
             />
           </label>
-          <label>
+          <label className="workspace-form-field">
             来源时间字段
-            <input value={field} onChange={(e) => setField(e.target.value)} />
+            <input
+              disabled={disabled}
+              value={field}
+              placeholder="如 date"
+              onChange={(e) => {
+                edit();
+                setField(e.target.value);
+              }}
+            />
           </label>
-          <SelectMenu
-            label="时间精度"
-            variant="field"
-            value={precision}
-            onChange={setPrecision}
-            disabled={disabled}
-            options={[
-              { value: "date", label: "日期" },
-              { value: "instant", label: "含时区时间" },
-              { value: "epoch_seconds", label: "Unix 秒" },
-              { value: "epoch_millis", label: "Unix 毫秒" },
-            ]}
-          />
-          <label>
+          <label className="workspace-form-field">
+            时间精度
+            <SelectMenu
+              label="时间精度"
+              variant="field"
+              value={precision}
+              onChange={(v) => {
+                edit();
+                setPrecision(v);
+              }}
+              disabled={disabled}
+              options={[
+                { value: "date", label: "日期" },
+                { value: "instant", label: "含时区时间" },
+                { value: "epoch_seconds", label: "Unix 秒" },
+                { value: "epoch_millis", label: "Unix 毫秒" },
+              ]}
+            />
+          </label>
+          <label className="workspace-form-field">
             定时表达式
             <input
+              disabled={disabled}
               value={pattern}
-              onChange={(e) => setPattern(e.target.value)}
+              placeholder="可选"
+              onChange={(e) => {
+                edit();
+                setPattern(e.target.value);
+              }}
             />
           </label>
-          <label>
+          <label className="workspace-form-field">
             时区
             <input
+              disabled={disabled}
               value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
+              placeholder="如 Asia/Shanghai"
+              onChange={(e) => {
+                edit();
+                setTimezone(e.target.value);
+              }}
             />
           </label>
-        </fieldset>
-      )}
-    </details>
+        </div>
+      </section>
+      <div className="fx-provider-footer">
+        <span className="fx-default-state" role="status">
+          {builtin
+            ? "保存后将恢复默认接口"
+            : replace
+              ? "接口变更待保存"
+              : currentUrl
+                ? "当前使用自定义接口"
+                : "当前使用默认接口"}
+        </span>
+        <button
+          type="button"
+          className="text-button"
+          disabled={disabled}
+          onClick={() => {
+            setBuiltin(true);
+            setReplace(false);
+            setBearer("");
+            setUrl("");
+            setApproved(false);
+          }}
+        >
+          恢复默认接口
+        </button>
+      </div>
+    </div>
   );
 }

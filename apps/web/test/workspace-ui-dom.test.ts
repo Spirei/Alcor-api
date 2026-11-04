@@ -18,7 +18,7 @@ test("migrated presentation keeps source gaps, exact amounts and bounded media e
     await build({
       stdin: {
         contents:
-          'export {WorkspaceTabs,WorkspaceView} from "./src/workspace-ui";export {FireProgress} from "./src/fire-progress";export {FxConverter} from "./src/fx-converter";export {TradingMonth} from "./src/trading-month";export {ActivityTimeline} from "./src/activity-timeline";export {CardGallery} from "./src/card-gallery";',
+          'export {WorkspaceTabs,WorkspaceView} from "./src/workspace-ui";export {WorkspaceRoutes} from "./src/workspace-routes";export {MemoryRouter,Route,useLocation} from "react-router-dom";export {FireProgress} from "./src/fire-progress";export {FxConverter} from "./src/fx-converter";export {TradingMonth} from "./src/trading-month";export {ActivityTimeline} from "./src/activity-timeline";export {CardGallery} from "./src/card-gallery";',
         resolveDir: fileURLToPath(new URL("../", import.meta.url)),
         loader: "tsx",
       },
@@ -138,6 +138,12 @@ test("migrated presentation keeps source gaps, exact amounts and bounded media e
         assert.match(journal, /journal/);
       },
     );
+    await t.test("retained routing preserves the complete active URL without borrowing another panel's query", () => {
+      function Probe() { const value=ui.useLocation(); return element("output", null, value.search+value.hash); }
+      const page=(url) => render(element(ui.MemoryRouter, {initialEntries:[url]}, element(ui.WorkspaceRoutes,{path:"/reference"},element(ui.Route,{path:"/reference",element:element(Probe)}))));
+      assert.equal(page("/reference?from=CNY&amount=73#rates"),"<output>?from=CNY&amp;amount=73#rates</output>");
+      assert.equal(page("/settings?unrelated=private#other"),"<output></output>");
+    });
     await t.test(
       "timeline preserves raw details and invalid timestamps while bounding each page",
       () => {

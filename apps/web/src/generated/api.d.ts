@@ -16286,6 +16286,10 @@ export interface components {
             assetBrokerOrder?: string[];
             /** Assetmarketorder */
             assetMarketOrder?: ("US" | "HK" | "CN" | "JP" | "KR" | "SG" | "UK" | "DE" | "FR" | "AU" | "CA" | "IN" | "TW" | "BR")[];
+            /** Fxorder */
+            fxOrder?: string[];
+            /** Fxhidden */
+            fxHidden?: string[];
             /**
              * Mode
              * @enum {string}
