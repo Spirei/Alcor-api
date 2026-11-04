@@ -13,6 +13,7 @@ import { resourceSize } from "./resource-state";
 import { sharedAssetOriginal } from "./shared-asset-original";
 import { PngClipboardActions } from "./png-clipboard";
 import { AssetLookupCatalogPanel } from "./asset-lookup-catalog";
+import { AssetLibraryBrowser } from "./asset-library-browser";
 import {
   assetKinds,
   assetFolders,
@@ -445,142 +446,149 @@ function SharedAssetSession({
           重新读取
         </button>
       </header>
-      {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
-      {pending && (
-        <div className="shared-asset-result" role="status">
-          <p>等待原操作结果</p>
-          <p className="shared-asset-id">{pending}</p>
-          <button
-            className="button"
-            disabled={busy || locked}
-            onClick={() => void check()}
-          >
-            查询原回执
-          </button>
-        </div>
-      )}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void upload();
-        }}
-      >
-        <div className="shared-asset-fields">
-          <label>
-            类型
-            <SelectMenu
-              label="素材类型"
-              value={kind}
-              options={assetKinds}
-              variant="field"
-              disabled={blocked}
-              onChange={(value) => {
-                setKind(value as AssetKind);
-                clearFile();
-              }}
-            />
-          </label>
-          {kind === "asset" && (
-            <>
-              <label>
-                素材文件夹
-                <SelectMenu
-                  label="素材文件夹"
-                  value={folder}
-                  options={assetFolders}
-                  variant="field"
-                  disabled={blocked}
-                  onChange={(value) => {
-                    setFolder(value);
-                    setMarket("");
-                    clearFile();
-                  }}
-                />
-              </label>
-              {folder === "stock" && (
+      <AssetLibraryBrowser
+        session={session}
+        active={active && visible && !locked}
+      />
+      <details className="asset-library-management">
+        <summary>上传素材</summary>
+        {error && <p role="alert">{error}</p>}
+        {notice && <p role="status">{notice}</p>}
+        {pending && (
+          <div className="shared-asset-result" role="status">
+            <p>等待原操作结果</p>
+            <p className="shared-asset-id">{pending}</p>
+            <button
+              className="button"
+              disabled={busy || locked}
+              onClick={() => void check()}
+            >
+              查询原回执
+            </button>
+          </div>
+        )}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void upload();
+          }}
+        >
+          <div className="shared-asset-fields">
+            <label>
+              类型
+              <SelectMenu
+                label="素材类型"
+                value={kind}
+                options={assetKinds}
+                variant="field"
+                disabled={blocked}
+                onChange={(value) => {
+                  setKind(value as AssetKind);
+                  clearFile();
+                }}
+              />
+            </label>
+            {kind === "asset" && (
+              <>
                 <label>
-                  股票市场
+                  素材文件夹
                   <SelectMenu
-                    label="股票市场"
-                    value={market}
+                    label="素材文件夹"
+                    value={folder}
+                    options={assetFolders}
                     variant="field"
                     disabled={blocked}
                     onChange={(value) => {
-                      setMarket(value);
+                      setFolder(value);
+                      setMarket("");
                       clearFile();
                     }}
-                    options={[
-                      { value: "", label: "不分市场" },
-                      ...["US", "HK", "CN", "JP", "KR"].map((value) => ({
-                        value,
-                        label: value,
-                      })),
-                    ]}
                   />
                 </label>
-              )}
-              {folder === "market" && (
+                {folder === "stock" && (
+                  <label>
+                    股票市场
+                    <SelectMenu
+                      label="股票市场"
+                      value={market}
+                      variant="field"
+                      disabled={blocked}
+                      onChange={(value) => {
+                        setMarket(value);
+                        clearFile();
+                      }}
+                      options={[
+                        { value: "", label: "不分市场" },
+                        ...["US", "HK", "CN", "JP", "KR"].map((value) => ({
+                          value,
+                          label: value,
+                        })),
+                      ]}
+                    />
+                  </label>
+                )}
+                {folder === "market" && (
+                  <label>
+                    市场代码
+                    <input
+                      value={market}
+                      disabled={blocked}
+                      onChange={(event) => setMarket(event.target.value)}
+                    />
+                  </label>
+                )}
                 <label>
-                  市场代码
+                  素材代码
                   <input
-                    value={market}
+                    value={code}
+                    maxLength={40}
                     disabled={blocked}
-                    onChange={(event) => setMarket(event.target.value)}
+                    onChange={(event) => setCode(event.target.value)}
                   />
                 </label>
-              )}
-              <label>
-                素材代码
-                <input
-                  value={code}
-                  maxLength={40}
-                  disabled={blocked}
-                  onChange={(event) => setCode(event.target.value)}
-                />
-              </label>
-              <label>
-                显示名称
-                <input
-                  value={name}
-                  maxLength={120}
-                  disabled={blocked}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </label>
-            </>
+                <label>
+                  显示名称
+                  <input
+                    value={name}
+                    maxLength={120}
+                    disabled={blocked}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+          <div className="shared-asset-upload">
+            <label>
+              文件
+              <input
+                ref={input}
+                type="file"
+                accept={config?.kinds[kind].extensions
+                  .map((ext) => "." + ext)
+                  .join(",")}
+                disabled={blocked}
+                onChange={(event) => {
+                  const next = event.target.files?.[0] ?? null;
+                  if (next && (!limit || next.size <= 0 || next.size > limit)) {
+                    clearFile();
+                    setError("文件为空或超过该类型大小上限");
+                  } else {
+                    setFile(next);
+                    setError("");
+                  }
+                }}
+              />
+            </label>
+            <button className="button" disabled={blocked || !file}>
+              上传
+            </button>
+          </div>
+          {limit !== null && (
+            <p className="shared-asset-limit">最大 {resourceSize(limit)}</p>
           )}
-        </div>
-        <div className="shared-asset-upload">
-          <label>
-            文件
-            <input
-              ref={input}
-              type="file"
-              accept={config?.kinds[kind].extensions
-                .map((ext) => "." + ext)
-                .join(",")}
-              disabled={blocked}
-              onChange={(event) => {
-                const next = event.target.files?.[0] ?? null;
-                if (next && (!limit || next.size <= 0 || next.size > limit)) {
-                  clearFile();
-                  setError("文件为空或超过该类型大小上限");
-                } else {
-                  setFile(next);
-                  setError("");
-                }
-              }}
-            />
-          </label>
-          <button className="button" disabled={blocked || !file}>
-            上传
-          </button>
-        </div>
-        {limit !== null && (
-          <p className="shared-asset-limit">最大 {resourceSize(limit)}</p>
-        )}
-      </form>
+        </form>
+      </details>
       {receipt && (
         <section className="shared-asset-result" aria-label="素材操作结果">
           <p role="status">
@@ -631,7 +639,14 @@ function SharedAssetSession({
                   下载原件
                 </button>
               </div>
-              <PngClipboardActions key={receipt.version} session={session} active={active && visible && !locked && !busy} image={preview} version={receipt.version!} onDenied={fail} />
+              <PngClipboardActions
+                key={receipt.version}
+                session={session}
+                active={active && visible && !locked && !busy}
+                image={preview}
+                version={receipt.version!}
+                onDenied={fail}
+              />
               <details>
                 <summary>文件详情</summary>
                 <dl>
@@ -670,7 +685,7 @@ function SharedAssetSession({
         </button>
       </form>
       <details onToggle={(event) => setCatalogOpened(event.currentTarget.open)}>
-        <summary>素材目录</summary>
+        <summary>素材目录登记与来源管理</summary>
         <AssetLookupCatalogPanel
           session={session}
           active={active && visible && !locked && catalogOpened}

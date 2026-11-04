@@ -19,7 +19,7 @@ test("actual shared image SSR and original downloader enforce administrator curr
     await build({
       stdin: {
         contents:
-          'export {SharedAssetsPage} from "./src/shared-assets";export {sharedAssetOriginal} from "./src/shared-asset-original";export {bindApiSession} from "./src/api-session";',
+          'export {SharedAssetsPage} from "./src/shared-assets";export {sharedAssetOriginal} from "./src/shared-asset-original";export {bindApiSession} from "./src/api-session";export {assetImageUrl} from "./src/asset-library-browser";',
         resolveDir: fileURLToPath(new URL("../", import.meta.url)),
         loader: "tsx",
       },
@@ -37,6 +37,24 @@ test("actual shared image SSR and original downloader enforce administrator curr
       logLevel: "silent",
     });
     const m = createRequire(import.meta.url)(output);
+    await t.test("asset previews only use registered local media paths", () => {
+      for (const url of [
+        "https://tracker.invalid/image.png",
+        "//tracker.invalid/image.png",
+        "data:image/svg+xml,bad",
+        "/uploads/../private",
+        "/uploads/%2e%2e/private",
+        "/uploads/x%2fsecret",
+        "/api/session",
+        "/uploads/x\\secret",
+      ])
+        assert.equal(m.assetImageUrl(url), "");
+      for (const url of [
+        "/api/asset-image/registered?v=123",
+        "/uploads/asset/stock/US/DEMO.png?sha256=abc",
+      ])
+        assert.equal(m.assetImageUrl(url), url);
+    });
     const raw = new TextEncoder().encode("original-SVG-source"),
       normalized = new TextEncoder().encode("normalized-SVG-output");
     const hash = (bytes: Uint8Array) =>
