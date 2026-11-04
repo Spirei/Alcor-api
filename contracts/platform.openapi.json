@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Alcor Platform",
-    "version": "0.1.168"
+    "version": "0.1.169"
   },
   "paths": {
     "/api/profile/requests": {

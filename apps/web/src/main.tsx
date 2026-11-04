@@ -2,6 +2,7 @@ import { SystemOperationsPanel } from "./system-operations";
 import { AgentRuntimeControls } from "./agent-runtime";
 import { FinancialDisplayProvider, AmountVisibilityControl } from "./financial-display";
 import { mobileNavigation } from "./site-navigation";
+import { WorkspaceNavigation } from "./workspace-navigation";
 import { PublicSiteProvider, PublicHomeNav, usePublicSite, registerSiteWorker } from "./public-site";
 import { SiteTicker } from "./site-ticker";
 import { legacySitePath, loginDestination } from "./site-paths";
@@ -1552,6 +1553,7 @@ function Workspace({
     [searchOpen, setSearchOpen] = useState(false),
     [query, setQuery] = useState(""),
     [logoutError, setLogoutError] = useState("");
+  useEffect(() => { if (!mobileViewport) setMobile(false); }, [mobileViewport]);
   const collapsed = appearance.settings.sidebarCollapsed;
   const profile = useResource<Profile>("/profile");
   useEffect(() => {
@@ -1581,7 +1583,8 @@ function Workspace({
   useEffect(() => {
     if (!mobile) return;
     const previous = document.activeElement;
-    document.querySelector<HTMLElement>(".sidebar nav a")?.focus();
+    const selected = document.querySelector<HTMLElement>('.sidebar nav a[aria-current="page"]') || document.querySelector<HTMLElement>(".sidebar nav a");
+    selected?.focus({ preventScroll: true });
     const escape = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMobile(false);
     };
@@ -1652,27 +1655,13 @@ function Workspace({
           <span className="nav-text">搜索功能</span>
           <kbd className="nav-text">⌘ K</kbd>
         </button>
-        <nav aria-label="主导航">
-          {mobileNavigation(session.user.role === "admin" ? navigation : navigation.filter((item) => memberPaths.includes(item.path)),publicSite.mobileNavigationOrder,mobileViewport).map(({ path, name, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === "/"}
-              className={({ isActive }) =>
-                isActive ||
-                (path === "/" && location.pathname.startsWith("/connections/"))
-                  ? "active"
-                  : ""
-              }
-              aria-label={name}
-              title={collapsed ? name : undefined}
-              onClick={() => beginNavigation(path)}
-            >
-              <Icon size={19} />
-              <span className="nav-text">{name}</span>
-            </NavLink>
-          ))}
-        </nav>
+        <WorkspaceNavigation
+          items={mobileNavigation(session.user.role === "admin" ? navigation : navigation.filter((item) => memberPaths.includes(item.path)),publicSite.mobileNavigationOrder,mobileViewport)}
+          collapsed={collapsed}
+          mobileOpen={mobile}
+          preferInputOrder={mobileViewport && publicSite.mobileNavigationOrder.length > 0}
+          onNavigate={(path) => { beginNavigation(path); setMobile(false); }}
+        />
         <div className="sidebar-bottom">
           <NavLink
             to="/appearance"
