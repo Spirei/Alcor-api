@@ -1,3 +1,7 @@
+import { MaterialAccessSettings } from "./asset-library-access";
+import { Dialog } from "./dialog";
+import { WorkspaceTabs, PageHeader } from "./workspace-ui";
+import { RefreshCw, Settings2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -8,15 +12,16 @@ import {
 import { api, ApiError, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
 import { requestId } from "./request-id";
-import { SelectMenu } from "./select-menu";
 import { resourceSize } from "./resource-state";
 import { sharedAssetOriginal } from "./shared-asset-original";
 import { PngClipboardActions } from "./png-clipboard";
 import { AssetLookupCatalogPanel } from "./asset-lookup-catalog";
-import { AssetLibraryBrowser } from "./asset-library-browser";
+import {
+  AssetLibraryBrowser,
+  type AssetIconTarget,
+} from "./asset-library-browser";
 import {
   assetKinds,
-  assetFolders,
   clearSharedAssetRequests,
   readSharedAssetRequest,
   retainSharedAssetRequest,
@@ -38,12 +43,7 @@ export function SharedAssetsPage({
   active?: boolean;
 }) {
   if (session.user.role !== "admin")
-    return (
-      <section>
-        <h1>素材库</h1>
-        <p role="alert">需要管理员权限</p>
-      </section>
-    );
+    return <MaterialReader session={session} active={active} />;
   const scope = JSON.stringify([
     session.instance_id,
     session.user.id,
@@ -72,21 +72,23 @@ function SharedAssetSession({
     [locked, setLocked] = useState(false),
     [ready, setReady] = useState(false),
     [journalReady, setJournalReady] = useState(false);
-  const [config, setConfig] = useState<AssetConfig | null>(null),
-    [kind, setKind] = useState<AssetKind>("ico"),
-    [folder, setFolder] = useState(""),
-    [market, setMarket] = useState(""),
-    [code, setCode] = useState(""),
-    [name, setName] = useState("");
-  const [catalogOpened, setCatalogOpened] = useState(false);
+  const [config, setConfig] = useState<AssetConfig | null>(null);
+  const [assetPanel, setAssetPanel] = useState<"settings" | null>(null);
+  const [settingsTab, setSettingsTab] = useState<
+    "access" | "catalog" | "history"
+  >("access");
   const [catalogRefresh, setCatalogRefresh] = useState(0);
+  const [accessBlocked, setAccessBlocked] = useState(false);
   const catalogChanged = useCallback(
     () => setCatalogRefresh((value) => value + 1),
     [],
   );
   const lastCatalogReceipt = useRef<string | null>(null);
-  const [file, setFile] = useState<File | null>(null),
-    [busy, setBusy] = useState(false),
+  const readError = useRef(false);
+  const expectedIcon = useRef<
+    (AssetIconTarget & { catalogRevision: number }) | null
+  >(null);
+  const [busy, setBusy] = useState(false),
     [pending, setPending] = useState<string | null>(null),
     [lookup, setLookup] = useState(""),
     [receipt, setReceipt] = useState<AssetReceipt | null>(null),
@@ -99,8 +101,7 @@ function SharedAssetSession({
     original = useRef<string | null>(null),
     expectedKind = useRef<AssetKind | null>(null),
     rejected = useRef<number | undefined>(undefined);
-  const input = useRef<HTMLInputElement>(null),
-    preview = useRef<HTMLImageElement>(null),
+  const preview = useRef<HTMLImageElement>(null),
     work = useRef<AbortController | null>(null),
     reading = useRef<AbortController | null>(null),
     objectUrl = useRef<string | null>(null);
@@ -108,10 +109,6 @@ function SharedAssetSession({
     () => apiSessionSnapshot().csrf === session.csrf,
     [session.csrf],
   );
-  const clearFile = useCallback(() => {
-    setFile(null);
-    if (input.current) input.current.value = "";
-  }, []);
   const pause = useCallback(() => {
     live.current = false;
     ++epoch.current;
@@ -123,12 +120,11 @@ function SharedAssetSession({
     preview.current?.removeAttribute("src");
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
     objectUrl.current = null;
-    clearFile();
     setReceipt(null);
     setConfig(null);
     setReady(false);
     setBusy(false);
-  }, [clearFile]);
+  }, []);
   const fail = useCallback(
     (reason: unknown) => {
       setError(reason instanceof Error ? reason.message : "读取失败");
@@ -140,14 +136,11 @@ function SharedAssetSession({
       ) {
         pause();
         setLocked(true);
-        setFolder("");
-        setMarket("");
-        setCode("");
-        setName("");
         setLookup("");
         setNotice("");
         original.current = null;
         setPending(null);
+        expectedIcon.current = null;
         expectedKind.current = null;
         rejected.current = undefined;
         try {
@@ -202,7 +195,10 @@ function SharedAssetSession({
       ) {
         setConfig(sharedAssetConfig(value));
         setReady(true);
-        setError("");
+        if (readError.current) {
+          setError("");
+          readError.current = false;
+        }
       }
     } catch (reason) {
       if (
@@ -210,8 +206,10 @@ function SharedAssetSession({
         generation === epoch.current &&
         sequence === read.current &&
         !controller.signal.aborted
-      )
+      ) {
+        readError.current = true;
         fail(reason);
+      }
     } finally {
       if (reading.current === controller) reading.current = null;
     }
@@ -228,6 +226,22 @@ function SharedAssetSession({
       value.kind !== expectedKind.current
     )
       throw new Error("原素材类型不符，请继续核对");
+    const targeted = !!expectedIcon.current;
+    if (
+      original.current === id &&
+      expectedIcon.current &&
+      value.state === "completed" &&
+      (!value.binding ||
+        value.binding.id !== expectedIcon.current.id ||
+        value.binding.type !== expectedIcon.current.type ||
+        value.binding.code !== expectedIcon.current.code ||
+        value.binding.market !==
+          (expectedIcon.current.type === "card"
+            ? expectedIcon.current.market || ""
+            : (expectedIcon.current.market || "OTHER").toUpperCase()) ||
+        value.binding.revision !== expectedIcon.current.catalogRevision + 1)
+    )
+      throw new Error("对应图标的保存结果待核对");
     if (original.current === id) {
       releaseSharedAssetRequest(sessionStorage, scope, id);
       original.current = null;
@@ -235,7 +249,14 @@ function SharedAssetSession({
       expectedKind.current = null;
       rejected.current = undefined;
     }
-    setNotice("");
+    setNotice(
+      value.state === "completed" && value.binding
+        ? value.binding.type === "card"
+          ? "卡面已更新"
+          : "图标已更新"
+        : "",
+    );
+    expectedIcon.current = null;
     setReceipt(value);
     if (
       value.state === "completed" &&
@@ -247,18 +268,19 @@ function SharedAssetSession({
     }
     setLookup(id);
     setImageError(false);
-    setError("");
-    clearFile();
+    setError(value.state === "failed" ? value.message : "");
+    if (targeted && value.state === "failed") catalogChanged();
     void load();
   }
   function forgetRejected(id: string) {
     releaseSharedAssetRequest(sessionStorage, scope, id);
     original.current = null;
     setPending(null);
+    expectedIcon.current = null;
     expectedKind.current = null;
     rejected.current = undefined;
     setError("");
-    setNotice("上次上传未受理，请重新核对素材");
+    setNotice("上次操作未受理，请重新核对素材");
     void load();
   }
   async function check(id = original.current ?? lookup.trim()) {
@@ -300,7 +322,13 @@ function SharedAssetSession({
       }
     }
   }
-  async function upload() {
+  async function upload(
+    chosenFile: File | null,
+    target: AssetIconTarget & { catalogRevision: number },
+    restore = false,
+  ) {
+    const chosenKind = "asset";
+    const chosenFolder = target.type || "";
     if (
       !live.current ||
       !displayed() ||
@@ -308,21 +336,27 @@ function SharedAssetSession({
       original.current ||
       !ready ||
       !journalReady ||
-      !file ||
+      (!chosenFile && !restore) ||
       !config
     )
       return;
     const limit =
-      kind === "asset" && folder === "card"
+      chosenKind === "asset" && chosenFolder === "card"
         ? config.cardMaxBytes
-        : config.kinds[kind].maxBytes;
-    if (file.size <= 0 || file.size > limit) {
+        : config.kinds[chosenKind].maxBytes;
+    if (
+      !restore &&
+      chosenFile &&
+      (chosenFile.size <= 0 || chosenFile.size > limit)
+    ) {
       setError("文件为空或超过该类型大小上限");
       return;
     }
     if (
-      !config.kinds[kind].extensions.includes(
-        file.name.split(".").pop()?.toLowerCase() ?? "",
+      !restore &&
+      chosenFile &&
+      !config.kinds[chosenKind].extensions.includes(
+        chosenFile.name.split(".").pop()?.toLowerCase() ?? "",
       )
     ) {
       setError("此类型不支持该文件格式");
@@ -332,15 +366,20 @@ function SharedAssetSession({
       generation = epoch.current,
       controller = new AbortController(),
       body = new FormData();
-    body.set("file", file);
-    body.set("kind", kind);
+    if (chosenFile) body.set("file", chosenFile);
+    body.set("kind", chosenKind);
     body.set("requestId", id);
     body.set("expectedRevision", String(config.revision));
-    if (kind === "asset") {
-      body.set("folder", folder);
-      body.set("market", market);
-      body.set("code", code);
-      body.set("name", name);
+    if (chosenKind === "asset") {
+      body.set("folder", chosenFolder);
+      body.set("market", target.market || "");
+      body.set("code", target.code || "");
+      body.set("name", target.name || "");
+    }
+    if (target) {
+      body.set("assetId", target.id);
+      body.set("catalogRevision", String(target.catalogRevision));
+      body.set("publicMetadataConfirmed", "true");
     }
     try {
       retainSharedAssetRequest(sessionStorage, scope, id);
@@ -349,19 +388,37 @@ function SharedAssetSession({
       return;
     }
     original.current = id;
-    expectedKind.current = kind;
+    expectedKind.current = chosenKind;
+    expectedIcon.current = target;
     rejected.current = undefined;
     setPending(id);
     setReceipt(null);
-    setNotice("");
+    setNotice(
+      restore
+        ? "正在恢复原图…"
+        : target.type === "card"
+          ? "正在更新卡面…"
+          : "正在更新图标…",
+    );
     setError("");
     work.current = controller;
     setBusy(true);
-    clearFile();
     try {
       const result = await api<unknown>(
-        base + "/upload",
-        { method: "POST", body, signal: controller.signal },
+        base + (restore ? "/restore-card" : "/upload"),
+        {
+          method: "POST",
+          body: restore
+            ? JSON.stringify({
+                requestId: id,
+                expectedRevision: config.revision,
+                catalogRevision: target.catalogRevision,
+                assetId: target.id,
+                publicMetadataConfirmed: true,
+              })
+            : body,
+          signal: controller.signal,
+        },
         session.csrf,
         300000,
       );
@@ -442,277 +499,279 @@ function SharedAssetSession({
       }
     }
   }
-  const blocked = busy || !!pending || !ready || !journalReady || locked;
-  const limit = config
-    ? kind === "asset" && folder === "card"
-      ? config.cardMaxBytes
-      : config.kinds[kind].maxBytes
-    : null;
   return (
     <section className="shared-assets-page">
-      <header className="page-heading">
-        <h1>素材库</h1>
-        <button
-          className="button"
-          disabled={busy || locked}
-          onClick={() => {
-            void load();
-            catalogChanged();
-          }}
-        >
-          重新读取
-        </button>
-      </header>
+      <PageHeader
+        title="素材库"
+        actions={
+          <div className="page-toolbar-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="素材库设置"
+              onClick={() => setAssetPanel("settings")}
+              disabled={busy || locked}
+            >
+              <Settings2 size={18} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="刷新素材库"
+              disabled={busy || locked}
+              onClick={() => {
+                setError("");
+                void load();
+                catalogChanged();
+              }}
+            >
+              <RefreshCw size={17} />
+            </button>
+          </div>
+        }
+      />
       <AssetLibraryBrowser
         session={session}
         active={active && visible && !locked}
         revision={catalogRefresh}
+        onChanged={() => {
+          void load();
+          catalogChanged();
+        }}
+        uploadDisabled={busy || locked || !ready || !journalReady || !!pending}
+        onRestore={(asset, revision) => {
+          void upload(null, { ...asset, catalogRevision: revision }, true);
+        }}
+        onReplace={(asset, revision, chosen) => {
+          void upload(chosen, { ...asset, catalogRevision: revision });
+        }}
       />
-      <details className="asset-library-management">
-        <summary>上传素材</summary>
-        {error && <p role="alert">{error}</p>}
-        {notice && <p role="status">{notice}</p>}
-        {pending && (
-          <div className="shared-asset-result" role="status">
-            <p>等待原操作结果</p>
-            <p className="shared-asset-id">{pending}</p>
-            <button
-              className="button"
-              disabled={busy || locked}
-              onClick={() => void check()}
-            >
-              查询原回执
-            </button>
-          </div>
-        )}
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void upload();
+      {!assetPanel && error && (
+        <p role="alert" className="notice error">
+          {error}
+        </p>
+      )}
+      {!assetPanel && notice && <p role="status">{notice}</p>}
+      {pending && (
+        <div className="notice">
+          <span>素材操作结果待确认</span>
+          <button
+            type="button"
+            disabled={busy || locked}
+            onClick={() => void check()}
+          >
+            核对上传结果
+          </button>
+        </div>
+      )}
+      {assetPanel === "settings" && (
+        <Dialog
+          title="素材库设置"
+          className="asset-settings-dialog"
+          onClose={() => {
+            if (!busy && !accessBlocked) setAssetPanel(null);
           }}
         >
-          <div className="shared-asset-fields">
-            <label>
-              类型
-              <SelectMenu
-                label="素材类型"
-                value={kind}
-                options={assetKinds}
-                variant="field"
-                disabled={blocked}
-                onChange={(value) => {
-                  setKind(value as AssetKind);
-                  clearFile();
-                }}
+          <div className="dialog-content shared-assets-page">
+            {error && <p role="alert">{error}</p>}
+            <WorkspaceTabs
+              label="素材库设置"
+              value={settingsTab}
+              onChange={setSettingsTab}
+              items={[
+                { value: "access", label: "权限开放" },
+                { value: "catalog", label: "目录与来源" },
+                { value: "history", label: "操作记录" },
+              ]}
+            />
+            {settingsTab === "access" && (
+              <MaterialAccessSettings
+                session={session}
+                active={active && visible && !locked}
+                onBlocked={setAccessBlocked}
               />
-            </label>
-            {kind === "asset" && (
-              <>
-                <label>
-                  素材文件夹
-                  <SelectMenu
-                    label="素材文件夹"
-                    value={folder}
-                    options={assetFolders}
-                    variant="field"
-                    disabled={blocked}
-                    onChange={(value) => {
-                      setFolder(value);
-                      setMarket("");
-                      clearFile();
-                    }}
-                  />
-                </label>
-                {folder === "stock" && (
+            )}
+            {settingsTab === "history" && (
+              <section aria-label="操作记录">
+                <form
+                  className="shared-asset-lookup"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void check(lookup.trim());
+                  }}
+                >
                   <label>
-                    股票市场
-                    <SelectMenu
-                      label="股票市场"
-                      value={market}
-                      variant="field"
-                      disabled={blocked}
-                      onChange={(value) => {
-                        setMarket(value);
-                        clearFile();
-                      }}
-                      options={[
-                        { value: "", label: "不分市场" },
-                        ...["US", "HK", "CN", "JP", "KR"].map((value) => ({
-                          value,
-                          label: value,
-                        })),
-                      ]}
-                    />
-                  </label>
-                )}
-                {folder === "market" && (
-                  <label>
-                    市场代码
+                    操作编号
                     <input
-                      value={market}
-                      disabled={blocked}
-                      onChange={(event) => setMarket(event.target.value)}
+                      value={lookup}
+                      disabled={locked}
+                      onChange={(event) => setLookup(event.target.value)}
                     />
                   </label>
+                  <button
+                    className="button secondary"
+                    disabled={
+                      busy || locked || !validAssetOperation(lookup.trim())
+                    }
+                  >
+                    查询回执
+                  </button>
+                </form>
+                {receipt && (
+                  <section
+                    className="shared-asset-result"
+                    aria-label="素材操作结果"
+                  >
+                    <p role="status">
+                      {receipt.state === "completed"
+                        ? "素材已保存"
+                        : receipt.message}
+                    </p>
+                    <p className="shared-asset-id">{receipt.requestId}</p>
+                    {receipt.state === "completed" && (
+                      <>
+                        <div className="shared-asset-preview">
+                          {!imageError && (
+                            <img
+                              ref={preview}
+                              src={receipt.url}
+                              alt={
+                                assetKinds.find((v) => v.value === receipt.kind)
+                                  ?.label ?? "共享素材"
+                              }
+                              onError={() => {
+                                if (live.current) setImageError(true);
+                              }}
+                            />
+                          )}
+                          {imageError && <p>图片无法显示</p>}
+                        </div>
+                        <p>
+                          原件 {resourceSize(receipt.originalSize!)} · 展示{" "}
+                          {resourceSize(receipt.size!)}
+                        </p>
+                        <p>
+                          {receipt.originalSha256 === receipt.sha256
+                            ? "原件与展示图一致"
+                            : "SVG 安全展示版"}
+                        </p>
+                        <div className="shared-asset-actions">
+                          <a
+                            className="button secondary"
+                            href={receipt.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            打开固定展示图
+                          </a>
+                          <button
+                            className="button secondary"
+                            disabled={busy || locked}
+                            onClick={() => void download()}
+                          >
+                            下载原件
+                          </button>
+                        </div>
+                        <PngClipboardActions
+                          key={receipt.version}
+                          session={session}
+                          active={active && visible && !locked && !busy}
+                          image={preview}
+                          version={receipt.version!}
+                          onDenied={fail}
+                        />
+                        <details>
+                          <summary>文件详情</summary>
+                          <dl>
+                            <dt>展示地址</dt>
+                            <dd>{receipt.url}</dd>
+                            <dt>原件摘要</dt>
+                            <dd>{receipt.originalSha256}</dd>
+                            <dt>展示摘要</dt>
+                            <dd>{receipt.sha256}</dd>
+                          </dl>
+                        </details>
+                      </>
+                    )}
+                  </section>
                 )}
-                <label>
-                  素材代码
-                  <input
-                    value={code}
-                    maxLength={40}
-                    disabled={blocked}
-                    onChange={(event) => setCode(event.target.value)}
-                  />
-                </label>
-                <label>
-                  显示名称
-                  <input
-                    value={name}
-                    maxLength={120}
-                    disabled={blocked}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </label>
-              </>
+              </section>
+            )}
+            {settingsTab === "catalog" && (
+              <section aria-label="目录与来源">
+                <AssetLookupCatalogPanel
+                  session={session}
+                  active={
+                    active &&
+                    visible &&
+                    !locked &&
+                    assetPanel === "settings" &&
+                    settingsTab === "catalog"
+                  }
+                  onChanged={catalogChanged}
+                />
+              </section>
             )}
           </div>
-          <div className="shared-asset-upload">
-            <label>
-              文件
-              <input
-                ref={input}
-                type="file"
-                accept={config?.kinds[kind].extensions
-                  .map((ext) => "." + ext)
-                  .join(",")}
-                disabled={blocked}
-                onChange={(event) => {
-                  const next = event.target.files?.[0] ?? null;
-                  if (next && (!limit || next.size <= 0 || next.size > limit)) {
-                    clearFile();
-                    setError("文件为空或超过该类型大小上限");
-                  } else {
-                    setFile(next);
-                    setError("");
-                  }
-                }}
-              />
-            </label>
-            <button className="button" disabled={blocked || !file}>
-              上传
-            </button>
-          </div>
-          {limit !== null && (
-            <p className="shared-asset-limit">最大 {resourceSize(limit)}</p>
-          )}
-        </form>
-      </details>
-      {receipt && (
-        <section className="shared-asset-result" aria-label="素材操作结果">
-          <p role="status">
-            {receipt.state === "completed" ? "素材已保存" : receipt.message}
-          </p>
-          <p className="shared-asset-id">{receipt.requestId}</p>
-          {receipt.state === "completed" && (
-            <>
-              <div className="shared-asset-preview">
-                {!imageError && (
-                  <img
-                    ref={preview}
-                    src={receipt.url}
-                    alt={
-                      assetKinds.find((v) => v.value === receipt.kind)?.label ??
-                      "共享素材"
-                    }
-                    onError={() => {
-                      if (live.current) setImageError(true);
-                    }}
-                  />
-                )}
-                {imageError && <p>图片无法显示</p>}
-              </div>
-              <p>
-                原件 {resourceSize(receipt.originalSize!)} · 展示{" "}
-                {resourceSize(receipt.size!)}
-              </p>
-              <p>
-                {receipt.originalSha256 === receipt.sha256
-                  ? "原件与展示图一致"
-                  : "SVG 安全展示版"}
-              </p>
-              <div className="shared-asset-actions">
-                <a
-                  className="button secondary"
-                  href={receipt.url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  打开固定展示图
-                </a>
-                <button
-                  className="button secondary"
-                  disabled={busy || locked}
-                  onClick={() => void download()}
-                >
-                  下载原件
-                </button>
-              </div>
-              <PngClipboardActions
-                key={receipt.version}
-                session={session}
-                active={active && visible && !locked && !busy}
-                image={preview}
-                version={receipt.version!}
-                onDenied={fail}
-              />
-              <details>
-                <summary>文件详情</summary>
-                <dl>
-                  <dt>展示地址</dt>
-                  <dd>{receipt.url}</dd>
-                  <dt>原件摘要</dt>
-                  <dd>{receipt.originalSha256}</dd>
-                  <dt>展示摘要</dt>
-                  <dd>{receipt.sha256}</dd>
-                </dl>
-              </details>
-            </>
-          )}
-        </section>
+        </Dialog>
       )}
-      <details className="asset-library-management">
-        <summary>操作回执查询</summary>
-        <form
-          className="shared-asset-lookup"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void check(lookup.trim());
-          }}
-        >
-          <label>
-            操作编号
-            <input
-              value={lookup}
-              disabled={locked}
-              onChange={(event) => setLookup(event.target.value)}
-            />
-          </label>
-          <button
-            className="button secondary"
-            disabled={busy || locked || !validAssetOperation(lookup.trim())}
-          >
-            查询回执
-          </button>
-        </form>
-      </details>
-      <details onToggle={(event) => setCatalogOpened(event.currentTarget.open)}>
-        <summary>素材目录登记与来源管理</summary>
-        <AssetLookupCatalogPanel
+    </section>
+  );
+}
+
+function MaterialReader({
+  session,
+  active,
+}: {
+  session: Session;
+  active: boolean;
+}) {
+  const [allowed, setAllowed] = useState<boolean | null>(null),
+    [error, setError] = useState("");
+  useEffect(() => {
+    if (!active) {
+      setAllowed(null);
+      return;
+    }
+    const abort = new AbortController();
+    void api<{ registered: boolean }>("/asset-library/access", {
+      signal: abort.signal,
+    })
+      .then((v) => {
+        if (!abort.signal.aborted) {
+          if (typeof v.registered !== "boolean")
+            throw Error("素材权限响应无效");
+          setAllowed(v.registered);
+        }
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted)
+          setError(e instanceof Error ? e.message : "素材权限读取失败");
+      });
+    return () => abort.abort();
+  }, [active, session.csrf]);
+  return (
+    <section className="shared-assets-page">
+      <PageHeader title="素材库" />
+      {error ? (
+        <p role="alert">{error}</p>
+      ) : allowed === false ? (
+        <p role="status">素材库暂未向注册用户开放</p>
+      ) : allowed === null ? (
+        <p role="status">正在读取素材权限…</p>
+      ) : (
+        <AssetLibraryBrowser
+          key={JSON.stringify([
+            session.instance_id,
+            session.user.id,
+            session.receipt_scope,
+          ])}
           session={session}
-          active={active && visible && !locked && catalogOpened}
-          onChanged={catalogChanged}
+          active={active}
+          uploadDisabled
+          readOnly
         />
-      </details>
+      )}
     </section>
   );
 }

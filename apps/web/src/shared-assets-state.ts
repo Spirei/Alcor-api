@@ -20,8 +20,7 @@ export const assetFolders = [
   { value: "metal", label: "贵金属" },
   { value: "stock", label: "股票" },
   { value: "broker", label: "券商" },
-  { value: "group", label: "共享分组" },
-  { value: "icon", label: "服务图标" },
+  { value: "group", label: "股票分组" },
   { value: "card", label: "卡面" },
 ] as const;
 export type AssetConfig = {
@@ -45,6 +44,14 @@ export type AssetReceipt = {
   size?: number;
   originalSize?: number;
   version?: string;
+  binding?: {
+    id: string;
+    type: string;
+    market: string;
+    code: string;
+    revision: number;
+    imageVersion: string;
+  };
 };
 export function validAssetOperation(id: string) {
   return uuid.test(id);
@@ -142,5 +149,17 @@ export function sharedAssetReceipt(raw: unknown, id: string): AssetReceipt {
     throw new Error("原件与展示图大小不符");
   if (v.sha256 !== v.originalSha256 && !v.legacyUrl.endsWith(".svg"))
     throw new Error("素材处理方式待核对");
+  if (
+    v.binding &&
+    (v.kind !== "asset" ||
+      v.binding.imageVersion !== v.version ||
+      typeof v.binding.id !== "string" ||
+      typeof v.binding.type !== "string" ||
+      typeof v.binding.market !== "string" ||
+      typeof v.binding.code !== "string" ||
+      !Number.isSafeInteger(v.binding.revision) ||
+      v.binding.revision < 1)
+  )
+    throw new Error("对应图标的登记结果待核对");
   return v;
 }

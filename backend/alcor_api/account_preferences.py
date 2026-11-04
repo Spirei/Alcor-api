@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .models import InputModel
 from .security import Identity, identity, lock_mutation_identity
@@ -31,6 +31,24 @@ class PalettePreference(InputModel):
 
 class AppearancePreference(InputModel):
     version: Literal[1]
+    assetBrokerOrder: list[str] = Field(default_factory=list, max_length=500)
+    assetMarketOrder: list[Literal["US", "HK", "CN", "JP", "KR", "SG", "UK", "DE", "FR", "AU", "CA", "IN", "TW", "BR"]] = Field(default_factory=lambda: ["US", "HK", "CN", "JP", "KR", "SG", "UK", "DE", "FR", "AU", "CA", "IN", "TW", "BR"], min_length=1, max_length=14)
+
+    @field_validator("assetBrokerOrder")
+    @classmethod
+    def broker_order(cls, value):
+        import re
+        if len(set(value)) != len(value) or any(not re.fullmatch(r"[A-Za-z0-9:._-]{1,120}", v) for v in value):
+            raise ValueError("券商排序无效")
+        return value
+
+    @field_validator("assetMarketOrder")
+    @classmethod
+    def unique_asset_markets(cls, value):
+        if len(set(value)) != len(value):
+            raise ValueError("市场不能重复")
+        return value
+
     mode: Literal["system", "light", "dark"]
     separateModes: bool
     shared: PalettePreference
@@ -104,6 +122,10 @@ async def save_preferences(data: PreferenceChange, request: Request, who: Member
             if "appearance" in fields
             else old["appearance"]
         )
+        if appearance is not None and data.appearance is not None and "assetMarketOrder" not in data.appearance.model_fields_set and old["appearance"]:
+            appearance["assetMarketOrder"] = old["appearance"].get("assetMarketOrder", appearance["assetMarketOrder"])
+        if appearance is not None and data.appearance is not None and "assetBrokerOrder" not in data.appearance.model_fields_set and old["appearance"]:
+            appearance["assetBrokerOrder"] = old["appearance"].get("assetBrokerOrder", appearance["assetBrokerOrder"])
         if "appearance" in fields and appearance is not None:
             fonts = {appearance[mode]["font"] for mode in ("shared", "light", "dark")}
             fonts.add(appearance["contentFont"])

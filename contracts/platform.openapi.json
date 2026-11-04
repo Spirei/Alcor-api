@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Alcor Platform",
-    "version": "0.1.171"
+    "version": "0.1.172"
   },
   "paths": {
     "/api/profile/requests": {
@@ -29954,6 +29954,90 @@
         }
       }
     },
+    "/api/asset-library/access": {
+      "get": {
+        "summary": "Public Access",
+        "operationId": "public_access_api_asset_library_access_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/asset-library/access": {
+      "get": {
+        "summary": "Admin Access",
+        "operationId": "admin_access_api_admin_asset_library_access_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Save",
+        "operationId": "save_api_admin_asset_library_access_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/asset-library/access/operations/{request_id}": {
+      "get": {
+        "summary": "Operation",
+        "operationId": "operation_api_admin_asset_library_access_operations__request_id__get",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assets/lookup": {
       "get": {
         "summary": "Old V1",
@@ -30440,6 +30524,41 @@
       }
     },
     "/api/admin/asset-catalog/entries/{aid}": {
+      "put": {
+        "summary": "Canonical Rename",
+        "operationId": "canonical_rename_api_admin_asset_catalog_entries__aid__put",
+        "parameters": [
+          {
+            "name": "aid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Aid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "summary": "Canonical Delete",
         "operationId": "canonical_delete_api_admin_asset_catalog_entries__aid__delete",
@@ -30470,6 +30589,22 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/asset-catalog/restore": {
+      "post": {
+        "summary": "Canonical Restore",
+        "operationId": "canonical_restore_api_admin_asset_catalog_restore_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -32261,6 +32396,22 @@
         }
       }
     },
+    "/api/admin/shared-assets/restore-card": {
+      "post": {
+        "summary": "Restore Card",
+        "operationId": "restore_card_api_admin_shared_assets_restore_card_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/shared-assets/versions/{identifier}/original": {
       "get": {
         "summary": "Original",
@@ -32857,6 +33008,39 @@
             "type": "integer",
             "const": 1,
             "title": "Version"
+          },
+          "assetBrokerOrder": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Assetbrokerorder"
+          },
+          "assetMarketOrder": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "US",
+                "HK",
+                "CN",
+                "JP",
+                "KR",
+                "SG",
+                "UK",
+                "DE",
+                "FR",
+                "AU",
+                "CA",
+                "IN",
+                "TW",
+                "BR"
+              ]
+            },
+            "type": "array",
+            "maxItems": 14,
+            "minItems": 1,
+            "title": "Assetmarketorder"
           },
           "mode": {
             "type": "string",

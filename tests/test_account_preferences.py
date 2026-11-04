@@ -20,6 +20,8 @@ def appearance():
     }
     return {
         "version": 1,
+        "assetBrokerOrder": [],
+        "assetMarketOrder": ["US", "HK", "CN", "JP", "KR", "SG", "UK", "DE", "FR", "AU", "CA", "IN", "TW", "BR"],
         "mode": "dark",
         "separateModes": False,
         "shared": palette,

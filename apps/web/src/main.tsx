@@ -22,7 +22,6 @@ import {
   usePublicSite,
   registerSiteWorker,
 } from "./public-site";
-import { SiteTicker } from "./site-ticker";
 import { legacySitePath, loginDestination } from "./site-paths";
 const MarketAssetDetails = lazy(() =>
   import("./market-asset-details").then((module) => ({
@@ -478,6 +477,7 @@ const modulePaths = [
   "/app/authorize",
 ];
 const memberPaths = [
+  "/shared-assets",
   "/celebs",
   "/feed",
   "/market",
@@ -2053,7 +2053,6 @@ function Workspace({
             {["/portfolio", "/cards", "/fire", "/activity"].includes(
               location.pathname,
             ) && <AmountVisibilityControl />}
-            <SiteTicker />
             <button
               className="icon-button header-search"
               data-global-search-trigger

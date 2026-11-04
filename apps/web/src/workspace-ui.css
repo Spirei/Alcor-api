@@ -37,7 +37,7 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.workspace-tabs > button:hover {
+.workspace-tabs > button:not(:disabled):hover {
   color: var(--ink);
   background: var(--hover);
 }
@@ -219,9 +219,9 @@
   align-items: center;
   text-align: center;
   justify-content: center;
-  min-height: 210px;
-  padding: 32px 20px;
-  gap: 12px;
+  min-height: 140px;
+  padding: 24px 20px;
+  gap: 8px;
   color: var(--muted);
 }
 .workspace-empty-icon {
@@ -417,4 +417,19 @@ main.page-section:has(> .simple-app) > :is(a, strong) {
   .workspace-ui input[type="file"]::file-selector-button {
     min-height: 44px;
   }
+}
+
+.workspace-ui .workspace-empty p {
+  font-size: 12px;
+}
+.select-menu-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.select-menu-heading small {
+  font-size: inherit;
 }

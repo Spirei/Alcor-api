@@ -1,0 +1,62 @@
+.workspace-ui {
+  --page-title-size: 18px;
+  --page-section-gap: 24px;
+  --panel-radius: 16px;
+  --panel-padding: 20px;
+}
+.workspace-ui .workspace-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 var(--page-section-gap);
+}
+.workspace-page-title,
+.page-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.workspace-ui .workspace-page-heading h1 {
+  font-size: var(--page-title-size);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.page-toolbar-actions {
+  flex-wrap: wrap;
+}
+.workspace-page-title > .icon-button {
+  width: 30px;
+  height: 30px;
+}
+.workspace-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.workspace-section-heading h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .workspace-ui .workspace-page-heading {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+}
+@media (max-width: 640px) {
+  .workspace-page-title {
+    gap: 8px;
+  }
+}
+@media (max-width: 640px) {
+  .page-toolbar-actions {
+    gap: 6px;
+  }
+}

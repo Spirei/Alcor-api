@@ -1,3 +1,5 @@
+import { brokerOrder } from "./asset-library-market.ts";
+import { libraryMarketOrder } from "./asset-library-market.ts";
 import {
   isPersonalFontId,
   personalFontFamily,
@@ -29,6 +31,8 @@ export type Palette = {
 };
 export type Appearance = {
   version: 1;
+  assetMarketOrder: string[];
+  assetBrokerOrder: string[];
   mode: Mode;
   separateModes: boolean;
   shared: Palette;
@@ -98,6 +102,8 @@ export function defaultPalette(): Palette {
 export function defaultAppearance(): Appearance {
   return {
     version: 1,
+    assetBrokerOrder: [],
+    assetMarketOrder: libraryMarketOrder(null),
     mode: "system",
     separateModes: false,
     shared: defaultPalette(),
@@ -176,6 +182,8 @@ export function parseAppearance(
   if (p.version !== 1) return defaults;
   const result = {
     ...defaults,
+    assetBrokerOrder: brokerOrder(p.assetBrokerOrder),
+    assetMarketOrder: libraryMarketOrder(p.assetMarketOrder),
     mode: choice(p.mode, ["system", "light", "dark"], defaults.mode),
     shared: palette(p.shared),
     light: palette(p.light),

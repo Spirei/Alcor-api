@@ -203,18 +203,21 @@ async def purge_owner(conn, owner):
         await conn.execute('DELETE FROM ' + table + ' WHERE owner_id=%s', (owner,))
 
 
-async def published_card_assets(conn, limit=None):
+async def published_card_assets(conn, limit=None, *, include_deleted=False):
     """Read-only projection for the unified shared-asset catalog; never copy card metadata elsewhere."""
     await conn.execute("SELECT pg_advisory_xact_lock_shared(hashtextextended('card-catalog',0))")
     if limit is not None and (type(limit) is not int or not 1 <= limit <= 10000):
         raise HTTPException(400, '卡面目录读取上限无效')
-    query = 'SELECT metadata,image_version,updated_at FROM card_catalog_public_index WHERE deleted_at IS NULL ORDER BY updated_at,image_path'
+    query = 'SELECT metadata,image_version,updated_at FROM card_catalog_public_index' + ('' if include_deleted else ' WHERE deleted_at IS NULL') + ' ORDER BY updated_at,image_path'
     rows = await (await conn.execute(query + (' LIMIT %s' if limit is not None else ''), (limit,) if limit is not None else ())).fetchall()
     items = []
     for row in rows:
         value = restore_json(row['metadata'])
         # This index is populated only by an administrator's explicit public custom-card registration.
-        items.append({'id': 'card:' + value['image'], 'type': 'card',
+        items.append({'id': value.get('libraryId') or 'card:' + value['image'], 'type': 'card',
+                      'bank': value.get('bank', ''), 'region': value.get('region', ''),
+                      'originalImageUrl': value['image'] if value.get('libraryId') else None,
+                      'customized': value.get('libraryCustomized', False),
                       'market': (value.get('region') or 'OTHER').strip(JS_WHITESPACE).upper(),
                       'code': (value.get('name') or 'CARD').strip(JS_WHITESPACE).upper(), 'name': value.get('name', ''),
                       'url': value['image'], 'source': 'manual',

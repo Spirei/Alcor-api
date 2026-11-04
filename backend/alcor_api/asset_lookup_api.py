@@ -17,7 +17,14 @@ from .system_asset_api import content
 
 
 def mount_asset_catalog(app, settings, db):
-    service = AssetCatalog(db)
+    from .legacy_asset_directory import LegacyAssetDirectory
+    from .legacy_card_directory import LegacyCardDirectory
+    app.state.legacy_asset_directory = LegacyAssetDirectory(settings.file_root)
+    app.state.legacy_card_directory = LegacyCardDirectory(settings.file_root)
+    app.state.legacy_card_directory.asset_directory = app.state.legacy_asset_directory
+    from .asset_library_access import mount_material_access, assert_material_read
+    mount_material_access(app, db)
+    service = AssetCatalog(db, app.state.legacy_asset_directory)
     app.state.asset_lookup_catalog = service
 
     async def admin(request):
@@ -65,6 +72,7 @@ def mount_asset_catalog(app, settings, db):
             **({"X-Alcor-API-Version": "2"} if version == 2 else {}),
         }
         try:
+            await assert_material_read(request, db)
             ip = request.client.host if request.client else "unknown"
             if not await app.state.rate_limit(
                 db, digest("asset-lookup:" + ip), 120, window_seconds=60
@@ -105,6 +113,7 @@ def mount_asset_catalog(app, settings, db):
 
     @app.get("/api/asset-catalog")
     async def directory(request: Request):
+        await assert_material_read(request, db)
         kind = request.query_params.get("type")
         if kind is not None and kind not in (
             "stock",
@@ -118,6 +127,14 @@ def mount_asset_catalog(app, settings, db):
             "card",
         ):
             raise HTTPException(400, "素材分类无效")
+        if request.query_params.get("paged") == "1":
+            from .asset_catalog_management import page_number
+            return await app.state.asset_catalog_management.listing(
+                kind=kind, q=request.query_params.get("q", ""),
+                market=request.query_params.get("market") or None,
+                page=page_number(request.query_params.get("page")),
+                page_size=page_number(request.query_params.get("pageSize"), 50, 100),
+            )
         return await service.directory(kind)
 
     @app.get("/api/admin/asset-catalog")
@@ -168,10 +185,12 @@ def mount_asset_catalog(app, settings, db):
 
     @app.get("/api/asset-catalog/alias")
     async def resolve(request: Request):
+        await assert_material_read(request, db)
         return await service.resolve_alias(alias_path(request.query_params.get("url")))
 
     @app.get("/api/asset-image/{key}")
     async def image(key: str, request: Request):
+        access = await assert_material_read(request, db)
         if not re.fullmatch(r"[a-f0-9]{24}", key):
             return Response("Not Found", status_code=404, headers={"Cache-Control": "no-store"})
         try:
@@ -185,7 +204,7 @@ def mount_asset_catalog(app, settings, db):
         etag = '"' + row["served_sha256"][:12] + '"'
         if "range" not in request.headers and request.headers.get("if-none-match") == etag:
             stream.close()
-            return Response(status_code=304, headers={"Cache-Control": "public, no-cache", "ETag": etag})
+            return Response(status_code=304, headers={"Cache-Control": "public, no-cache" if access["guest"] else "private, no-store", "Vary":"Cookie, Authorization", "ETag": etag})
         # The outer old route only compares its short ETag without a Range header.
         checked = Request(
             {
@@ -199,7 +218,8 @@ def mount_asset_catalog(app, settings, db):
         )
         response = content(checked, row, stream)
         response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = "public, no-cache"
+        response.headers["Cache-Control"] = "public, no-cache" if access["guest"] else "private, no-store"
+        response.headers["Vary"] = "Cookie, Authorization"
         return response
 
     from .asset_catalog_management_api import mount_asset_management

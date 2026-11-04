@@ -30,7 +30,7 @@ SECURITY_CHECK_SVG = (
 
 
 def mount_system_assets(app, settings, db, rate_limit):
-    service = SystemAssets(db)
+    service = SystemAssets(db, getattr(app.state, "legacy_card_directory", None))
     app.state.system_assets = service
 
     async def admin(request):
@@ -43,7 +43,11 @@ def mount_system_assets(app, settings, db, rate_limit):
 
     async def form_upload(who, form, request, canonical=False):
         if (
-            set(form) - {"file", "kind", "folder", "name", "code", "market", "requestId", "expectedRevision"}
+            set(form)
+            - (
+                {"file", "kind", "folder", "name", "code", "market", "requestId", "expectedRevision"}
+                | ({"assetId", "catalogRevision", "publicMetadataConfirmed"} if canonical else set())
+            )
             or len(form.getlist("file")) != 1
             or any(len(form.getlist(k)) != 1 for k in form)
         ):
@@ -62,6 +66,49 @@ def mount_system_assets(app, settings, db, rate_limit):
             if not value.isascii() or not value.isdecimal() or len(value) > 16:
                 raise HTTPException(400, "素材修订无效")
             fields["expectedRevision"] = int(value)
+        binding_fields = {"assetId", "catalogRevision", "publicMetadataConfirmed"}
+        if binding_fields & set(fields):
+            from .asset_catalog_management import TYPES, identifier
+
+            if (
+                not binding_fields <= set(fields)
+                or fields.get("publicMetadataConfirmed") != "true"
+                or fields.get("kind") != "asset"
+                or fields.get("folder") not in (*TYPES, "card")
+            ):
+                raise HTTPException(400, "对应图标的目录信息不完整")
+            catalog_revision = fields.pop("catalogRevision")
+            if (
+                not catalog_revision.isascii()
+                or not catalog_revision.isdecimal()
+                or len(catalog_revision) > 16
+                or int(catalog_revision) >= 9007199254740991
+            ):
+                raise HTTPException(400, "素材目录修订无效")
+            raw_id = fields.pop("assetId")
+            if fields["folder"] == "card":
+                if (not raw_id.startswith("card:") and not re.fullmatch(r"legacy-file:[a-f0-9]{32}", raw_id)) or len(raw_id) > 2048 or any(ord(c) < 32 for c in raw_id):
+                    raise HTTPException(400, "卡面标识无效")
+                aid = raw_id
+            else:
+                aid = identifier(raw_id)
+            fields.pop("publicMetadataConfirmed")
+            fields["catalogBinding"] = {
+                "expectedRevision": int(catalog_revision),
+                "asset": {
+                    "id": aid,
+                    "type": fields["folder"],
+                    "market": fields.get("market", ""),
+                    "code": fields.get("code", ""),
+                    "name": fields.get("name", ""),
+                },
+            }
+            if not re.fullmatch(r"[A-Z0-9][A-Z0-9._:-]{0,39}", fields.get("code", "")):
+                import hashlib
+
+                fields["code"] = "icon-" + hashlib.sha256(aid.encode()).hexdigest()[:16]
+            if fields["folder"] == "card":
+                fields["name"] = "卡面图片"
         value = await service.upload(
             who, fields, file.filename or "", await file.read(20971521), request.state.request_id, canonical
         )
@@ -113,6 +160,35 @@ def mount_system_assets(app, settings, db, rate_limit):
             raise HTTPException(400, "查询字段无效")
         return await service.receipt(await admin(request), identifier)
 
+    @app.post("/api/admin/shared-assets/restore-card")
+    async def restore_card(request: Request):
+        import json
+        import hashlib
+        from pathlib import Path
+        who = await admin(request)
+        try:
+            raw = json.loads(await bounded_body(request, 8192))
+            if (not isinstance(raw, dict) or set(raw) != {"requestId", "expectedRevision", "catalogRevision", "assetId", "publicMetadataConfirmed"}
+                    or raw["publicMetadataConfirmed"] is not True
+                    or any(type(raw[k]) is not int or not 0 <= raw[k] < 9007199254740991 for k in ("expectedRevision", "catalogRevision"))
+                    or not isinstance(raw["assetId"], str)):
+                raise ValueError()
+        except (ValueError, TypeError, UnicodeError):
+            raise HTTPException(400, "卡面恢复字段无效") from None
+        async with app.state.resource_library.upload_slot():
+            from .card_public_assets import CardPublicAssets
+            source = await CardPublicAssets(db, service.card_directory).source(raw["assetId"])
+            if source is None:
+                raise HTTPException(409, "原始卡面尚未核对，无法恢复")
+            directory = service.card_directory if source["relativePath"].startswith("cards/") else getattr(service.card_directory, "asset_directory", None)
+            if directory is None:
+                raise HTTPException(409, "原始素材目录尚未核对")
+            original = await asyncio.to_thread(directory.read_original, source["relativePath"])
+            fields = {"kind": "asset", "folder": "card", "name": "原始卡面", "code": "original-" + hashlib.sha256(raw["assetId"].encode()).hexdigest()[:16], "requestId": raw["requestId"], "expectedRevision": raw["expectedRevision"],
+                      "catalogBinding": {"expectedRevision": raw["catalogRevision"], "restoreOriginal": True, "asset": {"id": raw["assetId"], "type": "card"}}}
+            value = await service.upload(who, fields, Path(source["relativePath"]).name, original, request.state.request_id, True)
+            return JSONResponse(value, status_code=value["httpStatus"], headers={"Cache-Control": "no-store"})
+
     @app.get("/api/admin/shared-assets/versions/{identifier}/original")
     async def original(identifier: UUID, request: Request):
         if request.query_params:
@@ -122,6 +198,9 @@ def mount_system_assets(app, settings, db, rate_limit):
 
     @app.get("/uploads/{path:path}")
     async def public(path: str, request: Request):
+        if path.startswith(("asset/", "cards/")):
+            from .asset_library_access import assert_material_read
+            await assert_material_read(request, db)
         if re.search(b"%2f|%5c|%00", request.scope.get("raw_path", b""), re.IGNORECASE):
             raise HTTPException(400, "无效的素材路径")
         query = request.query_params
@@ -129,7 +208,20 @@ def mount_system_assets(app, settings, db, rate_limit):
             raise HTTPException(400, "素材摘要参数无效")
         # Old public URLs ignore ordinary cache-busting query fields; sha256 is strict.
         sha = query.get("sha256")
-        row, stream = await service.public("/uploads/" + path, sha)
+        if sha is not None and not re.fullmatch(r"[a-f0-9]{64}", sha):
+            raise HTTPException(400, "无效的素材摘要")
+        directory = getattr(app.state, "legacy_card_directory" if path.startswith("cards/") else "legacy_asset_directory", None)
+        # Unicode legacy filenames and manifest cards never enter the ASCII
+        # registered-path parser. Every component is checked by the readonly adapter.
+        if directory is not None and (path.startswith("cards/") or path.startswith("asset/") and not re.fullmatch(r"[A-Za-z0-9._/-]+", path)):
+            row, stream = await asyncio.to_thread(directory.open_bytes, path, sha)
+            return content(request, row, stream, immutable=sha is not None)
+        try:
+            row, stream = await service.public("/uploads/" + path, sha)
+        except HTTPException as exc:
+            if exc.status_code != 404 or directory is None or not path.startswith(("asset/", "cards/")):
+                raise
+            row, stream = await asyncio.to_thread(directory.open_bytes, path, sha)
         return content(request, row, stream, immutable=sha is not None)
 
     @app.get(
@@ -141,11 +233,14 @@ def mount_system_assets(app, settings, db, rate_limit):
 
 
 def security_check_response():
-    return Response(SECURITY_CHECK_SVG, headers={
-        "Content-Type": "image/svg+xml; charset=utf-8",
-        "Cache-Control": "public, max-age=0, must-revalidate",
-        "X-Content-Type-Options": "nosniff",
-    })
+    return Response(
+        SECURITY_CHECK_SVG,
+        headers={
+            "Content-Type": "image/svg+xml; charset=utf-8",
+            "Cache-Control": "public, max-age=0, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 def content(request, row, stream, private=False, immutable=False):
@@ -164,6 +259,9 @@ def content(request, row, stream, private=False, immutable=False):
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'",
     }
+    if str(request.url.path).startswith(("/uploads/asset/", "/uploads/cards/")):
+        headers["Cache-Control"] = "private, no-store"
+        headers["Vary"] = "Cookie, Authorization"
     if private:
         headers["Content-Disposition"] = "attachment"
     if not private and request.headers.get("if-none-match") in (headers["ETag"], "*"):

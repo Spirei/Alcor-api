@@ -14,6 +14,14 @@ export function Dialog({
   className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const backdropPress = useRef(false);
+  const outside = (x: number, y: number) => {
+    const rect = ref.current?.getBoundingClientRect();
+    return (
+      !!rect &&
+      (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom)
+    );
+  };
   useEffect(() => {
     const previous =
       document.activeElement === document.body
@@ -44,8 +52,23 @@ export function Dialog({
         event.preventDefault();
         onClose();
       }}
-      onClick={(e) => {
-        if (e.target === ref.current) onClose();
+      onPointerDown={(event) => {
+        backdropPress.current =
+          event.isPrimary &&
+          event.button === 0 &&
+          event.target === ref.current &&
+          outside(event.clientX, event.clientY);
+      }}
+      onPointerCancel={() => {
+        backdropPress.current = false;
+      }}
+      onClick={(event) => {
+        const dismiss =
+          backdropPress.current &&
+          event.target === ref.current &&
+          outside(event.clientX, event.clientY);
+        backdropPress.current = false;
+        if (dismiss) onClose();
       }}
       aria-label={title}
     >

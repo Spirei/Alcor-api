@@ -1,10 +1,11 @@
 """Versioned public metadata edits over AssetCatalog's one transaction core."""
 
+import asyncio
 import hashlib
 import json
 import math
 import re
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -30,9 +31,20 @@ def page_number(value, fallback=1, maximum=1000000):
 
 
 def identifier(value):
+    if isinstance(value, str) and value.startswith("card:") and len(value) <= 2048 and "\\" not in value and not any(ord(c) < 32 for c in value):
+        return value
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9:._-]{1,120}", value):
         raise HTTPException(400, "素材标识无效")
     return value
+
+
+def public_identity(row):
+    kind = row["type"]
+    market = (row["market"] or "OTHER").upper() if kind in ("stock", "broker") else ""
+    if kind == "broker" and market in ("GROUP", "OTHER"):
+        market = "OTHER"
+    code = (row["market"] if kind == "market" else row["code"]).upper()
+    return kind, market, code
 
 
 def fingerprint(data):
@@ -42,8 +54,10 @@ def fingerprint(data):
 
 
 class AssetManagement:
-    def __init__(self, catalog):
+    def __init__(self, catalog, legacy_directory=None, legacy_card_directory=None):
         self.catalog = catalog
+        self.legacy_directory = legacy_directory
+        self.legacy_card_directory = legacy_card_directory
 
     async def prior(self, conn, who, request_id, fp):
         row = await (
@@ -86,6 +100,14 @@ class AssetManagement:
         return str(row["id"])
 
     async def write(self, who, request_id, expected, raw, *, restore=False, rename=False, connection=None):
+        if rename and connection is None:
+            # Same identity -> catalog -> system image lock order as camera uploads.
+            from .system_assets import SystemAssets
+            async with self.catalog.context(who, True) as conn:
+                if str(raw.get("id", "")).startswith("card:") or self.legacy_card_directory is not None:
+                    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('card-catalog',0))")
+                async with SystemAssets(self.catalog.db).context(who, True, connection=conn):
+                    return await self.write(who, request_id, expected, raw, restore=restore, rename=True, connection=conn)
         if not isinstance(raw, dict) or set(raw) - {
             "id",
             "type",
@@ -110,14 +132,29 @@ class AssetManagement:
             )["revision"]
             if type(expected) is not int or expected != current or expected >= 9007199254740990:
                 raise HTTPException(409, "公共素材目录已变化，请重新读取")
+            legacy = None
+            if rename and self.legacy_card_directory is not None:
+                from .card_public_assets import CardPublicAssets
+                cards = CardPublicAssets(self.catalog.db, self.legacy_card_directory)
+                source = await cards.source(raw.get("id"))
+                if source is not None:
+                    return await self.rename_card(conn, who, request_id, expected, raw, fp, cards, source)
             if rename:
                 aid = identifier(raw.get("id"))
                 old = await (
                     await conn.execute("SELECT * FROM asset_catalog_entries WHERE id=%s", (aid,))
                 ).fetchone()
-                if not old:
+                if not old and self.legacy_directory is not None:
+                    legacy = next((row for row in await self.legacy_directory.entries() if row["id"] == aid and row["type"] in TYPES), None)
+                if not old and legacy is None:
+                    from .legacy_asset_directory import MARKET_NAMES
+                    key = aid.removeprefix("market:")
+                    if aid.startswith("market:") and key in MARKET_NAMES and key != "SPX":
+                        legacy = {"type": "market", "market": key, "code": key, "fileVariants": []}
+                if not old and legacy is None:
                     raise HTTPException(404, "素材不存在")
-                kind, market, code = old["type"], old["market"], old["code"]
+                row = old or legacy
+                kind, market, code = row["type"], row["market"], row["code"]
                 name = raw.get("name")
                 if not isinstance(name, str) or not trim(name):
                     raise HTTPException(400, "缺少素材名称")
@@ -139,7 +176,9 @@ class AssetManagement:
                         "market:" + market
                         if kind == "market"
                         else kind + ":" + code
-                        if kind in ("flag", "crypto", "metal", "broker", "icon")
+                        if kind in ("flag", "crypto", "metal", "icon") or kind == "broker" and market in ("GROUP", "OTHER")
+                        else "broker:" + market + ":" + code
+                        if kind == "broker"
                         else "stock:" + market + ":" + code
                     )
                 )
@@ -159,6 +198,23 @@ class AssetManagement:
                 raise HTTPException(409, "素材身份不可改写，请使用新标识")
             light = str(old["light_version"]) if old and old["light_version"] else None
             dark = str(old["dark_version"]) if old and old["dark_version"] else None
+            if legacy and legacy["fileVariants"]:
+                # Register exact original bytes in the existing immutable store. The source
+                # directory stays untouched; new image versions and the label commit together.
+                from pathlib import Path
+                from .system_assets import SystemAssets
+                images = SystemAssets(self.catalog.db)
+                for variant in legacy["fileVariants"]:
+                    is_dark = variant.get("darkVariant", False)
+                    if (is_dark and dark) or (not is_dark and light):
+                        continue
+                    source = await asyncio.to_thread(self.legacy_directory.read_original, variant["relativePath"])
+                    image = await images.apply(conn, who.id, {"kind": "asset", "folder": kind, "market": market, "code": (code if re.fullmatch(r"[A-Z0-9][A-Z0-9._:-]{0,34}", code) else "IMG-" + hashlib.sha256(code.encode()).hexdigest()[:16]) + ("-dark" if is_dark else ""), "name": name}, Path(variant["relativePath"]).name, source, source_original=True)
+                    if is_dark:
+                        dark = image["version"]
+                    else:
+                        light = image["version"]
+                await conn.execute("UPDATE system_asset_scope SET revision=revision+1 WHERE namespace='system_public'")
             if not rename:
                 if "imageVersion" in raw:
                     light = raw["imageVersion"] or None
@@ -229,49 +285,75 @@ class AssetManagement:
             (who.id, "asset-catalog." + kind, aid, request_id),
         )
 
-    async def delete(self, who, request_id, expected, aid, *, connection=None):
+    async def rename_card(self, conn, who, request_id, expected, raw, fp, cards, source):
+        from pathlib import Path
+        from .system_assets import SystemAssets
+        name = raw.get("name")
+        if not isinstance(name, str) or not trim(name) or len(name) > 120:
+            raise HTTPException(400, "请输入 1–120 字的素材名称")
+        old = await (await conn.execute("SELECT * FROM card_catalog_public_index WHERE image_path=%s", (source['originalImageUrl'],))).fetchone()
+        version = old['image_version'] if old else None
+        if version is None:
+            directory = self.legacy_directory if source['relativePath'].startswith('asset/') else self.legacy_card_directory
+            data = await asyncio.to_thread(directory.read_original, source['relativePath'])
+            image = await SystemAssets(self.catalog.db).apply(conn, who.id, {"kind":"asset", "folder":"card", "name":"卡面图片", "code":""}, Path(source['relativePath']).name, data, source_original=True)
+            version = image['version']
+            await conn.execute("UPDATE system_asset_scope SET revision=revision+1 WHERE namespace='system_public'")
+        binding = await cards.bind(conn, who, expected, raw['id'], version, name=trim(name))
+        asset = {**source, "name": trim(name), "code": trim(name).upper(), "readOnly": False}
+        result = {"requestId": str(request_id), "state":"completed", "revision":binding['revision'], "asset":asset}
+        await conn.execute("INSERT INTO asset_catalog_operations(actor_id,request_id,fingerprint,result) VALUES(%s,%s,%s,%s)", (who.id, request_id, fp, Jsonb(result)))
+        await self.event(conn, who, request_id, raw['id'], 'rename', None, asset, result)
+        return result
+
+    async def delete(self, who, request_id, expected, aid, *, connection=None, restore=False):
         aid = identifier(aid)
-        fp = fingerprint(["asset-delete", expected, aid])
+        fp = fingerprint(["asset-restore" if restore else "asset-delete", expected, aid])
         context = self.catalog.context(who, True) if connection is None else self.catalog.context(who, True, connection=connection)
         async with context as conn:
             if prior := await self.prior(conn, who, request_id, fp):
                 return prior
-            current = (
-                await (await conn.execute("SELECT revision FROM asset_catalog_scope FOR UPDATE")).fetchone()
-            )["revision"]
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('card-catalog',0))")
+            current = (await (await conn.execute("SELECT revision FROM asset_catalog_scope FOR UPDATE")).fetchone())["revision"]
             if type(expected) is not int or expected != current or expected >= 9007199254740990:
                 raise HTTPException(409, "公共素材目录已变化，请重新读取")
-            row = await (
-                await conn.execute("SELECT * FROM asset_catalog_entries WHERE id=%s", (aid,))
-            ).fetchone()
-            if row is None and aid.split(":", 1)[0] == "card":
-                raise HTTPException(409, "此类素材由原领域管理，不能在当前目录删除")
-            await conn.execute(
-                """INSERT INTO asset_catalog_tombstones(asset_id,deleted_by,request_id) VALUES(%s,%s,%s)
-                ON CONFLICT(asset_id) DO UPDATE SET deleted_at=clock_timestamp(),deleted_by=excluded.deleted_by,request_id=excluded.request_id,restored_at=NULL,restored_by=NULL,restored_request_id=NULL""",
-                (aid, who.id, request_id),
-            )
-            result = {
-                "requestId": str(request_id),
-                "state": "completed",
-                "kind": "delete",
-                "id": aid,
-                "deleted": True,
-                "alreadyAbsent": row is None,
-                "revision": current + 1,
-            }
+            row = await (await conn.execute("SELECT * FROM asset_catalog_entries WHERE id=%s", (aid,))).fetchone()
+            source = None
+            if self.legacy_card_directory is not None:
+                from .card_public_assets import CardPublicAssets
+                source = await CardPublicAssets(self.catalog.db, self.legacy_card_directory).source(aid)
+            legacy = next((r for r in await self.legacy_directory.entries() if r['id'] == aid), None) if self.legacy_directory is not None and row is None and source is None else None
+            tombstone = await (await conn.execute("SELECT * FROM asset_catalog_tombstones WHERE asset_id=%s AND restored_at IS NULL", (aid,))).fetchone()
+            material = row or source or legacy
+            if material and material['type'] == 'market':
+                market_alias = 'market:' + (material['market'] or material['code']).upper()
+            else:
+                from .legacy_asset_directory import MARKET_NAMES
+                market_alias = aid if aid.startswith('market:') and aid[7:] in MARKET_NAMES else None
+            if restore:
+                if not tombstone:
+                    raise HTTPException(409, "素材未移除，请重新读取")
+                await conn.execute("UPDATE asset_catalog_tombstones SET restored_at=clock_timestamp(),restored_by=%s,restored_request_id=%s WHERE asset_id=%s", (who.id, request_id, aid))
+            else:
+                await conn.execute("INSERT INTO asset_catalog_tombstones(asset_id,deleted_by,request_id) VALUES(%s,%s,%s) ON CONFLICT(asset_id) DO UPDATE SET deleted_at=clock_timestamp(),deleted_by=excluded.deleted_by,request_id=excluded.request_id,restored_at=NULL,restored_by=NULL,restored_request_id=NULL", (aid, who.id, request_id))
+            if market_alias and market_alias != aid:
+                if restore:
+                    await conn.execute("UPDATE asset_catalog_tombstones SET restored_at=clock_timestamp(),restored_by=%s,restored_request_id=%s WHERE asset_id=%s", (who.id, request_id, market_alias))
+                else:
+                    await conn.execute("INSERT INTO asset_catalog_tombstones(asset_id,deleted_by,request_id) VALUES(%s,%s,%s) ON CONFLICT(asset_id) DO UPDATE SET deleted_at=clock_timestamp(),deleted_by=excluded.deleted_by,request_id=excluded.request_id,restored_at=NULL,restored_by=NULL,restored_request_id=NULL", (market_alias,who.id,request_id))
+            if source is not None:
+                await conn.execute("UPDATE card_catalog_public_index SET deleted_at=" + ("NULL" if restore else "clock_timestamp()") + " WHERE image_path=%s", (source['originalImageUrl'],))
+            result = {"requestId": str(request_id), "state": "completed", "kind": "restore" if restore else "delete", "id": aid, "deleted": not restore, "alreadyAbsent": row is None and source is None and legacy is None, "revision": current + 1}
             await conn.execute("UPDATE asset_catalog_scope SET revision=revision+1")
-            await conn.execute(
-                "INSERT INTO asset_catalog_operations(actor_id,request_id,fingerprint,result) VALUES(%s,%s,%s,%s)",
-                (who.id, request_id, fp, Jsonb(result)),
-            )
-            await self.event(conn, who, request_id, aid, "delete", dict(row) if row else None, None, result)
+            await conn.execute("INSERT INTO asset_catalog_operations(actor_id,request_id,fingerprint,result) VALUES(%s,%s,%s,%s)", (who.id, request_id, fp, Jsonb(result)))
+            await self.event(conn, who, request_id, aid, result['kind'], dict(row) if row else None, None, result)
             return result
 
     async def web_icons(self, kind, selected):
         from .asset_web_keys import icon_rows, related_icons, stock_codes
 
         async with self.catalog.context() as conn:
+            removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
             mapping = {}
             cache = {}
             budget = {"bytes": 0, "verified": set()}
@@ -289,8 +371,21 @@ class AssetManagement:
                         )
                     ).fetchone()
                     if not row:
-                        continue
-                    asset = await self.catalog.project(conn, row, cache, budget)
+                        # Registered absence/deletion is authoritative; filenames cannot restore it.
+                        known = await (await conn.execute(
+                            "SELECT 1 FROM asset_catalog_entries WHERE type=%s AND upper(code)=%s AND (%s='flag' OR upper(market)=%s) LIMIT 1",
+                            (kind, code, kind, market),
+                        )).fetchone()
+                        candidates = await self.legacy_directory.matching(kind, market, [code]) if self.legacy_directory is not None and not known else []
+                        if not candidates:
+                            continue
+                        candidates = [r for r in candidates if r["id"] not in removed]
+                        if not candidates:
+                            continue
+                        row = candidates[0]
+                        asset = await self.legacy_directory.project(row, budget)
+                    else:
+                        asset = await self.catalog.project(conn, row, cache, budget)
                     if not asset["imageUrl"]:
                         continue
                     if kind == "stock":
@@ -300,6 +395,25 @@ class AssetManagement:
                         mapping[code] = asset["imageUrl"]
                     break
             return {"assets": icon_rows(kind, related_icons(mapping) if kind == "stock" else mapping)}
+
+    async def stock_markets(self):
+        """Availability is based on verified public images, never market quotes."""
+        async with self.catalog.context() as conn:
+            removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
+            rows = await (await conn.execute("SELECT e.* FROM asset_catalog_entries e WHERE type='stock' AND NOT EXISTS(SELECT 1 FROM asset_catalog_tombstones t WHERE t.asset_id=e.id AND t.restored_at IS NULL) ORDER BY market,code LIMIT 5001")).fetchall()
+            if len(rows) > 5000:
+                raise HTTPException(503, "股票素材超过核对预算")
+            known = {public_identity(row) for row in await (await conn.execute("SELECT type,market,code FROM asset_catalog_entries WHERE type='stock'")).fetchall()}
+            legacy = [row for row in await self.legacy_directory.entries() if row['type'] == 'stock' and row['id'] not in removed and public_identity(row) not in known] if self.legacy_directory else []
+            available = set(); budget = {'bytes': 0, 'verified': set()}; cache = {}
+            for row, readonly in [*[(r, False) for r in rows], *[(r, True) for r in legacy]]:
+                market = row['market']
+                if market in available:
+                    continue
+                projected = await self.legacy_directory.project(row, budget) if readonly else await self.catalog.project(conn, row, cache, budget)
+                if projected.get('imageUrl'):
+                    available.add(market)
+            return sorted(available)
 
     async def listing(
         self,
@@ -317,6 +431,7 @@ class AssetManagement:
         from .card_catalog import published_card_assets
 
         async with self.catalog.context() as conn:
+            removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
             rows = await (
                 await conn.execute(
                     """SELECT e.* FROM asset_catalog_entries e WHERE (%s::text IS NULL OR type=%s)
@@ -326,15 +441,40 @@ class AssetManagement:
                 )
             ).fetchall()
             cards = (
-                await published_card_assets(conn, limit=5001)
-                if kind in (None, "card") and not deleted
+                await published_card_assets(conn, limit=5001, include_deleted=deleted)
+                if kind in (None, "card")
                 else []
             )
             if len(rows) > 5000 or len(cards) > 5000:
                 raise HTTPException(503, "素材列表超过读取预算，请缩小分类和筛选范围")
             records = [(row, False) for row in rows] + [
-                (card, True) for card in cards if market is None or card["market"] == market
+                (card, True) for card in cards if (card["id"] in removed) == deleted and (market is None or card["market"] == market)
             ]
+            known_card_ids = {row["id"] for row in cards}
+            known_paths = set()
+            if self.legacy_card_directory is not None and kind in (None, "card"):
+                known_paths = {unquote(row["image_path"]) for row in await (await conn.execute("SELECT image_path FROM card_catalog_public_index")).fetchall()}
+                for card in await self.legacy_card_directory.entries():
+                    if (card["id"] in removed) == deleted and card["id"] not in known_card_ids and unquote(card["originalImageUrl"]) not in known_paths and (market is None or card["market"] == market):
+                        records.append((card, "legacy-card"))
+            if self.legacy_directory is not None:
+                # Any registered row, including a tombstone, suppresses the filename fallback.
+                known_rows = await (await conn.execute("SELECT type,market,code FROM asset_catalog_entries")).fetchall()
+                known = {public_identity(r) for r in known_rows}
+                for entry in await self.legacy_directory.entries():
+                    if entry["type"] == "card" and (entry["id"] in known_card_ids or unquote(entry["legacyPath"]) in known_paths):
+                        continue
+                    key = public_identity(entry)
+                    if (entry["id"] in removed) == deleted and key not in known and (kind is None or entry["type"] == kind) and (market is None or entry["market"] == market):
+                        records.append((entry, "legacy-file"))
+                        known.add(key)
+            if deleted and kind in (None, 'market'):
+                from .legacy_asset_directory import MARKET_NAMES
+                represented = {r['market'] for r,_ in records if r['type']=='market'}
+                for aid in sorted(removed):
+                    key = aid.removeprefix('market:')
+                    if aid.startswith('market:') and key in MARKET_NAMES and key not in represented:
+                        records.append(({'id':aid,'type':'market','market':key,'code':key,'name':MARKET_NAMES[key],'imageUrl':'','readOnly':True},'placeholder'))
             query = trim(q)
             if sort is not None:
                 from .asset_web_paging import sqlite_like_contains
@@ -343,8 +483,7 @@ class AssetManagement:
                     (row, card)
                     for row, card in records
                     if not query
-                    or sqlite_like_contains(row["code"], query)
-                    or sqlite_like_contains(row["name"], query)
+                    or any(sqlite_like_contains(row.get(field, ""), query) for field in ("code", "name", "bank", "market"))
                 ]
             else:
                 records = [
@@ -359,6 +498,10 @@ class AssetManagement:
                 records.sort(key=lambda pair: pair[0]["code"])
                 if sort in ("name", "code"):
                     records.sort(key=lambda pair: pair[0][sort], reverse=direction == "desc")
+            if kind == 'flag' and sort in (None, 'rank'):
+                from .legacy_asset_directory import REGION_NAMES
+                order = {code:index for index,code in enumerate(REGION_NAMES)}
+                records.sort(key=lambda pair: order.get(pair[0]['code'].upper(), len(order)))
             total = len(records)
             if clamp:
                 page = min(page, max(1, math.ceil(total / page_size)))
@@ -367,6 +510,15 @@ class AssetManagement:
             budget = {"bytes": 0, "verified": set()}
             assets = []
             for row, card in selected:
+                if card == "placeholder":
+                    assets.append(row)
+                    continue
+                if card == "legacy-card":
+                    assets.append(await self.legacy_card_directory.project(row, budget))
+                    continue
+                if card == "legacy-file":
+                    assets.append(await self.catalog.material_display(conn, await self.legacy_directory.project(row, budget), cache, budget))
+                    continue
                 if not card:
                     assets.append(
                         {**await self.catalog.project(conn, row, cache, budget), "deleted": deleted}
@@ -378,6 +530,7 @@ class AssetManagement:
             ]
             return {
                 "assets": assets,
+                "excludedMarkets": sorted(aid[7:] for aid in removed if aid.startswith("market:")),
                 "total": total,
                 "page": page,
                 "pageSize": page_size,

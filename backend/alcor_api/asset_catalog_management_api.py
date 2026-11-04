@@ -16,7 +16,7 @@ from .profile_http import bounded_body
 
 
 def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
-    service = AssetManagement(catalog)
+    service = AssetManagement(catalog, getattr(app.state, "legacy_asset_directory", None), getattr(app.state, "legacy_card_directory", None))
     app.state.asset_catalog_management = service
     headers = {
         "Cache-Control": "private, no-store",
@@ -108,9 +108,13 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
             if denied is not None:
                 return denied
         try:
+            from .asset_library_access import assert_material_read
+            await assert_material_read(request, db)
             kind = first(request, "type")
             if kind not in (*TYPES, "card") or (version is not None and kind not in V1_TYPES):
                 kind = None
+            if web and kind == "stock" and first(request, "marketAvailability") == "1":
+                return result({"markets": await service.stock_markets()})
             if web:
                 selected = select_web_keys(
                     kind, first(request, "keys"), first(request, "market"), first(request, "code")
@@ -235,6 +239,8 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
                     ):
                         raise HTTPException(400, "请确认公共素材字段及当前版本")
                     asset = raw["asset"]
+                    if aid and (not isinstance(asset, dict) or asset.get("id") != aid):
+                        raise HTTPException(400, "素材标识与编辑目标不一致")
                 receipt = await service.write(
                     who,
                     uid,
@@ -307,6 +313,22 @@ def mount_asset_management(app, db, catalog, canonical_admin, v2_access):
     async def canonical_save(request: Request):
         return await mutate(request)
 
-    @app.delete("/api/admin/asset-catalog/entries/{aid}")
+    @app.put("/api/admin/asset-catalog/entries/{aid:path}")
+    async def canonical_rename(aid: str, request: Request):
+        return await mutate(request, aid=aid)
+
+    @app.delete("/api/admin/asset-catalog/entries/{aid:path}")
     async def canonical_delete(aid: str, request: Request):
         return await mutate(request, aid=aid, delete=True)
+
+    @app.post("/api/admin/asset-catalog/restore")
+    async def canonical_restore(request: Request):
+        try:
+            who = await member(request, False)
+            raw = await read_body(request)
+            if not isinstance(raw, dict) or set(raw) != {"requestId", "expectedRevision", "assetId"}:
+                raise HTTPException(400, "恢复素材字段无效")
+            uid, expected = await operation(request, who, raw, False)
+            return result(await service.delete(who, uid, expected, raw['assetId'], restore=True))
+        except HTTPException as exc:
+            return error(exc)

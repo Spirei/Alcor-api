@@ -19,12 +19,21 @@ from .system_asset_codec import FOLDERS, KINDS, asset_name, image_bytes
 
 
 class SystemAssets:
-    def __init__(self, db):
+    def __init__(self, db, card_directory=None):
         self.db = db
+        self.card_directory = card_directory
 
     @asynccontextmanager
-    async def context(self, who=None, write=False):
-        async with self.db.connection() as conn, conn.transaction():
+    async def connection(self, connection=None):
+        if connection is not None:
+            yield connection
+        else:
+            async with self.db.connection() as conn:
+                yield conn
+
+    @asynccontextmanager
+    async def context(self, who=None, write=False, *, connection=None):
+        async with self.connection(connection) as conn, conn.transaction():
             if who:
                 await conn.execute(
                     "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("identity-management:" + who.id,)
@@ -63,7 +72,15 @@ class SystemAssets:
                 raise HTTPException(404, "未找到原素材操作")
             return row["result"]
 
-    async def upload(self, who, fields, file_name, raw, audit_id, canonical):
+    async def upload(self, who, fields, file_name, raw, audit_id, canonical, *, connection=None):
+        if fields.get("catalogBinding") and connection is None:
+            from .asset_lookup_catalog import AssetCatalog
+            # Catalog readers can consult card metadata. Acquire the catalog before
+            # the image publication lock, matching readers rather than waiting in a cycle.
+            async with AssetCatalog(self.db).context(who, True) as conn:
+                if fields["catalogBinding"]["asset"]["type"] == "card":
+                    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('card-catalog',0))")
+                return await self.upload(who, fields, file_name, raw, audit_id, canonical, connection=conn)
         try:
             request = str(UUID(fields.get("requestId", "")))
             if request != fields.get("requestId"):
@@ -78,7 +95,7 @@ class SystemAssets:
                 separators=(",", ":"),
             ).encode()
         ).hexdigest()
-        async with self.context(who, True) as conn:
+        async with self.context(who, True, connection=connection) as conn:
             prior = await (
                 await conn.execute(
                     "SELECT fingerprint,result FROM system_asset_operations WHERE request_id=%s", (request,)
@@ -107,11 +124,28 @@ class SystemAssets:
                     if revision >= 9007199254740991:
                         raise HTTPException(409, "素材修订已达上限")
                     result = await self.apply(conn, who.id, fields, file_name, raw)
+                    if binding := fields.get("catalogBinding"):
+                        from .asset_catalog_management import AssetManagement
+                        from .asset_lookup_catalog import AssetCatalog
+
+                        if binding["asset"]["type"] == "card":
+                            from .card_public_assets import CardPublicAssets
+                            result["binding"] = await CardPublicAssets(self.db, self.card_directory).bind(conn, who, binding["expectedRevision"], binding["asset"]["id"], result["version"], binding.get("restoreOriginal", False))
+                        else:
+                            bound = await AssetManagement(AssetCatalog(self.db)).write(
+                                who, UUID(request), binding["expectedRevision"],
+                                {**binding["asset"], "imageVersion": result["version"]}, connection=conn,
+                            )
+                            result["binding"] = {
+                                **{key: bound["asset"][key] for key in ("id", "type", "market", "code")},
+                                "revision": bound["revision"], "imageVersion": result["version"],
+                            }
                     await conn.execute(
                         "UPDATE system_asset_scope SET revision=revision+1 WHERE namespace='system_public'"
                     )
             except HTTPException as reason:
                 error = reason
+                result = None
             payload = {
                 "requestId": request,
                 "namespace": "system_public",
@@ -138,7 +172,7 @@ class SystemAssets:
             )
             return payload
 
-    async def apply(self, conn, actor, fields, file_name, raw):
+    async def apply(self, conn, actor, fields, file_name, raw, *, source_original=False):
         kind = fields.get("kind", "")
         folder = fields.get("folder", "").strip() if kind == "asset" else ""
         if kind not in KINDS:
@@ -154,7 +188,9 @@ class SystemAssets:
         ext = file_name.rsplit(".", 1)[-1].lower()
         if ext not in extensions:
             raise HTTPException(400, "该素材类型不支持此图片格式")
-        output, media = await asyncio.to_thread(image_bytes, raw, ext)
+        from .legacy_asset_codec import display_bytes
+        codec = display_bytes if source_original or fields.get("catalogBinding", {}).get("restoreOriginal") else image_bytes
+        output, media = await asyncio.to_thread(codec, raw, ext)
         if not output or len(output) > 20971520 + 65536:
             raise HTTPException(400, "安全素材超过大小上限")
         name = fields.get("name", "").strip()
@@ -171,7 +207,7 @@ class SystemAssets:
             prefix += (
                 "/"
                 + folder
-                + ("/" + market if folder == "stock" and market in ("US", "HK", "CN", "JP", "KR") else "")
+                + ("/" + market if folder in ("stock", "broker") and re.fullmatch(r"[A-Z0-9_-]{1,16}", market) else "")
             )
         filename = (
             asset_name(name, code, market, folder, ext)

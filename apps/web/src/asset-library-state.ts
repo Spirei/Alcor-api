@@ -3,12 +3,13 @@ export function assetPageKey(
   market: string,
   query: string,
   page: number,
+  size = 10,
 ) {
   const params = new URLSearchParams({
     type,
     paged: "1",
     page: String(page),
-    pageSize: "10",
+    pageSize: String(size),
     q: query,
   });
   if (type === "stock" && market) params.set("market", market);

@@ -19,7 +19,7 @@ test("actual shared image SSR and original downloader enforce administrator curr
     await build({
       stdin: {
         contents:
-          'export {SharedAssetsPage} from "./src/shared-assets";export {sharedAssetOriginal} from "./src/shared-asset-original";export {bindApiSession} from "./src/api-session";export {assetImageUrl} from "./src/asset-library-browser";',
+          'export {SharedAssetsPage} from "./src/shared-assets";export {AssetMarketFilter} from "./src/asset-market-filter";export {sharedAssetOriginal} from "./src/shared-asset-original";export {bindApiSession} from "./src/api-session";export {assetImageUrl} from "./src/asset-library-browser";',
         resolveDir: fileURLToPath(new URL("../", import.meta.url)),
         loader: "tsx",
       },
@@ -55,6 +55,27 @@ test("actual shared image SSR and original downloader enforce administrator curr
       ])
         assert.equal(m.assetImageUrl(url), url);
     });
+    await t.test(
+      "more markets contain only markets with real stock artwork and disappear when empty",
+      () => {
+        const render = (available: string[] | null) =>
+          renderToStaticMarkup(
+            React.createElement(m.AssetMarketFilter, {
+              value: "",
+              onChange() {},
+              icons: {},
+              available,
+            }),
+          );
+        assert.ok(!render([]).includes('aria-label="更多市场"'));
+        assert.ok(!render(null).includes('aria-label="更多市场"'));
+        const one = render(["SG"]);
+        assert.ok(one.includes('aria-label="更多市场"'));
+        assert.ok(one.includes("新加坡"));
+        assert.ok(!one.includes('value="UK"'));
+        assert.ok(!one.includes("德国"));
+      },
+    );
     const raw = new TextEncoder().encode("original-SVG-source"),
       normalized = new TextEncoder().encode("normalized-SVG-output");
     const hash = (bytes: Uint8Array) =>
@@ -82,7 +103,7 @@ test("actual shared image SSR and original downloader enforce administrator curr
     };
     const signal = new AbortController().signal;
     await t.test(
-      "administrator has all five kinds and upload/receipt controls while ordinary user has no upload form",
+      "administrator reaches upload and source settings from tools without exposing forms on the library",
       () => {
         const session = {
           instance_id: "synthetic",
@@ -94,22 +115,23 @@ test("actual shared image SSR and original downloader enforce administrator curr
           React.createElement(m.SharedAssetsPage, { session }),
         );
         assert.equal((html.match(/<h1>/g) || []).length, 1);
-        for (const label of [
-          "素材库",
-          "主页背景",
-          "站点标志",
-          "登录页图片",
-          "查询回执",
-        ])
+        for (const label of ["素材库", "素材库设置"])
           assert.ok(html.includes(label));
-        assert.ok(html.includes('type="file"'));
+        assert.match(html, /aria-label="更换对应图标"/);
+        assert.match(html, /type="file"[^>]+hidden/);
+        assert.doesNotMatch(html, />上传素材</);
+        assert.match(html, /aria-pressed="true">市场图标</);
+        assert.ok(html.indexOf(">市场图标<") < html.indexOf(">股票图标<"));
+        assert.ok(html.includes(">股票分组<"));
+        assert.doesNotMatch(html, /分组图标|>图标<|深色预览|浅色预览/);
+        assert.ok(!html.includes("<details"));
         assert.ok(!html.includes("img src="));
         const denied = renderToStaticMarkup(
           React.createElement(m.SharedAssetsPage, {
             session: { ...session, user: { ...session.user, role: "user" } },
           }),
         );
-        assert.ok(denied.includes("需要管理员权限"));
+        assert.ok(denied.includes("正在读取素材权限"));
         assert.ok(!denied.includes('type="file"'));
       },
     );

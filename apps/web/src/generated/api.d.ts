@@ -14514,6 +14514,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/asset-library/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Access */
+        get: operations["public_access_api_asset_library_access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/asset-library/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Access */
+        get: operations["admin_access_api_admin_asset_library_access_get"];
+        put?: never;
+        /** Save */
+        post: operations["save_api_admin_asset_library_access_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/asset-library/access/operations/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operation */
+        get: operations["operation_api_admin_asset_library_access_operations__request_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assets/lookup": {
         parameters: {
             query?: never;
@@ -14817,10 +14869,28 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /** Canonical Rename */
+        put: operations["canonical_rename_api_admin_asset_catalog_entries__aid__put"];
         post?: never;
         /** Canonical Delete */
         delete: operations["canonical_delete_api_admin_asset_catalog_entries__aid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/asset-catalog/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Canonical Restore */
+        post: operations["canonical_restore_api_admin_asset_catalog_restore_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -15825,6 +15895,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/shared-assets/restore-card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Card */
+        post: operations["restore_card_api_admin_shared_assets_restore_card_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/shared-assets/versions/{identifier}/original": {
         parameters: {
             query?: never;
@@ -16195,6 +16282,10 @@ export interface components {
              * @constant
              */
             version: 1;
+            /** Assetbrokerorder */
+            assetBrokerOrder?: string[];
+            /** Assetmarketorder */
+            assetMarketOrder?: ("US" | "HK" | "CN" | "JP" | "KR" | "SG" | "UK" | "DE" | "FR" | "AU" | "CA" | "IN" | "TW" | "BR")[];
             /**
              * Mode
              * @enum {string}
@@ -44241,6 +44332,97 @@ export interface operations {
             };
         };
     };
+    public_access_api_asset_library_access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    admin_access_api_admin_asset_library_access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    save_api_admin_asset_library_access_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    operation_api_admin_asset_library_access_operations__request_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     old_v1_api_v1_assets_lookup_get: {
         parameters: {
             query?: never;
@@ -44767,6 +44949,37 @@ export interface operations {
             };
         };
     };
+    canonical_rename_api_admin_asset_catalog_entries__aid__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     canonical_delete_api_admin_asset_catalog_entries__aid__delete: {
         parameters: {
             query?: never;
@@ -44794,6 +45007,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    canonical_restore_api_admin_asset_catalog_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -46502,6 +46735,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_card_api_admin_shared_assets_restore_card_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

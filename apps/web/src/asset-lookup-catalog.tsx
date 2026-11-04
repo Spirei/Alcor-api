@@ -37,8 +37,7 @@ const assetTypes = [
   { value: "crypto", label: "加密资产" },
   { value: "metal", label: "贵金属" },
   { value: "broker", label: "券商图标" },
-  { value: "group", label: "分组图标" },
-  { value: "icon", label: "通用图标" },
+  { value: "group", label: "股票分组" },
 ] as const;
 const emptyAsset = {
   id: "",

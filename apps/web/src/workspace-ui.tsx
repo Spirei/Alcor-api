@@ -7,8 +7,9 @@ import {
   type ReactNode,
 } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ChevronLeft, ChevronRight, Inbox } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import "./workspace-ui.css";
+import "./page-layout.css";
 
 export function WorkspaceTabs<T extends string>({
   label,
@@ -178,9 +179,6 @@ export function WorkspaceEmpty({
 }) {
   return (
     <div className="workspace-empty" role="status">
-      <span className="workspace-empty-icon">
-        <Inbox size={25} strokeWidth={1.4} />
-      </span>
       <strong>{title}</strong>
       {description && <p>{description}</p>}
       {actions}
@@ -206,4 +204,24 @@ export function usePageReveal(page: number) {
       requested.current = true;
     },
   };
+}
+
+export function PageHeader({
+  title,
+  tools,
+  actions,
+}: {
+  title: string;
+  tools?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="page-heading workspace-page-heading">
+      <div className="workspace-page-title">
+        <h1>{title}</h1>
+        {tools}
+      </div>
+      {actions && <div className="page-toolbar-actions">{actions}</div>}
+    </header>
+  );
 }

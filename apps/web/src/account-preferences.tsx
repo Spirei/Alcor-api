@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api, ApiError } from "./api";
 import type { Session } from "./api";
@@ -22,14 +15,11 @@ import type {
   PreferencePatch as Patch,
 } from "./preference-draft";
 export type { AvatarStatus } from "./preference-draft";
-const Context = createContext<{
-  ready: boolean;
-  status: AvatarStatus;
-  select: (value: AvatarStatus) => void;
-} | null>(null);
-export function useAccountStatus() {
-  return useContext(Context);
-}
+import { AccountPreferenceContext as Context } from "./account-preference-context";
+export {
+  useAccountStatus,
+  useAccountAppearance,
+} from "./account-preference-context";
 export function AccountPreferencesProvider({
   session,
   appearance,
@@ -360,7 +350,7 @@ export function AccountPreferencesProvider({
     enqueue({ avatar_status: value });
   }
   return (
-    <Context.Provider value={{ ready, status, select }}>
+    <Context.Provider value={{ ready, status, select, appearance }}>
       {children}
       {error && (
         <div className="account-preferences-error notice error" role="alert">

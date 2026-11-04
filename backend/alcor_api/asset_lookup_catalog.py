@@ -15,8 +15,9 @@ from .shared_attachment_media import open_original
 
 
 class AssetCatalog:
-    def __init__(self, db):
+    def __init__(self, db, legacy_directory=None):
         self.db = db
+        self.legacy_directory = legacy_directory
 
     @asynccontextmanager
     async def connection(self, connection=None):
@@ -398,7 +399,7 @@ class AssetCatalog:
         return {
             **card,
             "url": image["public_path"] + "?sha256=" + image["served_sha256"] if image else "",
-            "imageUrl": "/api/asset-image/" + image_key(card["id"]) + "?v=" + image["served_sha256"][:12]
+            "imageUrl": "/api/asset-image/" + image_key("card:" + card["url"]) + "?v=" + image["served_sha256"][:12]
             if image
             else "",
             "urlDark": "",
@@ -455,10 +456,43 @@ class AssetCatalog:
         metadata_key = ("source-metadata", row["id"])
         if metadata_key not in cache:
             cache[metadata_key] = await project_metadata(conn, self.db, row["id"])
-        return {**result, **cache[metadata_key], "materialState": states}
+        return await self.material_display(conn, {**result, **cache[metadata_key], "materialState": states}, cache, budget)
+
+    async def material_display(self, conn, asset, cache, budget):
+        """Preserve the established shared-underlying image rule without changing ETF identity."""
+        if asset.get('type') != 'stock' or asset.get('market') != 'US' or asset.get('iconTarget'):
+            return asset
+        from .asset_web_keys import RELATED
+        from .asset_lookup_contract import normalize
+        code = normalize('US', asset['code'])
+        root = RELATED.get(code)
+        if not root:
+            return asset
+        seen = {code}
+        while root in RELATED:
+            if root in seen:
+                return asset
+            seen.add(root); root = RELATED[root]
+        cache_key = ('underlying-art', root)
+        if cache_key not in cache:
+            rows = await (await conn.execute("SELECT * FROM asset_catalog_entries e WHERE type='stock' AND upper(market)='US' AND upper(code)=%s ORDER BY created_at,id LIMIT 1",(root,))).fetchall()
+            removed = {r['asset_id'] for r in await (await conn.execute('SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL')).fetchall()}
+            source = await self.project(conn, rows[0], cache, budget) if rows and rows[0]['id'] not in removed else None
+            if not rows and self.legacy_directory is not None:
+                original = next((r for r in await self.legacy_directory.matching('stock','US',[root]) if r['id'] not in removed),None)
+                source = await self.legacy_directory.project(original,budget) if original else None
+            cache[cache_key] = source
+        source = cache[cache_key]
+        result = {**asset, 'imageInheritance': {'market':'US','code':root}}
+        for key in ('url','urlDark','imageUrl','imageUrlDark'):
+            result[key] = source.get(key,'') if source else ''
+        if source:
+            result['iconTarget'] = {k:source[k] for k in ('id','type','market','code','name')}
+        return result
 
     async def lookup(self, keys):
         async with self.context() as conn:
+            removed = {r["asset_id"] for r in await (await conn.execute("SELECT asset_id FROM asset_catalog_tombstones WHERE restored_at IS NULL")).fetchall()}
             results = {}
             cache = {}
             budget = {"bytes": 0, "verified": set()}
@@ -485,7 +519,16 @@ class AssetCatalog:
                 if len(rows) > 200 or len(results) + len(rows) > 500:
                     raise HTTPException(503, "素材查询超过读取预算")
                 if not rows:
-                    missing.append(key)
+                    known = await (await conn.execute(
+                        "SELECT 1 FROM asset_catalog_entries WHERE type=%s AND " + clause + " LIMIT 1",
+                        (key["type"], *params),
+                    )).fetchone()
+                    candidates = await self.legacy_directory.matching(key["type"], key.get("market", ""), codes) if self.legacy_directory is not None and not known else []
+                    candidates = [r for r in candidates if r["id"] not in removed]
+                    for entry in candidates[:1]:
+                        results[entry["id"]] = await self.material_display(conn, await self.legacy_directory.project(entry, budget), cache, budget)
+                    if not candidates:
+                        missing.append(key)
                 for row in rows:
                     results[row["id"]] = await self.project(conn, row, cache, budget)
             return {

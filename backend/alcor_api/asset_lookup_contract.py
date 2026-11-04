@@ -157,7 +157,7 @@ def manifest(text, label):
             market, code = trim(item["market"]).upper(), trim(item["code"]).upper()
             if (
                 not re.fullmatch(r"[A-Z0-9_-]{0,16}", market)
-                or not re.fullmatch(
+                or not (item["type"] == "broker" and 1 <= len(code) <= 40 and not any(ord(c) < 32 for c in code)) and not re.fullmatch(
                     r"[A-Z0-9._-]{0,40}" if item["type"] in ("market", "group") else r"[A-Z0-9._-]{1,40}",
                     code,
                 )
