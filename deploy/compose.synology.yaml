@@ -50,7 +50,7 @@ services:
       - ALL
     # 与镜像内健康检查一致：API 数据库及 Worker 心跳。
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/container', timeout=5).read()"]
+      test: ["CMD", "python", "/app/deploy/healthcheck.py", "api"]
       interval: 30s
       timeout: 6s
       retries: 3

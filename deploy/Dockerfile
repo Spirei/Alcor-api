@@ -35,12 +35,13 @@ COPY contracts/releases.json contracts/releases.json
 COPY deploy/supervisord.conf deploy/supervisord.conf
 COPY deploy/entrypoint.py deploy/entrypoint.py
 COPY --from=web /source/apps/web/dist apps/web/dist
+COPY deploy/healthcheck.py /app/deploy/healthcheck.py
 ENV PATH="/app/.venv/bin:$PATH" ALCOR_ROOT=/app ALCOR_RUNTIME=/app/run ALCOR_PYTHON=/app/.venv/bin/python ALCOR_BIND_HOST=0.0.0.0 ALCOR_PORT=8080 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 ENV ALCOR_PG_TOOLS_DIR=/usr/lib/postgresql/${PG_MAJOR}/bin
 ENV ALCOR_RELEASE_VERSION=${APP_VERSION} ALCOR_SOURCE_REVISION=${SOURCE_REVISION}
 LABEL org.opencontainers.image.version=${APP_VERSION} org.opencontainers.image.revision=${SOURCE_REVISION} org.alcor.schema=${SCHEMA_HASH}
 USER 10001:10001
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=6s --start-period=45s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/container', timeout=5).read()"]
+HEALTHCHECK --interval=30s --timeout=6s --start-period=45s --retries=3 CMD ["python", "/app/deploy/healthcheck.py", "api"]
 ENTRYPOINT ["python", "/app/deploy/entrypoint.py"]
 CMD ["supervisord", "-c", "/app/deploy/supervisord.conf"]
