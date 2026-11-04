@@ -59,6 +59,10 @@ async def test_public_templates_are_one_read_only_pg_projection_and_untrusted_or
 async def test_admin_save_is_cas_idempotent_and_public_read_uses_exact_saved_template(client, admin, db):
     head = await client.get("/api/system/mail-templates")
     assert head.status_code == 200, head.text
+    assert head.json()["defaults"] == DEFAULTS
+    assert head.json()["variables"]["email_change"] == ["email", "minutes", "name", "siteName"]
+    assert "stockCode" in head.json()["variables"]["price_alert"]
+    assert "stockCode" not in head.json()["variables"]["email_change"]
     template = copy.deepcopy(DEFAULTS[1])
     template["subject"] = "{{siteName}} 合成模板"
     template["name"] = "Caller may not rename immutable template"
@@ -86,10 +90,17 @@ async def test_admin_save_is_cas_idempotent_and_public_read_uses_exact_saved_tem
     assert (await client.post("/api/system/mail-templates/operations", json=changed)).json() == stale.json()
     public = (await client.get("/api/auth/mail-templates")).json()["templates"]
     assert public[1]["subject"] == "{{siteName}} 合成模板"
+    # Reading editor presets does not reset saved configuration or emit mail.
+    refreshed = (await client.get("/api/system/mail-templates")).json()
+    assert refreshed["revision"] == 1
+    assert refreshed["templates"][1]["subject"] == "{{siteName}} 合成模板"
+    assert refreshed["defaults"] == DEFAULTS
+    assert refreshed["defaults"][1]["subject"] != refreshed["templates"][1]["subject"]
     async with db.connection() as conn:
         assert (await (await conn.execute("SELECT count(*) n FROM mail_template_operations")).fetchone())[
             "n"
         ] == 2
+        assert (await (await conn.execute("SELECT count(*) n FROM identity_mail_outbox")).fetchone())["n"] == 0
         assert (
             await (
                 await conn.execute("SELECT count(*) n FROM audit_events WHERE action='mail.template.saved'")

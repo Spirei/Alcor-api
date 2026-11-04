@@ -1,12 +1,14 @@
 """Root API and native thin adapters over the same mail template authority."""
 
 import re
+from copy import deepcopy
 from uuid import UUID
 
 from fastapi import HTTPException, Request, Response
 
 from .legacy_identity import LegacyError, assert_native_origin, envelope
 from .mail_templates import MailTemplates
+from .mail_template_model import COMMON, DEFAULTS, PRICE
 from .native_app_auth import authenticate
 from .profile_http import bounded_body
 from .security import identity
@@ -62,7 +64,17 @@ def mount_mail_templates(app, db):
     @app.get("/api/system/mail-templates", tags=["admin"])
     async def read(request: Request, response: Response):
         response.headers["Cache-Control"] = "private, no-store"
-        return await service.read(await admin(request))
+        value = await service.read(await admin(request))
+        # Editor metadata comes from the same model as validation and rendering.
+        # Reading presets never replaces the administrator's saved templates.
+        return {
+            **value,
+            "defaults": deepcopy(DEFAULTS),
+            "variables": {
+                item["id"]: sorted(COMMON | (PRICE if item["id"] == "price_alert" else set()))
+                for item in DEFAULTS
+            },
+        }
 
     @app.post("/api/system/mail-templates/operations", tags=["admin"])
     async def save(request: Request, response: Response):
