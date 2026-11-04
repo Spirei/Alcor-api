@@ -15,7 +15,7 @@ from .models import InputModel
 from .profile_http import bounded_body
 from .resource_api import no_duplicate_object
 from .security import Identity, administrator
-from .site_settings import SiteSettings
+from .site_settings import ASSETS, SiteSettings
 
 Admin = Annotated[Identity, Depends(administrator)]
 V1_KEYS = (
@@ -138,9 +138,17 @@ def mount_site_settings(app, settings, db):
     async def assets(who: Admin):
         async with db.connection() as conn, conn.transaction():
             await service.authorize(conn, who)
+            current = await (await conn.execute("SELECT settings FROM site_settings WHERE singleton")).fetchone()
+            if not current:
+                raise HTTPException(503, "站点配置缺失")
+            try:
+                selected = [UUID(current["settings"][key]) for key in ASSETS if current["settings"].get(key)]
+            except (ValueError, TypeError, AttributeError):
+                raise HTTPException(503, "站点图片登记版本无效") from None
             rows = await (
                 await conn.execute(
-                    "SELECT id,kind,public_path,served_sha256 FROM system_asset_versions WHERE kind IN ('ico','background','login','logo') ORDER BY created_at DESC,id LIMIT 200"
+                    "SELECT id,kind,public_path,served_sha256 FROM system_asset_versions WHERE kind IN ('ico','background','login','logo') ORDER BY (id=ANY(%s::uuid[])) DESC,created_at DESC,id LIMIT 200",
+                    (selected,),
                 )
             ).fetchall()
             return {"items": rows, "limit": 200}

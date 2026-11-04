@@ -6,7 +6,23 @@ import { apiSessionSnapshot } from "./api-session";
 import { PasswordField } from "./password-fields";
 import { requestId } from "./request-id";
 import { SelectMenu } from "./select-menu";
-import { PrivateServiceSettings } from "./private-service-settings";
+import {
+  FormActions,
+  SettingGroup,
+  SettingRow,
+  SettingsSurface,
+  ToggleSwitch,
+} from "./workspace-forms";
+import { RefreshCw, Layers } from "lucide-react";
+import { SiteArtworkPicker } from "./site-artwork-picker";
+import {
+  siteArtworkFields,
+  siteArtworkUrl,
+  type SiteArtwork,
+} from "./site-artwork-state";
+import { useSiteArtworkUpload } from "./site-artwork-upload";
+import { HomeNavigationSettings } from "./home-navigation-settings";
+import "./site-settings.css";
 import { SiteServiceStatus } from "./site-service-status";
 
 type Config = {
@@ -38,20 +54,7 @@ type Receipt = {
   settings?: Config;
   executed?: boolean;
 };
-type Asset = {
-  id: string;
-  kind: string;
-  public_path: string;
-  served_sha256: string;
-};
 const root = "/admin/site-settings";
-const assetFields = [
-  ["ico", "图标", "ico"],
-  ["pwaIcon", "桌面图标", "ico"],
-  ["siteLogo", "标志", "logo"],
-  ["homepageBg", "首页背景", "background"],
-  ["loginSideImage", "登录配图", "login"],
-] as const;
 export function SiteSettings({
   session,
   active = true,
@@ -90,7 +93,7 @@ function SiteSettingsContent({
   const [opened, setOpened] = useState(expanded),
     [head, setHead] = useState<Head | null>(null),
     [draft, setDraft] = useState<Config | null>(null);
-  const [assets, setAssets] = useState<Asset[]>([]),
+  const [assets, setAssets] = useState<SiteArtwork[]>([]),
     [password, setPassword] = useState(""),
     [code, setCode] = useState("");
   const [nav, setNav] = useState("[]"),
@@ -328,258 +331,398 @@ function SiteSettingsContent({
       if (current(epoch)) setBusy(false);
     }
   }
-  async function loadAssets() {
-    if (!live.current || busy) return;
-    const epoch = generation.current;
-    setBusy(true);
-    setMessage("");
-    try {
-      const value = await api<{ items: Asset[] }>(root + "/assets");
-      if (current(epoch)) setAssets(value.items);
-    } catch (error) {
-      if (current(epoch)) fail(error);
-    } finally {
-      if (current(epoch)) setBusy(false);
-    }
-  }
-  const blocked = busy || locked || !active || !visible || !!pending;
+  const [assetError, setAssetError] = useState("");
+  const [assetRefresh, setAssetRefresh] = useState(0);
+  useEffect(() => {
+    if (!head || !opened || !active || !visible || locked || !displayed())
+      return;
+    const epoch = generation.current,
+      abort = new AbortController();
+    void api<{ items: SiteArtwork[] }>(root + "/assets", {
+      signal: abort.signal,
+    })
+      .then((value) => {
+        if (!abort.signal.aborted && current(epoch)) {
+          setAssets(value.items);
+          setAssetError("");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!abort.signal.aborted && current(epoch)) {
+          setAssetError(
+            error instanceof Error ? error.message : "图片读取失败",
+          );
+          if (error instanceof ApiError && [401, 403].includes(error.status))
+            fail(error);
+        }
+      });
+    return () => abort.abort();
+  }, [head, opened, active, visible, locked, assetRefresh]);
+  const artwork = useSiteArtworkUpload({
+    session,
+    active: opened && active && visible && !locked && !pending,
+    onFailure: fail,
+    onUploaded: (field, result) => {
+      if (
+        !draft ||
+        !result.version ||
+        !result.kind ||
+        !result.legacyUrl ||
+        !result.sha256
+      )
+        return;
+      const item = {
+        id: result.version,
+        kind: result.kind,
+        public_path: result.legacyUrl,
+        served_sha256: result.sha256,
+      };
+      setAssets((items) => [
+        item,
+        ...items.filter((asset) => asset.id !== item.id),
+      ]);
+      updateDraft({ ...draft, [field]: result.version });
+      setMessage("图片已加入草稿，保存站点设置后生效");
+    },
+  });
+  const blocked =
+    busy ||
+    locked ||
+    !active ||
+    !visible ||
+    !!pending ||
+    artwork.busy ||
+    !!artwork.pending;
+  const image = (field: "siteLogo" | "ico" | "homepageBg") =>
+    siteArtworkUrl(assets.find((item) => item.id === draft?.[field]));
+  const background = image("homepageBg"),
+    logo = image("siteLogo") || image("ico");
   return (
-    <details
+    <SettingsSurface
+      title="站点设置"
+      expanded={expanded}
       open={opened}
-      onToggle={(event) => setOpened(event.currentTarget.open)}
+      onOpenChange={setOpened}
     >
-      <summary>站点设置</summary>
       {message && <p role="status">{message}</p>}
       {pending && (
-        <div>
-          <span>原请求待核对</span>
-          <button
-            className="button"
-            type="button"
-            disabled={busy || locked}
-            onClick={() => void resolve()}
-          >
-            查询结果
-          </button>
-          <button
-            className="button"
-            type="button"
-            disabled={busy || locked}
-            onClick={() => void resolve(true)}
-          >
-            关闭未受理请求
-          </button>
+        <div className="site-pending-action" role="status">
+          原请求待核对
+          <FormActions>
+            <button
+              className="button"
+              type="button"
+              disabled={busy || locked}
+              onClick={() => void resolve()}
+            >
+              查询结果
+            </button>
+            <button
+              className="button"
+              type="button"
+              disabled={busy || locked}
+              onClick={() => void resolve(true)}
+            >
+              关闭未受理请求
+            </button>
+          </FormActions>
         </div>
       )}
-      {draft && (
+      {artwork.error && <p role="alert">{artwork.error}</p>}
+      {artwork.pending && (
+        <div className="site-pending-action" role="status">
+          {artwork.busy ? "正在处理图片…" : "原图片操作结果待核对"}
+          <FormActions>
+            <button
+              className="button"
+              type="button"
+              disabled={artwork.busy || locked}
+              onClick={() => void artwork.query()}
+            >
+              核对图片结果
+            </button>
+          </FormActions>
+        </div>
+      )}
+      {draft ? (
         <form
-          className="access-form"
+          className="site-settings-form"
           onSubmit={(event) => {
             event.preventDefault();
             void save();
           }}
         >
-          {(
-            [
-              ["title", "站点名称"],
-              ["logoText", "标志文字"],
-              ["domain", "公开域名"],
-              ["footerDesc", "页脚文字"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key}>
-              {label}
+          <SettingGroup title="站点信息">
+            <SettingRow title="站点名称">
               <input
-                value={draft[key]}
+                aria-label="站点名称"
+                value={draft.title}
+                maxLength={120}
                 disabled={blocked}
                 onChange={(event) =>
-                  updateDraft({ ...draft, [key]: event.target.value })
+                  updateDraft({ ...draft, title: event.target.value })
                 }
               />
-            </label>
-          ))}
-          <label>
-            标志字体
-            <SelectMenu
-              label="标志字体"
-              variant="field"
-              value={draft.logoFont}
-              disabled={blocked}
-              options={[
-                { value: "system", label: "系统" },
-                { value: "diatype", label: "Diatype" },
-                { value: "diatype-regular", label: "Diatype Regular" },
-              ]}
-              onChange={(value) => updateDraft({ ...draft, logoFont: value })}
-            />
-          </label>
-          <button
-            className="button"
-            type="button"
-            disabled={blocked}
-            onClick={() => void loadAssets()}
-          >
-            选择已上传素材
-          </button>
-          {assetFields.map(([field, label, kind]) => (
-            <label key={field}>
-              {label}
-              <SelectMenu
-                label={label}
-                variant="field"
+            </SettingRow>
+            <SettingRow title="公开域名">
+              <input
+                aria-label="公开域名"
+                value={draft.domain}
+                maxLength={120}
                 disabled={blocked}
-                value={draft[field] || ""}
-                options={[
-                  { value: "", label: "无" },
-                  ...assets
-                    .filter((asset) => asset.kind === kind)
-                    .map((asset) => ({
-                      value: asset.id,
-                      label: asset.public_path.split("/").pop() || "素材",
-                    })),
-                  ...(draft[field] &&
-                  !assets.some((asset) => asset.id === draft[field])
-                    ? [{ value: draft[field]!, label: "当前素材" }]
-                    : []),
-                ]}
-                onChange={(value) =>
-                  updateDraft({ ...draft, [field]: value || null })
+                onChange={(event) =>
+                  updateDraft({ ...draft, domain: event.target.value })
                 }
               />
-            </label>
-          ))}
-          <label>
-            <button
-              type="button"
-              role="switch"
-              className="appearance-switch"
-              aria-label="开放注册"
-              aria-checked={draft.allowRegister}
-              disabled={blocked}
-              onClick={() =>
-                updateDraft({ ...draft, allowRegister: !draft.allowRegister })
-              }
+            </SettingRow>
+            <SettingRow
+              title="开放注册"
+              description="关闭后仅管理员可以创建账号"
             >
-              <span className="appearance-switch-track" aria-hidden="true">
-                <span />
-              </span>
-            </button>
-            开放注册
-          </label>
-          <label>
-            <button
-              type="button"
-              role="switch"
-              className="appearance-switch"
-              aria-label="显示市场色块"
-              aria-checked={draft.marketBadgesVisible}
-              disabled={blocked}
-              onClick={() =>
-                updateDraft({
-                  ...draft,
-                  marketBadgesVisible: !draft.marketBadgesVisible,
-                })
-              }
-            >
-              <span className="appearance-switch-track" aria-hidden="true">
-                <span />
-              </span>
-            </button>
-            显示市场色块
-          </label>
-          <details>
-            <summary>高级</summary>
-            <label>
-              首页导航
-              <textarea
-                value={nav}
+              <ToggleSwitch
+                label="开放注册"
+                checked={draft.allowRegister}
                 disabled={blocked}
-                onChange={(event) => {
-                  setNav(event.target.value);
-                  dirty.current = true;
-                  setMessage("");
-                }}
+                onChange={(allowRegister) =>
+                  updateDraft({ ...draft, allowRegister })
+                }
               />
-            </label>
-            <label>
-              市场色块
-              <textarea
-                value={badges}
+            </SettingRow>
+            <SettingRow title="页脚简介">
+              <input
+                aria-label="页脚简介"
+                value={draft.footerDesc}
+                maxLength={500}
                 disabled={blocked}
-                onChange={(event) => {
-                  setBadges(event.target.value);
-                  dirty.current = true;
-                  setMessage("");
-                }}
+                onChange={(event) =>
+                  updateDraft({ ...draft, footerDesc: event.target.value })
+                }
               />
-            </label>
-          </details>
-          <MarketBadgeSettings
-            value={badges}
+            </SettingRow>
+          </SettingGroup>
+          <section className="site-settings-section" aria-label="网站形象">
+            <div className="site-settings-heading">
+              <h3>网站形象</h3>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="重新读取站点图片"
+                disabled={blocked}
+                onClick={() => setAssetRefresh((value) => value + 1)}
+              >
+                <RefreshCw size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="site-brand-preview" aria-label="站点形象预览">
+              <div className="site-brand-browser">
+                <i />
+                <i />
+                <i />
+                <span>{draft.title || "Alcor"}</span>
+              </div>
+              <div
+                className={
+                  "site-brand-content" + (background ? " has-background" : "")
+                }
+                style={
+                  background
+                    ? {
+                        backgroundImage: `linear-gradient(135deg,#101820bb,#10182055),url("${background}")`,
+                      }
+                    : undefined
+                }
+              >
+                {logo ? (
+                  <img src={logo} alt="" />
+                ) : (
+                  <Layers size={36} aria-hidden="true" />
+                )}
+                <strong>{draft.logoText || draft.title || "Alcor"}</strong>
+              </div>
+            </div>
+            <SettingGroup>
+              <SettingRow title="标志文字">
+                <input
+                  aria-label="标志文字"
+                  value={draft.logoText}
+                  maxLength={120}
+                  disabled={blocked}
+                  onChange={(event) =>
+                    updateDraft({ ...draft, logoText: event.target.value })
+                  }
+                />
+              </SettingRow>
+              <SettingRow title="标志字体">
+                <SelectMenu
+                  label="标志字体"
+                  variant="field"
+                  value={draft.logoFont}
+                  disabled={blocked}
+                  options={[
+                    { value: "system", label: "系统" },
+                    { value: "diatype", label: "Diatype" },
+                    { value: "diatype-regular", label: "Diatype Regular" },
+                  ]}
+                  onChange={(logoFont) => updateDraft({ ...draft, logoFont })}
+                />
+              </SettingRow>
+            </SettingGroup>
+            {assetError && <p role="alert">{assetError}</p>}
+            <div className="site-artwork-list">
+              {siteArtworkFields.map((item) => (
+                <SiteArtworkPicker
+                  key={item.field}
+                  {...item}
+                  value={draft[item.field]}
+                  assets={assets}
+                  disabled={blocked || !artwork.ready}
+                  onChange={(value) =>
+                    updateDraft({ ...draft, [item.field]: value })
+                  }
+                  onUpload={(file) => void artwork.upload(item.field, file)}
+                />
+              ))}
+            </div>
+            <p className="site-empty-note">
+              点击图片更换，保存站点设置后生效；原图片会保留。
+            </p>
+          </section>
+          <HomeNavigationSettings
+            value={nav}
             disabled={blocked}
             onChange={(value) => {
-              setBadges(value);
+              setNav(value);
               dirty.current = true;
               setMessage("");
             }}
           />
           <SiteNavigationSettings
+            expanded
             value={draft.mobileNavigationOrder ?? []}
             disabled={blocked}
-            onChange={(value) => {
-              setDraft({ ...draft, mobileNavigationOrder: value });
-              dirty.current = true;
-              setMessage("");
-            }}
+            onChange={(value) =>
+              updateDraft({ ...draft, mobileNavigationOrder: value })
+            }
           />
-          <label>
-            当前密码
-            <PasswordField
-              id="site-settings-password"
-              value={password}
+          <section className="site-settings-section" aria-label="市场色块">
+            <SettingGroup title="市场色块">
+              <SettingRow title="显示市场色块">
+                <ToggleSwitch
+                  label="显示市场色块"
+                  checked={draft.marketBadgesVisible}
+                  disabled={blocked}
+                  onChange={(marketBadgesVisible) =>
+                    updateDraft({ ...draft, marketBadgesVisible })
+                  }
+                />
+              </SettingRow>
+            </SettingGroup>
+            <MarketBadgeSettings
+              expanded
+              value={badges}
               disabled={blocked}
-              autoComplete="current-password"
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(value) => {
+                setBadges(value);
+                dirty.current = true;
+                setMessage("");
+              }}
             />
-          </label>
-          <label>
-            验证码或备用码
-            <input
-              value={code}
-              disabled={blocked}
-              autoComplete="one-time-code"
-              onChange={(event) => setCode(event.target.value)}
-            />
-          </label>
-          <button
-            className="button primary"
-            type="submit"
-            disabled={blocked || stale || !password}
-          >
-            保存
-          </button>
-          <button
-            className="button"
-            type="button"
-            disabled={busy || locked || !!pending}
-            onClick={() => void read()}
-          >
-            重新读取
-          </button>
+          </section>
+          <details className="site-settings-advanced">
+            <summary>高级资料</summary>
+            <div className="workspace-form-grid">
+              <label className="workspace-form-field">
+                <span>首页导航原配置</span>
+                <textarea
+                  value={nav}
+                  disabled={blocked}
+                  onChange={(event) => {
+                    setNav(event.target.value);
+                    dirty.current = true;
+                    setMessage("");
+                  }}
+                />
+              </label>
+              <label className="workspace-form-field">
+                <span>市场色块原配置</span>
+                <textarea
+                  value={badges}
+                  disabled={blocked}
+                  onChange={(event) => {
+                    setBadges(event.target.value);
+                    dirty.current = true;
+                    setMessage("");
+                  }}
+                />
+              </label>
+            </div>
+            {!locked && (
+              <SiteServiceStatus
+                session={session}
+                active={active && opened && visible}
+              />
+            )}
+          </details>
+          <section className="site-settings-security" aria-label="确认站点设置">
+            <p>站点设置会影响所有访客，保存时验证当前管理员身份。</p>
+            <div className="workspace-form-grid">
+              <label className="workspace-form-field">
+                <span>当前密码</span>
+                <PasswordField
+                  id="site-settings-password"
+                  value={password}
+                  disabled={blocked}
+                  autoComplete="current-password"
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+              <label className="workspace-form-field">
+                <span>验证码或备用码</span>
+                <input
+                  value={code}
+                  disabled={blocked}
+                  autoComplete="one-time-code"
+                  onChange={(event) => setCode(event.target.value)}
+                />
+              </label>
+            </div>
+            <FormActions>
+              <button
+                className="button"
+                type="button"
+                disabled={blocked || dirty.current}
+                onClick={() => void read()}
+              >
+                重新读取
+              </button>
+              {dirty.current && (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={blocked || !head}
+                  onClick={() => {
+                    if (head) accept(head);
+                    setPassword("");
+                    setCode("");
+                    setMessage("");
+                  }}
+                >
+                  放弃修改
+                </button>
+              )}
+              <button
+                className="button primary"
+                type="submit"
+                disabled={blocked || stale || !password || !dirty.current}
+              >
+                保存站点设置
+              </button>
+            </FormActions>
+          </section>
         </form>
+      ) : (
+        !locked && !message && <p role="status">正在读取站点设置…</p>
       )}
-      {!locked && (
-        <PrivateServiceSettings
-          session={session}
-          active={active && opened && visible}
-        />
-      )}
-      {!locked && (
-        <SiteServiceStatus
-          session={session}
-          active={active && opened && visible}
-        />
-      )}
-    </details>
+    </SettingsSurface>
   );
 }

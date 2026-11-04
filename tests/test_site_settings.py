@@ -254,7 +254,7 @@ async def test_registration_race_with_close_has_one_transactional_policy_order(c
 
 
 async def test_registered_asset_version_pins_bytes_and_rejects_wrong_kind(
-    client, admin, settings, tmp_path, app
+    client, admin, settings, tmp_path, app, db
 ):
     from test_system_assets import PNG, upload
 
@@ -268,6 +268,21 @@ async def test_registered_asset_version_pins_bytes_and_rejects_wrong_kind(
     assert "sha256=" in public and (await client.get(public)).content == PNG
     second, _ = await upload(client, "logo", PNG + b"OTHER", "brand.png")
     assert second.status_code == 200, second.text
+    assert (await client.get("/api/settings/public")).json()["settings"]["siteLogo"] == public
+    assert (await client.get(public)).content == PNG
+    # A bounded picker must retain the selected immutable original even when
+    # more than its normal page of newer artwork has been registered.
+    async with db.connection() as conn:
+        await conn.execute(
+            "INSERT INTO system_asset_versions(id,public_path,kind,folder,market,original_sha256,served_sha256,original_size,served_size,media_type,created_by) "
+            "SELECT gen_random_uuid(),public_path,kind,folder,market,original_sha256,served_sha256,original_size,served_size,media_type,created_by "
+            "FROM system_asset_versions CROSS JOIN generate_series(1,201) WHERE id=%s",
+            (version,),
+        )
+    picker = await client.get(P + "/assets")
+    assert picker.status_code == 200, picker.text
+    assert len(picker.json()["items"]) == 200
+    assert version in {item["id"] for item in picker.json()["items"]}
     assert (await client.get("/api/settings/public")).json()["settings"]["siteLogo"] == public
     assert (await client.get(public)).content == PNG
     wrong = await save(client, revision=1, patch={"ico": version})
