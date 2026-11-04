@@ -38,6 +38,29 @@ def test_deployment_artifacts_are_explicit_and_match_release():
     assert not result["docker_executed"] and not result["production_accessed"]
 
 
+def test_deployment_preflight_rejects_stale_api_contract(monkeypatch):
+    import json
+    from pathlib import Path
+
+    read_text = Path.read_text
+    contract = ROOT / "contracts/platform.openapi.json"
+
+    def stale_contract(path, *args, **kwargs):
+        content = read_text(path, *args, **kwargs)
+        if path == contract:
+            value = json.loads(content)
+            value["info"]["version"] = "0.0.0"
+            return json.dumps(value)
+        return content
+
+    monkeypatch.setattr(Path, "read_text", stale_contract)
+    check = module("deployment_check_stale_contract", ROOT / "tools/validate-deployment.py")
+    result = check.validate(ROOT)
+    assert not result["passed"]
+    assert any("OpenAPI version" in issue for issue in result["issues"])
+    assert not result["docker_executed"] and not result["production_accessed"]
+
+
 def test_private_storage_preflight_never_opens_a_database(tmp_path, monkeypatch):
     import psycopg
 

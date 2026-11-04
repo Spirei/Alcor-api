@@ -29,6 +29,10 @@ def validate(root):
         check(
             json.loads((root / path).read_text())["version"] == release, "package version mismatch: " + path
         )
+    check(
+        json.loads((root / "contracts/platform.openapi.json").read_text())["info"]["version"] == release,
+        "OpenAPI version does not match release; regenerate the API contract",
+    )
     backend_version = (root / "backend/alcor_api/__init__.py").read_text()
     check(
         (
