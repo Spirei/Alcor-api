@@ -79,6 +79,12 @@ function SharedAssetSession({
     [code, setCode] = useState(""),
     [name, setName] = useState("");
   const [catalogOpened, setCatalogOpened] = useState(false);
+  const [catalogRefresh, setCatalogRefresh] = useState(0);
+  const catalogChanged = useCallback(
+    () => setCatalogRefresh((value) => value + 1),
+    [],
+  );
+  const lastCatalogReceipt = useRef<string | null>(null);
   const [file, setFile] = useState<File | null>(null),
     [busy, setBusy] = useState(false),
     [pending, setPending] = useState<string | null>(null),
@@ -231,6 +237,14 @@ function SharedAssetSession({
     }
     setNotice("");
     setReceipt(value);
+    if (
+      value.state === "completed" &&
+      value.version &&
+      lastCatalogReceipt.current !== value.version
+    ) {
+      lastCatalogReceipt.current = value.version;
+      catalogChanged();
+    }
     setLookup(id);
     setImageError(false);
     setError("");
@@ -441,7 +455,10 @@ function SharedAssetSession({
         <button
           className="button"
           disabled={busy || locked}
-          onClick={() => void load()}
+          onClick={() => {
+            void load();
+            catalogChanged();
+          }}
         >
           重新读取
         </button>
@@ -449,6 +466,7 @@ function SharedAssetSession({
       <AssetLibraryBrowser
         session={session}
         active={active && visible && !locked}
+        revision={catalogRefresh}
       />
       <details className="asset-library-management">
         <summary>上传素材</summary>
@@ -692,6 +710,7 @@ function SharedAssetSession({
         <AssetLookupCatalogPanel
           session={session}
           active={active && visible && !locked && catalogOpened}
+          onChanged={catalogChanged}
         />
       </details>
     </section>

@@ -69,6 +69,36 @@ export type Deployment = {
   runner: { online: boolean; observed_at: string } | null;
   receipts: Receipt[];
 };
+export function deploymentPollDelay(
+  data: Pick<
+    Deployment,
+    "build" | "source" | "check" | "release" | "build_requests" | "receipts"
+  > | null,
+  refreshing: boolean,
+  failed: boolean,
+  watchingUpdate: boolean,
+  now = Date.now(),
+): number | null {
+  // Authorization errors withdraw the snapshot. A stale snapshot is retained only for recoverable reads.
+  if (!data || refreshing) return null;
+  const last = data.build_requests[0];
+  const age = last ? now - Date.parse(last.created_at) : Infinity;
+  const unpublished =
+    !data.source || data.source.sha !== data.release?.revision;
+  const recent =
+    unpublished &&
+    last &&
+    ["dispatching", "submitted", "unknown"].includes(last.status) &&
+    age >= -60000 &&
+    age < 15 * 60000;
+  const active =
+    watchingUpdate ||
+    data.receipts.some((r) => ["queued", "running"].includes(r.status)) ||
+    (data.build && data.build.status !== "completed") ||
+    (data.check && data.check.status !== "completed") ||
+    recent;
+  return active ? (failed ? 15000 : 5000) : null;
+}
 export function buildReceiptMessage(result: {
   status: string;
   message?: string;

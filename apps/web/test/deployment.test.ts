@@ -7,7 +7,69 @@ import {
   formatTime,
   buildReceiptMessage,
   verificationOnly,
+  deploymentPollDelay,
 } from "../src/deployment-view.ts";
+test("deployment polling retries transient reads but never a withdrawn identity or completed idle state", () => {
+  const now = Date.parse("2026-11-04T00:00:00Z");
+  const idle = {
+    source: { sha: "a", url: "#" },
+    release: null,
+    check: null,
+    build: null,
+    receipts: [],
+    build_requests: [],
+  };
+  assert.equal(deploymentPollDelay(idle, false, false, false, now), null);
+  const active = {
+    ...idle,
+    build_requests: [
+      {
+        request_id: "synthetic",
+        status: "unknown",
+        created_at: new Date(now).toISOString(),
+      },
+    ],
+  };
+  assert.equal(deploymentPollDelay(active, false, false, false, now), 5000);
+  assert.equal(deploymentPollDelay(active, false, true, false, now), 15000);
+  assert.equal(deploymentPollDelay(active, true, true, false, now), null);
+  assert.equal(deploymentPollDelay(null, false, true, true, now), null);
+  assert.equal(
+    deploymentPollDelay(active, false, false, false, now + 16 * 60000),
+    null,
+  );
+  assert.equal(
+    deploymentPollDelay(
+      {
+        ...active,
+        build_requests: [{ ...active.build_requests[0], created_at: "bad" }],
+      },
+      false,
+      false,
+      false,
+      now,
+    ),
+    null,
+  );
+  assert.equal(
+    deploymentPollDelay(
+      {
+        ...active,
+        release: {
+          version: "1",
+          revision: "a",
+          image: "synthetic",
+          schema_hash: "synthetic",
+        },
+      },
+      false,
+      false,
+      false,
+      now,
+    ),
+    null,
+  );
+});
 test("explicit build failure stays distinct from lost dispatch and verification-only jobs", () => {
   assert.match(buildReceiptMessage({ status: "failed" }), /未接受/);
   assert.match(buildReceiptMessage({ status: "unknown" }), /同一回执/);

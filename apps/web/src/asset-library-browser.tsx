@@ -6,9 +6,11 @@ import {
   RefreshCw,
   ImageOff,
   ChevronRight,
+  X,
 } from "lucide-react";
 import { api, type Session } from "./api";
 import { Dialog } from "./dialog";
+import { assetPageKey, assetPageNumbers } from "./asset-library-state";
 import "./asset-library-browser.css";
 
 const categories = [
@@ -83,9 +85,11 @@ function Thumbnail({ url, name }: { url?: string; name: string }) {
 export function AssetLibraryBrowser({
   session,
   active = true,
+  revision = 0,
 }: {
   session: Session;
   active?: boolean;
+  revision?: number;
 }) {
   // Parent is keyed by the full session. This cache is bounded and never shared across accounts.
   const cache = useRef(new Map<string, Listing>());
@@ -97,7 +101,10 @@ export function AssetLibraryBrowser({
     [page, setPage] = useState(1);
   const [view, setView] = useState<"grid" | "list">("list"),
     [dark, setDark] = useState(false);
-  const [listing, setListing] = useState<Listing | null>(null),
+  const [listing, setListing] = useState<{
+      key: string;
+      value: Listing;
+    } | null>(null),
     [busy, setBusy] = useState(false);
   const [error, setError] = useState(""),
     [refresh, setRefresh] = useState(0),
@@ -105,26 +112,38 @@ export function AssetLibraryBrowser({
   const [visible, setVisible] = useState(
     typeof document === "undefined" || !document.hidden,
   );
-  const [selected, setSelected] = useState<Asset | null>(null);
+  const [selection, setSelection] = useState<{
+    key: string;
+    asset: Asset;
+  } | null>(null);
+  const [pageDraft, setPageDraft] = useState("");
+  const searchInput = useRef<HTMLInputElement>(null);
+  const key = assetPageKey(type, market, query, page);
+  const selected = selection?.key === key ? selection.asset : null;
+  const queryPending = search.trim() !== query;
   useEffect(() => {
+    if (search.trim() === query) return;
     const timer = setTimeout(() => {
       setQuery(search.trim());
       setPage(1);
     }, 250);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, query]);
+  useEffect(() => {
+    cache.current.clear();
+  }, [revision]);
   useEffect(() => {
     const visibility = () => {
       if (document.hidden) ++generation.current;
       setVisible(!document.hidden);
-      if (document.hidden) setSelected(null);
+      if (document.hidden) setSelection(null);
     };
     const retire = () => {
       ++generation.current;
       cache.current.clear();
       setRetired(true);
       setListing(null);
-      setSelected(null);
+      setSelection(null);
     };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("alcor:session-changed", retire);
@@ -136,7 +155,7 @@ export function AssetLibraryBrowser({
     };
   }, []);
   useEffect(() => {
-    setSelected(null);
+    setSelection(null);
     if (!active || !visible || retired) {
       setListing(null);
       setBusy(false);
@@ -144,16 +163,6 @@ export function AssetLibraryBrowser({
     }
     const controller = new AbortController();
     const reading = ++generation.current;
-    const params = new URLSearchParams({
-      type,
-      paged: "1",
-      page: String(page),
-      pageSize: String(pageSize),
-      q: query,
-    });
-    if (market && type === "stock") params.set("market", market);
-    const key = params.toString();
-    setListing(cache.current.get(key) ?? null);
     setBusy(true);
     setError("");
     void api<Listing>("/assets?" + key, { signal: controller.signal })
@@ -184,12 +193,11 @@ export function AssetLibraryBrowser({
         cache.current.set(key, value);
         if (cache.current.size > 8)
           cache.current.delete(cache.current.keys().next().value!);
-        setListing(value);
+        setListing({ key, value });
         if (value.page !== page) setPage(value.page);
       })
       .catch((reason) => {
         if (!controller.signal.aborted && reading === generation.current) {
-          setListing(null);
           setError(reason instanceof Error ? reason.message : "素材读取失败");
         }
       })
@@ -198,19 +206,25 @@ export function AssetLibraryBrowser({
           setBusy(false);
       });
     return () => controller.abort();
-  }, [
-    active,
-    visible,
-    retired,
-    type,
-    market,
-    query,
-    page,
-    refresh,
-    session.csrf,
-  ]);
-  const shown = active && visible && !retired ? listing : null;
+  }, [active, visible, retired, key, refresh, revision, session.csrf]);
+  const shown =
+    active && visible && !retired
+      ? listing?.key === key
+        ? listing.value
+        : (cache.current.get(key) ?? null)
+      : null;
+  const loading = busy || queryPending;
   const pages = shown ? Math.max(1, Math.ceil(shown.total / pageSize)) : page;
+  const targetPage = Number(pageDraft);
+  const validTarget =
+    Number.isSafeInteger(targetPage) && targetPage >= 1 && targetPage <= pages;
+  function clearSearch() {
+    setSearch("");
+    setQuery("");
+    setPage(1);
+    setPageDraft("");
+    searchInput.current?.focus();
+  }
   return (
     <section className="asset-library" aria-label="素材浏览">
       <nav className="asset-library-tabs" aria-label="素材分类">
@@ -220,9 +234,13 @@ export function AssetLibraryBrowser({
             type="button"
             aria-pressed={type === key}
             onClick={() => {
+              if (key === type) return;
               setType(key);
               setMarket("");
+              setSearch("");
+              setQuery("");
               setPage(1);
+              setPageDraft("");
             }}
           >
             {label}
@@ -254,12 +272,23 @@ export function AssetLibraryBrowser({
         <label className="asset-library-search">
           <Search size={18} />
           <input
+            ref={searchInput}
             aria-label="搜索素材"
             placeholder="搜索名称或代码"
             value={search}
             maxLength={120}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              className="asset-library-clear"
+              aria-label="清空素材搜索"
+              onClick={clearSearch}
+            >
+              <X size={15} />
+            </button>
+          )}
         </label>
         {type === "stock" && (
           <select
@@ -324,8 +353,11 @@ export function AssetLibraryBrowser({
           <button
             className="icon-button"
             aria-label="刷新素材"
-            disabled={busy || retired}
-            onClick={() => setRefresh((v) => v + 1)}
+            disabled={loading || retired}
+            onClick={() => {
+              cache.current.clear();
+              setRefresh((v) => v + 1);
+            }}
           >
             <RefreshCw size={18} />
           </button>
@@ -337,8 +369,8 @@ export function AssetLibraryBrowser({
         ) : error ? (
           <span role="alert">{error}</span>
         ) : shown ? (
-          `${shown.total} 项素材${busy ? " · 更新中…" : ""}`
-        ) : busy ? (
+          `${shown.total} 项素材${loading ? " · 更新中…" : ""}`
+        ) : loading ? (
           "正在读取素材…"
         ) : (
           ""
@@ -353,14 +385,14 @@ export function AssetLibraryBrowser({
       )}
       <div
         className={`asset-library-items ${view} ${type === "card" ? "cards" : ""} ${dark ? "dark-preview" : ""}`}
-        aria-busy={busy}
+        aria-busy={loading}
       >
         {shown?.assets.map((asset, index) => (
           <button
             type="button"
             className="asset-library-item"
             key={asset.id}
-            onClick={() => setSelected(asset)}
+            onClick={() => setSelection({ key, asset })}
           >
             <span className="asset-library-rank" aria-hidden="true">
               {(page - 1) * pageSize + index + 1}
@@ -398,40 +430,107 @@ export function AssetLibraryBrowser({
           </button>
         ))}
       </div>
-      {!busy && shown?.assets.length === 0 && (
+      {!loading && shown?.assets.length === 0 && (
         <div className="asset-library-empty">
           <ImageOff size={30} />
-          <h3>{query ? "没有匹配的素材" : "这里还没有素材"}</h3>
+          <h3>{query || market ? "没有匹配的素材" : "这里还没有素材"}</h3>
           <p>
-            {query
+            {query || market
               ? "试试其他名称或代码"
               : "素材放入目录并完成登记后，会显示在这里。"}
           </p>
+          {(query || market) && (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => {
+                clearSearch();
+                setMarket("");
+              }}
+            >
+              清除筛选
+            </button>
+          )}
         </div>
       )}
       <nav className="asset-library-pagination" aria-label="素材分页">
         <button
           className="button secondary"
-          disabled={busy || retired || page <= 1}
+          disabled={loading || retired || page <= 1}
           onClick={() => setPage((p) => p - 1)}
         >
           上一页
         </button>
-        <span>
+        <span className="asset-library-page-position">
           {page} / {pages}
         </span>
+        <div className="asset-library-page-numbers">
+          {assetPageNumbers(page, pages).map((n, i) =>
+            typeof n === "number" ? (
+              <button
+                type="button"
+                className="asset-library-page-button"
+                key={n}
+                aria-label={`第 ${n} 页`}
+                aria-current={n === page ? "page" : undefined}
+                disabled={loading || retired || !shown}
+                onClick={() => setPage(n)}
+              >
+                {n}
+              </button>
+            ) : (
+              <span key={`gap-${i}`} aria-hidden="true">
+                {n}
+              </span>
+            ),
+          )}
+        </div>
         <button
           className="button secondary"
-          disabled={busy || retired || !shown || page >= pages}
+          disabled={loading || retired || !shown || page >= pages}
           onClick={() => setPage((p) => p + 1)}
         >
           下一页
         </button>
+        {shown && pages > 1 && (
+          <form
+            className="asset-library-jump"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!loading && !retired && validTarget) {
+                setPage(targetPage);
+                setPageDraft("");
+              }
+            }}
+          >
+            <label>
+              共 {pages} 页 · 跳至
+              <input
+                aria-label="跳转素材页码"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={pages}
+                step={1}
+                placeholder={String(page)}
+                value={pageDraft}
+                disabled={loading || retired}
+                onChange={(e) => setPageDraft(e.target.value)}
+              />
+            </label>
+            <button
+              className="button secondary"
+              disabled={loading || retired || !validTarget}
+            >
+              跳转
+            </button>
+          </form>
+        )}
       </nav>
       {selected && active && visible && !retired && (
         <Dialog
           title={selected.name || selected.code || "素材预览"}
-          onClose={() => setSelected(null)}
+          onClose={() => setSelection(null)}
           className="asset-library-dialog"
         >
           <div className={`asset-library-large ${dark ? "dark-preview" : ""}`}>

@@ -95,9 +95,11 @@ const states: Record<string, string> = {
 export function AssetLookupCatalogPanel({
   session,
   active = true,
+  onChanged,
 }: {
   session: Session;
   active?: boolean;
+  onChanged?: () => void;
 }) {
   if (session.user.role !== "admin") return null;
   const scope = reportScope(session);
@@ -107,6 +109,7 @@ export function AssetLookupCatalogPanel({
       scope={scope}
       session={session}
       active={active}
+      onChanged={onChanged}
     />
   );
 }
@@ -114,10 +117,12 @@ function CatalogSession({
   scope,
   session,
   active,
+  onChanged,
 }: {
   scope: string;
   session: Session;
   active: boolean;
+  onChanged?: () => void;
 }) {
   const [opened, setOpened] = useState(false),
     [visible, setVisible] = useState(
@@ -352,6 +357,7 @@ function CatalogSession({
         sessionStorage.removeItem(storageKey);
         setPending(null);
         setReceipt(result);
+        if (result.state === "completed") onChanged?.();
         setPreview(null);
         void load();
       }
@@ -455,6 +461,7 @@ function CatalogSession({
       sessionStorage.removeItem(storageKey);
       setPending(null);
       setReceipt(value);
+      onChanged?.();
       if (
         action === "save" &&
         value.asset &&
@@ -523,7 +530,7 @@ function CatalogSession({
           <button onClick={() => void load()} disabled={busy}>
             刷新
           </button>
-          <AssetSourceControls session={session} active={opened&&active&&visible&&!locked} revision={entries?.revision??head?.revision??null} blocked={busy||!!pending} onChanged={()=>{setPreview(null);setEditorRevision(null);void load();}} onDenied={failure}/>
+          <AssetSourceControls session={session} active={opened&&active&&visible&&!locked} revision={entries?.revision??head?.revision??null} blocked={busy||!!pending} onChanged={()=>{setPreview(null);setEditorRevision(null);void load();onChanged?.();}} onDenied={failure}/>
           {entries && (
             <>
               <label>

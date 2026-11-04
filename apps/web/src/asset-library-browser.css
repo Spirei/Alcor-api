@@ -87,6 +87,23 @@
   min-width: 0;
   padding-inline: 0 !important;
 }
+.asset-library-clear {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--muted);
+  cursor: pointer;
+}
+.asset-library-clear:focus-visible {
+  outline: 2px solid var(--asset-accent);
+  outline-offset: 2px;
+}
 .asset-library-tools {
   display: flex;
   gap: 6px;
@@ -202,6 +219,10 @@
 .asset-library-items.list .asset-library-item:last-child {
   border-bottom: 0;
 }
+.asset-library-items.list .asset-library-item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--asset-accent);
+}
 .asset-library-rank,
 .asset-library-market,
 .asset-library-open {
@@ -262,6 +283,9 @@
     transparent 1px 62px
   );
 }
+.asset-library-items.list[aria-busy="true"]:empty {
+  min-height: 660px;
+}
 .asset-library-items.list .asset-library-picture {
   width: 40px;
   height: 40px;
@@ -307,9 +331,54 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-top: 24px;
   font-size: 13px;
+}
+.asset-library-page-position {
+  display: none;
+}
+.asset-library-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.asset-library-pagination .asset-library-page-button {
+  min-width: 30px;
+  height: 30px;
+  padding: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.asset-library-page-button[aria-current="page"] {
+  background: var(--asset-accent);
+  color: white;
+}
+.asset-library .asset-library-jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.asset-library .asset-library-jump label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.asset-library .asset-library-jump input {
+  width: 60px;
+  height: 32px;
+  padding: 4px 6px;
+  text-align: center;
+  border-radius: 8px;
+}
+.asset-library-pagination .asset-library-jump button {
+  min-width: 54px;
 }
 .asset-library-pagination button {
   min-width: 82px;
@@ -350,6 +419,21 @@
   object-fit: contain;
 }
 @media (max-width: 600px) {
+  .asset-library-page-numbers {
+    display: none;
+  }
+  .asset-library-page-position {
+    display: inline;
+  }
+  .asset-library .asset-library-jump {
+    justify-content: center;
+    width: 100%;
+  }
+  .asset-library-items.list:not(.cards) .asset-library-picture,
+  .asset-library-items.list:not(.cards) .asset-library-picture img {
+    width: 36px;
+    height: 36px;
+  }
   .asset-library-markets {
     flex-basis: 100%;
   }

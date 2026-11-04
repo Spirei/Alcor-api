@@ -33,6 +33,7 @@ import {
   workflowLabel,
   buildReceiptMessage,
   verificationOnly,
+  deploymentPollDelay,
   type Deployment,
   type Release,
   type Receipt,
@@ -253,38 +254,52 @@ export function DeploymentSettings({
   const sourceCurrent =
     !!data?.source && data.release?.revision === data.source.sha;
   const runtimeCurrent = !!data?.matches_release;
-  const lastBuildRequest = data?.build_requests[0];
-  const buildAge = lastBuildRequest
-    ? Date.now() - Date.parse(lastBuildRequest.created_at)
-    : Infinity;
-  const watchingBuild =
-    activeBuild ||
-    (!sourceCurrent &&
-      !!lastBuildRequest &&
-      ["dispatching", "submitted", "unknown"].includes(
-        lastBuildRequest.status,
-      ) &&
-      buildAge >= 0 &&
-      buildAge < 15 * 60000);
+  const pollDelay = deploymentPollDelay(
+    data,
+    state.refreshing,
+    !!state.error,
+    !!watchingUpdate,
+  );
   useEffect(() => {
-    if ((!watchingBuild && !watchingUpdate) || state.refreshing || state.error)
-      return;
+    if (pollDelay === null) return;
     const refreshVisible = () => {
       if (!document.hidden) state.reload();
     };
-    const timer = setTimeout(refreshVisible, 5000);
+    const timer = setTimeout(refreshVisible, pollDelay);
     document.addEventListener("visibilitychange", refreshVisible);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", refreshVisible);
     };
+  }, [pollDelay, state.refreshing, state.updatedAt, state.error, state.reload]);
+  const observedBuild = useRef<{
+    repository: string;
+    id: number;
+    status: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!data?.build) return;
+    const next = {
+      repository: data.repository,
+      id: data.build.id,
+      status: data.build.status,
+    };
+    const prior = observedBuild.current;
+    const changed =
+      prior &&
+      prior.repository === next.repository &&
+      (prior.id !== next.id ||
+        (prior.status !== next.status && next.status === "completed"));
+    // Do not consume a transition while an older history read is still pending.
+    if (changed && rawHistory.refreshing) return;
+    observedBuild.current = next;
+    if (changed) rawHistory.reload();
   }, [
-    watchingBuild,
-    watchingUpdate,
-    state.refreshing,
-    state.updatedAt,
-    state.error,
-    state.reload,
+    data?.repository,
+    data?.build?.id,
+    data?.build?.status,
+    rawHistory.refreshing,
+    rawHistory.reload,
   ]);
   const repositoryUrl = data?.repository
     ? `https://github.com/${data.repository}`
@@ -297,6 +312,8 @@ export function DeploymentSettings({
     activity.refreshing ||
     config.refreshing;
   function refresh() {
+    if (!busy && !buildPending.current && !pending.current && !watchingUpdate)
+      setMessage("");
     state.reload();
     history.reload();
     activity.reload();
@@ -373,6 +390,7 @@ export function DeploymentSettings({
         {state.error && (
           <p className="deploy-alert" role="alert">
             {state.error}
+            {pollDelay === 15000 && <span> · 稍后自动重试</span>}
           </p>
         )}
         {configOpen && (
