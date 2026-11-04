@@ -1,4 +1,5 @@
-import {AccountSyncStatus} from "./account-sync-status";
+import { AccountSyncStatus } from "./account-sync-status";
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { AccountActionRecords } from "./account-action-history";
 import { closedAccountReceipt } from "./account-action-state";
 import { AdminCredentialRecovery } from "./admin-credential-recovery";
@@ -31,7 +32,10 @@ import { Dialog } from "./dialog";
 import { PasswordField, PasswordStrength } from "./password-fields";
 import { NativeSecurity } from "./native-security";
 import { SelectMenu } from "./select-menu";
-import { passwordChangeGate, type PasswordChangePhase } from "./password-change-state";
+import {
+  passwordChangeGate,
+  type PasswordChangePhase,
+} from "./password-change-state";
 
 type User = {
   id: string;
@@ -60,6 +64,9 @@ function Failure({ text }: { text: string }) {
 export function AccountPage({ session }: { session: Session }) {
   const resource = useResource<User>("/account");
   const location = useLocation();
+  const [accountView, setAccountView] = useState(
+    location.hash === "#account-owned-devices" ? "devices" : "overview",
+  );
   const [factorCode, setFactorCode] = useState("");
   const [current, setCurrent] = useState(""),
     [next, setNext] = useState(""),
@@ -194,117 +201,142 @@ export function AccountPage({ session }: { session: Session }) {
         <h1>账号与安全</h1>
       </div>
       <Failure text={resource.error} />
+      <WorkspaceTabs
+        label="账号设置"
+        value={accountView}
+        disabled={busy || unknown}
+        onChange={(value) => {
+          interrupt();
+          setAccountView(value);
+        }}
+        items={[
+          { value: "overview", label: "账号资料" },
+          { value: "security", label: "登录与安全" },
+          { value: "devices", label: "设备与会话" },
+        ]}
+      />
       {resource.data && (
         <>
-          <NativeSecurity session={session} />
-          <section className="card padded settings-section">
-            <h2>账号</h2>
-            <dl className="settings-list">
-              <div>
-                <dt>用户名</dt>
-                <dd>{resource.data.username}</dd>
-              </div>
-              <div>
-                <dt>角色</dt>
-                <dd>{resource.data.role === "admin" ? "管理员" : "用户"}</dd>
-              </div>
-              <div>
-                <dt>注册时间</dt>
-                <dd>
-                  {new Date(resource.data.created_at).toLocaleString("zh-CN")}
-                </dd>
-              </div>
-            </dl>
-          </section>
-          <EmailChange session={session} onChanged={resource.reload} />
-          <AccountSyncStatus session={session} active={location.pathname==="/account"}/>
-          <div id="account-owned-devices"><AccountDevices session={session}/></div>
-          <section className="card padded settings-section">
-            <h2>修改密码</h2>
-            <form
-              className="account-password-form"
-              onSubmit={(e) => void password(e)}
-            >
-              <label htmlFor="account-current-password">当前密码</label>
-              <PasswordField
-                id="account-current-password"
-                value={current}
-                disabled={busy || unknown}
-                autoComplete="current-password"
-                maxLength={128}
-                required
-                onChange={(e) => {
-                  setCurrent(e.target.value);
-                  setError("");
-                }}
-              />
-              <label htmlFor="account-new-password">新密码</label>
-              <PasswordField
-                id="account-new-password"
-                value={next}
-                disabled={busy || unknown}
-                autoComplete="new-password"
-                maxLength={128}
-                required
-                onChange={(e) => {
-                  setNext(e.target.value);
-                  setError("");
-                }}
-              />
-              {next && (
-                <PasswordStrength
-                  password={next}
-                  username={session.user.username}
-                />
-              )}
-              <label htmlFor="confirm-password">确认密码</label>
-              <PasswordField
-                id="confirm-password"
-                value={confirm}
-                disabled={busy || unknown}
-                autoComplete="new-password"
-                maxLength={128}
-                required
-                onChange={(e) => {
-                  setConfirm(e.target.value);
-                  setError("");
-                }}
-              />
-              {resource.data.two_factor_enabled && (
-                <>
-                  <label htmlFor="account-factor-code">验证码或备用码</label>
-                  <input
-                    id="account-factor-code"
-                    value={factorCode}
-                    onChange={(e) => setFactorCode(e.target.value)}
-                    autoComplete="one-time-code"
-                    maxLength={32}
-                    required
-                    disabled={busy || unknown}
-                  />
-                </>
-              )}
-              <Failure text={error} />
-              {unknown && (
-                <>
-                  <p role="alert">修改结果未确认，请用新密码重新登录核对。</p>
-                  <button
-                    className="button secondary"
-                    type="button"
-                    onClick={() => void checkPassword()}
-                  >
-                    重新登录核对
-                  </button>
-                </>
-              )}
-              <button
-                className="button primary"
-                disabled={busy || unknown || !current || !next || !confirm}
+          <WorkspaceView active={accountView === "overview"} label="账号资料">
+            <section className="card padded settings-section">
+              <h2>账号</h2>
+              <dl className="settings-list">
+                <div>
+                  <dt>用户名</dt>
+                  <dd>{resource.data.username}</dd>
+                </div>
+                <div>
+                  <dt>角色</dt>
+                  <dd>{resource.data.role === "admin" ? "管理员" : "用户"}</dd>
+                </div>
+                <div>
+                  <dt>注册时间</dt>
+                  <dd>
+                    {new Date(resource.data.created_at).toLocaleString("zh-CN")}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+            <AccountSyncStatus
+              session={session}
+              active={location.pathname === "/account"}
+            />
+          </WorkspaceView>
+          <WorkspaceView active={accountView === "devices"} label="设备与会话">
+            <div id="account-owned-devices">
+              <AccountDevices session={session} />
+            </div>
+          </WorkspaceView>
+          <WorkspaceView active={accountView === "security"} label="登录与安全">
+            <NativeSecurity session={session} />
+            <EmailChange session={session} onChanged={resource.reload} />
+            <section className="card padded settings-section">
+              <h2>修改密码</h2>
+              <form
+                className="account-password-form"
+                onSubmit={(e) => void password(e)}
               >
-                {busy ? "修改中…" : "修改密码"}
-              </button>
-            </form>
-          </section>
+                <label htmlFor="account-current-password">当前密码</label>
+                <PasswordField
+                  id="account-current-password"
+                  value={current}
+                  disabled={busy || unknown}
+                  autoComplete="current-password"
+                  maxLength={128}
+                  required
+                  onChange={(e) => {
+                    setCurrent(e.target.value);
+                    setError("");
+                  }}
+                />
+                <label htmlFor="account-new-password">新密码</label>
+                <PasswordField
+                  id="account-new-password"
+                  value={next}
+                  disabled={busy || unknown}
+                  autoComplete="new-password"
+                  maxLength={128}
+                  required
+                  onChange={(e) => {
+                    setNext(e.target.value);
+                    setError("");
+                  }}
+                />
+                {next && (
+                  <PasswordStrength
+                    password={next}
+                    username={session.user.username}
+                  />
+                )}
+                <label htmlFor="confirm-password">确认密码</label>
+                <PasswordField
+                  id="confirm-password"
+                  value={confirm}
+                  disabled={busy || unknown}
+                  autoComplete="new-password"
+                  maxLength={128}
+                  required
+                  onChange={(e) => {
+                    setConfirm(e.target.value);
+                    setError("");
+                  }}
+                />
+                {resource.data.two_factor_enabled && (
+                  <>
+                    <label htmlFor="account-factor-code">验证码或备用码</label>
+                    <input
+                      id="account-factor-code"
+                      value={factorCode}
+                      onChange={(e) => setFactorCode(e.target.value)}
+                      autoComplete="one-time-code"
+                      maxLength={32}
+                      required
+                      disabled={busy || unknown}
+                    />
+                  </>
+                )}
+                <Failure text={error} />
+                {unknown && (
+                  <>
+                    <p role="alert">修改结果未确认，请用新密码重新登录核对。</p>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => void checkPassword()}
+                    >
+                      重新登录核对
+                    </button>
+                  </>
+                )}
+                <button
+                  className="button primary"
+                  disabled={busy || unknown || !current || !next || !confirm}
+                >
+                  {busy ? "修改中…" : "修改密码"}
+                </button>
+              </form>
+            </section>
+          </WorkspaceView>
         </>
       )}
     </>

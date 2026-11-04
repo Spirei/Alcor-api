@@ -1,3 +1,4 @@
+import { WorkspaceEmpty } from "./workspace-ui";
 import {
   useCallback,
   useEffect,
@@ -494,68 +495,71 @@ function ResourceSession({
         </p>
       )}
       {!ready && !error && <p role="status">正在读取…</p>}
-      <div className="resource-upload">
-        <label>
-          上传文件
-          <input
-            ref={fileInput}
-            type="file"
-            disabled={blocked}
-            onChange={(e) => {
-              const value = e.target.files?.[0] ?? null;
-              if (value && (!value.size || value.size > 50 * 1024 * 1024)) {
-                clearFile();
-                setError("文件须为1字节至50MiB");
-                return;
+      <details className="workspace-tools">
+        <summary>上传文件与新建文件夹</summary>
+        <div className="resource-upload">
+          <label>
+            上传文件
+            <input
+              ref={fileInput}
+              type="file"
+              disabled={blocked}
+              onChange={(e) => {
+                const value = e.target.files?.[0] ?? null;
+                if (value && (!value.size || value.size > 50 * 1024 * 1024)) {
+                  clearFile();
+                  setError("文件须为1字节至50MiB");
+                  return;
+                }
+                setFile(value);
+              }}
+            />
+          </label>
+          <button
+            className="button"
+            disabled={blocked || !file}
+            onClick={() => {
+              if (!file) return;
+              const data = new FormData();
+              data.set("file", file);
+              data.set("name", file.name);
+              data.set("category", category);
+              if (parent) {
+                data.set("folderId", parent.id);
+                data.set("folderRevision", String(parent.revision));
               }
-              setFile(value);
+              void mutate("/files", "POST", data);
             }}
-          />
-        </label>
-        <button
-          className="button"
-          disabled={blocked || !file}
-          onClick={() => {
-            if (!file) return;
-            const data = new FormData();
-            data.set("file", file);
-            data.set("name", file.name);
-            data.set("category", category);
-            if (parent) {
-              data.set("folderId", parent.id);
-              data.set("folderRevision", String(parent.revision));
-            }
-            void mutate("/files", "POST", data);
+          >
+            上传
+          </button>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void mutate("/folders", "POST", {
+              category,
+              name: newFolder,
+              ...(parent
+                ? { parentId: parent.id, parentRevision: parent.revision }
+                : {}),
+            });
           }}
+          className="resource-upload"
         >
-          上传
-        </button>
-      </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void mutate("/folders", "POST", {
-            category,
-            name: newFolder,
-            ...(parent
-              ? { parentId: parent.id, parentRevision: parent.revision }
-              : {}),
-          });
-        }}
-        className="resource-upload"
-      >
-        <label>
-          新建目录
-          <input
-            value={newFolder}
-            disabled={blocked}
-            onChange={(e) => setNewFolder(e.target.value)}
-          />
-        </label>
-        <button className="button" disabled={blocked || !newFolder}>
-          创建
-        </button>
-      </form>
+          <label>
+            新建目录
+            <input
+              value={newFolder}
+              disabled={blocked}
+              onChange={(e) => setNewFolder(e.target.value)}
+            />
+          </label>
+          <button className="button" disabled={blocked || !newFolder}>
+            创建
+          </button>
+        </form>
+      </details>
       {ready &&
         children.map((item) => (
           <article className="resource-row" key={item.id}>
@@ -610,7 +614,10 @@ function ResourceSession({
           </article>
         ))}
       {ready && page?.items.length === 0 && children.length === 0 && (
-        <p>此目录为空</p>
+        <WorkspaceEmpty
+          title="此目录为空"
+          description="上传文件或新建文件夹，整理你的资源。"
+        />
       )}
       {edit && (
         <form

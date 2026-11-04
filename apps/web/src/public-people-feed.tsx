@@ -1,15 +1,343 @@
-import {useEffect,useRef,useState} from 'react';
-import {api,ApiError,type Session} from './api';
-type PublicPost={id:string;date:string|null;text:string;textZh?:string;originalUrl:string;author:'trump'|'duan';replyTo?:string;quote?:{name:string;text:string;url?:string;images?:string[]};images?:string[];comments?:{id:string;name:string;createdAt:string;text:string;likes?:number;replyTo?:string}[];sourceEvidence:{sourceRevision:string;pageId:string;licenseRevision:string}};
-type Payload={state:'observed'|'partial'|'unavailable';posts:PublicPost[];nextCursor:string|null;updatedAt:string|number|null;updatedByAuthor:Partial<Record<'trump'|'duan',string|number|null>>;collectionOnRead:false;refreshing:false};
-function external(raw:string){try{const value=new URL(raw);return ['https:','http:'].includes(value.protocol)&&!value.username&&!value.password?value.href:null;}catch{return null;}}
-function actualTime(raw:string|number|null|undefined){if(raw===null||raw===undefined||raw==='')return '未知';if(typeof raw==='number'){const date=new Date(raw);return Number.isFinite(date.getTime())?date.toLocaleString('zh-CN'):'未知';}return raw;}
-const name=(author:string)=>author==='trump'?'特朗普':author==='duan'?'段永平':author;
-export function PublicPeopleFeed({session,active}:{session:Session;active:boolean}){return <Panel key={JSON.stringify([session.instance_id,session.user.id,session.user.role,session.receipt_scope,session.csrf,session.expires_at])} active={active}/>;}
-function Panel({active}:{active:boolean}){
- const [open,setOpen]=useState(false),[author,setAuthor]=useState('all'),[data,setData]=useState<Payload|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');const epoch=useRef(0),live=useRef(true),controller=useRef<AbortController|null>(null);
- function clear(){epoch.current++;controller.current?.abort();setData(null);setBusy(false);}
- useEffect(()=>{live.current=active;if(!active||!open)clear();const hidden=()=>{if(document.hidden)clear();};document.addEventListener('visibilitychange',hidden);return()=>{live.current=false;epoch.current++;controller.current?.abort();document.removeEventListener('visibilitychange',hidden);};},[active,open]);
- async function read(more=false){if(busy||!active||!open||document.hidden)return;const run=++epoch.current,c=new AbortController();controller.current?.abort();controller.current=c;setBusy(true);setError('');if(!more)setData(null);const params=new URLSearchParams({limit:'30',...(author!=='all'?{author}:{}),...(more&&data?.nextCursor?{cursor:data.nextCursor}:{})});try{const value=await api<Payload>('/public-square?'+params,{signal:c.signal});if(!live.current||run!==epoch.current||c.signal.aborted||document.hidden)return;if(!['observed','partial','unavailable'].includes(value.state)||!Array.isArray(value.posts)||value.posts.some(post=>!['trump','duan'].includes(post.author)))throw new Error('公开人物动态范围待核对');setData(previous=>more&&previous?{...value,posts:[...previous.posts,...value.posts.filter(post=>!previous.posts.some(prior=>prior.author===post.author&&prior.id===post.id))]}:value);}catch(reason){if(!c.signal.aborted&&run===epoch.current){if(reason instanceof ApiError&&[401,403].includes(reason.status))clear();setError(reason instanceof Error?reason.message:'公开人物动态暂不可用');}}finally{if(run===epoch.current)setBusy(false);}}
- return <details open={open} onToggle={event=>setOpen(event.currentTarget.open)}><summary>公开人物原帖</summary><div className="feed-actions"><label>人物<select value={author} disabled={busy} onChange={event=>{clear();setError('');setAuthor(event.target.value);}}><option value="all">全部</option><option value="trump">特朗普</option><option value="duan">段永平</option></select></label><button className="button" disabled={busy||!active||!open} onClick={()=>void read()}>读取已保留公开原帖</button></div>{error&&<p role="alert">{error}</p>}{data&&<><p role="status">{data.state==='unavailable'?'当前未有可展示的已授权公开来源':data.state==='partial'?'已观察部分公开原帖，来源范围未完整':'已有获准公开展示的原帖'}</p><details><summary>来源观察时间</summary><p>公开快照 {actualTime(data.updatedAt)}</p>{(['trump','duan'] as const).map(person=><p key={person}>{name(person)} · {actualTime(data.updatedByAuthor[person])}</p>)}</details>{data.state!=='unavailable'&&!data.posts.length&&<p>当前保留范围无符合筛选的原帖</p>}{data.posts.map(post=><article key={post.author+':'+post.id} className="feed-post"><div className="feed-post-heading"><strong>{name(post.author)}</strong><time>{actualTime(post.date)}</time></div>{post.replyTo&&<p>回复 {post.replyTo}</p>}<p className="feed-plain-text">{post.text}</p>{post.textZh?<details><summary>已保存且获准展示的译文</summary><p className="feed-plain-text">{post.textZh}</p></details>:<p>已保存且允许展示的译文暂不可用</p>}{post.quote&&<blockquote><strong>{post.quote.name}</strong><p className="feed-plain-text">{post.quote.text}</p>{post.quote.url&&external(post.quote.url)&&<a href={external(post.quote.url)!} target="_blank" rel="noreferrer noopener">打开被引用原帖</a>}{post.quote.images?.map((url,index)=>external(url)&&<p key={index}><a href={external(url)!} target="_blank" rel="noreferrer noopener">明确打开引用原图 {index+1}</a></p>)}</blockquote>}{external(post.originalUrl)&&<a href={external(post.originalUrl)!} target="_blank" rel="noreferrer noopener">打开原发布页</a>}{post.images?.map((url,index)=>external(url)&&<p key={index}><a href={external(url)!} target="_blank" rel="noreferrer noopener">明确打开原图 {index+1}</a></p>)}{post.comments&&<details><summary>保留的公开评论 {post.comments.length} 条（非全部评论证明）</summary>{post.comments.map(comment=><div key={comment.id}><strong>{comment.name}</strong><small> · {actualTime(comment.createdAt)}</small>{comment.replyTo&&<p>回复 {comment.replyTo}</p>}<p className="feed-plain-text">{comment.text}</p>{comment.likes!==undefined&&<small>来源观察赞数 {comment.likes}</small>}</div>)}</details>}<details><summary>原帖来源证据</summary><dl><dt>来源版本</dt><dd>{post.sourceEvidence.sourceRevision}</dd><dt>保留原页</dt><dd>{post.sourceEvidence.pageId}</dd><dt>公开展示许可</dt><dd>{post.sourceEvidence.licenseRevision}</dd></dl></details></article>)}{data.nextCursor&&<button className="button" disabled={busy} onClick={()=>void read(true)}>读取更多已保留原帖</button>}</>}</details>;
+import { useEffect, useRef, useState } from "react";
+import { api, ApiError, type Session } from "./api";
+type PublicPost = {
+  id: string;
+  date: string | null;
+  text: string;
+  textZh?: string;
+  originalUrl: string;
+  author: "trump" | "duan";
+  replyTo?: string;
+  quote?: { name: string; text: string; url?: string; images?: string[] };
+  images?: string[];
+  comments?: {
+    id: string;
+    name: string;
+    createdAt: string;
+    text: string;
+    likes?: number;
+    replyTo?: string;
+  }[];
+  sourceEvidence: {
+    sourceRevision: string;
+    pageId: string;
+    licenseRevision: string;
+  };
+};
+type Payload = {
+  state: "observed" | "partial" | "unavailable";
+  posts: PublicPost[];
+  nextCursor: string | null;
+  updatedAt: string | number | null;
+  updatedByAuthor: Partial<Record<"trump" | "duan", string | number | null>>;
+  collectionOnRead: false;
+  refreshing: false;
+};
+function external(raw: string) {
+  try {
+    const value = new URL(raw);
+    return ["https:", "http:"].includes(value.protocol) &&
+      !value.username &&
+      !value.password
+      ? value.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+function actualTime(raw: string | number | null | undefined) {
+  if (raw === null || raw === undefined || raw === "") return "未知";
+  if (typeof raw === "number") {
+    const date = new Date(raw);
+    return Number.isFinite(date.getTime())
+      ? date.toLocaleString("zh-CN")
+      : "未知";
+  }
+  return raw;
+}
+const name = (author: string) =>
+  author === "trump" ? "特朗普" : author === "duan" ? "段永平" : author;
+export function PublicPeopleFeed({
+  session,
+  active,
+  expanded = false,
+}: {
+  session: Session;
+  active: boolean;
+  expanded?: boolean;
+}) {
+  return (
+    <Panel
+      key={JSON.stringify([
+        session.instance_id,
+        session.user.id,
+        session.user.role,
+        session.receipt_scope,
+        session.csrf,
+        session.expires_at,
+      ])}
+      active={active}
+      expanded={expanded}
+    />
+  );
+}
+function Panel({ active, expanded }: { active: boolean; expanded: boolean }) {
+  const [open, setOpen] = useState(expanded),
+    [author, setAuthor] = useState("all"),
+    [data, setData] = useState<Payload | null>(null),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const epoch = useRef(0),
+    live = useRef(true),
+    controller = useRef<AbortController | null>(null);
+  function clear() {
+    epoch.current++;
+    controller.current?.abort();
+    setData(null);
+    setBusy(false);
+  }
+  useEffect(() => {
+    live.current = active;
+    if (!active || !open) clear();
+    const hidden = () => {
+      if (document.hidden) clear();
+    };
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      live.current = false;
+      epoch.current++;
+      controller.current?.abort();
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, [active, open]);
+  async function read(more = false) {
+    if (busy || !active || !open || document.hidden) return;
+    const run = ++epoch.current,
+      c = new AbortController();
+    controller.current?.abort();
+    controller.current = c;
+    setBusy(true);
+    setError("");
+    if (!more) setData(null);
+    const params = new URLSearchParams({
+      limit: "30",
+      ...(author !== "all" ? { author } : {}),
+      ...(more && data?.nextCursor ? { cursor: data.nextCursor } : {}),
+    });
+    try {
+      const value = await api<Payload>("/public-square?" + params, {
+        signal: c.signal,
+      });
+      if (
+        !live.current ||
+        run !== epoch.current ||
+        c.signal.aborted ||
+        document.hidden
+      )
+        return;
+      if (
+        !["observed", "partial", "unavailable"].includes(value.state) ||
+        !Array.isArray(value.posts) ||
+        value.posts.some((post) => !["trump", "duan"].includes(post.author))
+      )
+        throw new Error("公开人物动态范围待核对");
+      setData((previous) =>
+        more && previous
+          ? {
+              ...value,
+              posts: [
+                ...previous.posts,
+                ...value.posts.filter(
+                  (post) =>
+                    !previous.posts.some(
+                      (prior) =>
+                        prior.author === post.author && prior.id === post.id,
+                    ),
+                ),
+              ],
+            }
+          : value,
+      );
+    } catch (reason) {
+      if (!c.signal.aborted && run === epoch.current) {
+        if (reason instanceof ApiError && [401, 403].includes(reason.status))
+          clear();
+        setError(
+          reason instanceof Error ? reason.message : "公开人物动态暂不可用",
+        );
+      }
+    } finally {
+      if (run === epoch.current) setBusy(false);
+    }
+  }
+  return (
+    <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>公开人物原帖</summary>
+      <div className="feed-actions">
+        <label>
+          人物
+          <select
+            value={author}
+            disabled={busy}
+            onChange={(event) => {
+              clear();
+              setError("");
+              setAuthor(event.target.value);
+            }}
+          >
+            <option value="all">全部</option>
+            <option value="trump">特朗普</option>
+            <option value="duan">段永平</option>
+          </select>
+        </label>
+        <button
+          className="button"
+          disabled={busy || !active || !open}
+          onClick={() => void read()}
+        >
+          读取已保留公开原帖
+        </button>
+      </div>
+      {error && <p role="alert">{error}</p>}
+      {data && (
+        <>
+          <p role="status">
+            {data.state === "unavailable"
+              ? "当前未有可展示的已授权公开来源"
+              : data.state === "partial"
+                ? "已观察部分公开原帖，来源范围未完整"
+                : "已有获准公开展示的原帖"}
+          </p>
+          <details>
+            <summary>来源观察时间</summary>
+            <p>公开快照 {actualTime(data.updatedAt)}</p>
+            {(["trump", "duan"] as const).map((person) => (
+              <p key={person}>
+                {name(person)} · {actualTime(data.updatedByAuthor[person])}
+              </p>
+            ))}
+          </details>
+          {data.state !== "unavailable" && !data.posts.length && (
+            <p>当前保留范围无符合筛选的原帖</p>
+          )}
+          {data.posts.map((post) => (
+            <article key={post.author + ":" + post.id} className="feed-post">
+              <div className="feed-post-avatar" aria-hidden="true">
+                {name(post.author).slice(0, 1)}
+              </div>
+              <div className="feed-post-content">
+                <div className="feed-post-heading">
+                  <strong>{name(post.author)}</strong>
+                  <time>{actualTime(post.date)}</time>
+                </div>
+                {post.replyTo && <p>回复 {post.replyTo}</p>}
+                <p className="feed-plain-text">{post.text}</p>
+                {post.textZh ? (
+                  <details>
+                    <summary>已保存且获准展示的译文</summary>
+                    <p className="feed-plain-text">{post.textZh}</p>
+                  </details>
+                ) : (
+                  <p>已保存且允许展示的译文暂不可用</p>
+                )}
+                {post.quote && (
+                  <blockquote>
+                    <strong>{post.quote.name}</strong>
+                    <p className="feed-plain-text">{post.quote.text}</p>
+                    {post.quote.url && external(post.quote.url) && (
+                      <a
+                        href={external(post.quote.url)!}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        打开被引用原帖
+                      </a>
+                    )}
+                    {post.quote.images?.map(
+                      (url, index) =>
+                        external(url) && (
+                          <p key={index}>
+                            <a
+                              href={external(url)!}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              明确打开引用原图 {index + 1}
+                            </a>
+                          </p>
+                        ),
+                    )}
+                  </blockquote>
+                )}
+                {external(post.originalUrl) && (
+                  <a
+                    href={external(post.originalUrl)!}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    打开原发布页
+                  </a>
+                )}
+                {post.images?.map(
+                  (url, index) =>
+                    external(url) && (
+                      <p key={index}>
+                        <a
+                          href={external(url)!}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                        >
+                          明确打开原图 {index + 1}
+                        </a>
+                      </p>
+                    ),
+                )}
+                {post.comments && (
+                  <details>
+                    <summary>
+                      保留的公开评论 {post.comments.length} 条（非全部评论证明）
+                    </summary>
+                    {post.comments.map((comment) => (
+                      <div key={comment.id}>
+                        <strong>{comment.name}</strong>
+                        <small> · {actualTime(comment.createdAt)}</small>
+                        {comment.replyTo && <p>回复 {comment.replyTo}</p>}
+                        <p className="feed-plain-text">{comment.text}</p>
+                        {comment.likes !== undefined && (
+                          <small>来源观察赞数 {comment.likes}</small>
+                        )}
+                      </div>
+                    ))}
+                  </details>
+                )}
+                <details>
+                  <summary>原帖来源证据</summary>
+                  <dl>
+                    <dt>来源版本</dt>
+                    <dd>{post.sourceEvidence.sourceRevision}</dd>
+                    <dt>保留原页</dt>
+                    <dd>{post.sourceEvidence.pageId}</dd>
+                    <dt>公开展示许可</dt>
+                    <dd>{post.sourceEvidence.licenseRevision}</dd>
+                  </dl>
+                </details>
+              </div>
+            </article>
+          ))}
+          {data.nextCursor && (
+            <button
+              className="button"
+              disabled={busy}
+              onClick={() => void read(true)}
+            >
+              读取更多已保留原帖
+            </button>
+          )}
+        </>
+      )}
+    </details>
+  );
 }

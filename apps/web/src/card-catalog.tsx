@@ -1,4 +1,6 @@
-import {CardRecognition} from "./card-recognition";
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
+import { useState as useWorkspaceState } from "react";
+import { CardRecognition } from "./card-recognition";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
@@ -112,6 +114,9 @@ function CardCatalogContent({
   session: Session;
   active?: boolean;
 }) {
+  const [workspaceSection, setWorkspaceSection] =
+    useWorkspaceState("preferences");
+
   const scope = JSON.stringify([
     session.instance_id,
     session.user.id,
@@ -436,244 +441,311 @@ function CardCatalogContent({
                 : "已删除自建卡"}
         </p>
       )}
-      <article className="card-catalog-panel">
-        <h2>来源</h2>
-        {snapshot?.source ? (
-          <>
-            <div>{snapshot.source.sourceLabel}</div>
-            <span>{snapshot.source.cardCount} 张</span>
-            <details>
-              <summary>详情</summary>
-              <dl>
-                <dt>SHA-256</dt>
-                <dd>
-                  <code>{snapshot.source.sha256}</code>
-                </dd>
-                <dt>导入时间</dt>
-                <dd>{new Date(snapshot.source.importedAt).toLocaleString()}</dd>
-                {session.user.role === "admin" && (
+      <WorkspaceTabs
+        label="卡面视图"
+        value={workspaceSection}
+        onChange={setWorkspaceSection}
+        items={[
+          { value: "preferences", label: "卡面图库" },
+          { value: "wallet", label: "我的卡包" },
+          { value: "custom", label: "自建卡与识别" },
+          { value: "sources", label: "来源清单" },
+        ]}
+      />
+
+      <WorkspaceView active={workspaceSection === "sources"} label="来源清单">
+        <article className="card-catalog-panel">
+          <h2>来源</h2>
+          {snapshot?.source ? (
+            <>
+              <div>{snapshot.source.sourceLabel}</div>
+              <span>{snapshot.source.cardCount} 张</span>
+              <details>
+                <summary>详情</summary>
+                <dl>
+                  <dt>SHA-256</dt>
+                  <dd>
+                    <code>{snapshot.source.sha256}</code>
+                  </dd>
+                  <dt>导入时间</dt>
+                  <dd>
+                    {new Date(snapshot.source.importedAt).toLocaleString()}
+                  </dd>
+                  {session.user.role === "admin" && (
+                    <>
+                      <dt>已发布卡面关联</dt>
+                      <dd>
+                        {snapshot.publishedAssets.length}
+                        {snapshot.publishedAssetsPartial ? "+" : ""}
+                      </dd>
+                    </>
+                  )}
+                  <dt>原件</dt>
+                  <dd>清单快照不包含素材原件</dd>
+                  {session.user.role === "admin" && (
+                    <>
+                      <dt>原清单</dt>
+                      <dd>
+                        <a
+                          href={`/api/admin/card-catalog/sources/${snapshot.source.id}/original`}
+                        >
+                          下载
+                        </a>
+                      </dd>
+                    </>
+                  )}
+                </dl>
+              </details>
+            </>
+          ) : (
+            <p>{snapshot ? "来源未核对" : "正在读取"}</p>
+          )}
+          {session.user.role === "admin" && (
+            <div className="card-catalog-source">
+              <label>
+                清单
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  disabled={disabled}
+                  onChange={(event) =>
+                    void loadFile(event.target.files?.[0]).catch(report)
+                  }
+                />
+              </label>
+              <label>
+                来源名称
+                <input
+                  value={sourceLabel}
+                  maxLength={120}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    sourceGeneration.current += 1;
+                    setSourceLabel(event.target.value);
+                    setPreview(null);
+                  }}
+                />
+              </label>
+              <div className="card-catalog-actions">
+                <button
+                  className="button secondary"
+                  disabled={disabled || !sourceText || !sourceLabel}
+                  onClick={() => void previewSource()}
+                >
+                  核对清单
+                </button>
+                {preview && (
                   <>
-                    <dt>已发布卡面关联</dt>
-                    <dd>
-                      {snapshot.publishedAssets.length}
-                      {snapshot.publishedAssetsPartial ? "+" : ""}
-                    </dd>
+                    <span>
+                      {preview.regionCount} 个地区 · {preview.cardCount} 张
+                    </span>
+                    <button
+                      className="button primary"
+                      disabled={disabled}
+                      onClick={() =>
+                        void write(
+                          "source_import",
+                          "/admin/card-catalog/imports",
+                          "POST",
+                          {
+                            manifestText: sourceText,
+                            sourceLabel,
+                            expectedRevision: preview.sourceRevision,
+                            expectedDigest: preview.sha256,
+                          },
+                        )
+                      }
+                    >
+                      确认导入
+                    </button>
                   </>
                 )}
-                <dt>原件</dt>
-                <dd>清单快照不包含素材原件</dd>
-                {session.user.role === "admin" && (
-                  <>
-                    <dt>原清单</dt>
-                    <dd>
-                      <a
-                        href={`/api/admin/card-catalog/sources/${snapshot.source.id}/original`}
-                      >
-                        下载
-                      </a>
-                    </dd>
-                  </>
-                )}
-              </dl>
-            </details>
-          </>
-        ) : (
-          <p>{snapshot ? "来源未核对" : "正在读取"}</p>
-        )}
-        {session.user.role === "admin" && (
-          <div className="card-catalog-source">
+              </div>
+            </div>
+          )}
+        </article>
+      </WorkspaceView>
+
+      <WorkspaceView
+        active={workspaceSection === "custom"}
+        label="自建卡与识别"
+      >
+        <CardRecognition
+          session={session}
+          active={active}
+          blocked={busy || !!pending}
+          images={snapshot?.availableImages || []}
+          onDenied={report}
+          onApply={(candidate) =>
+            setForm((previous) => ({
+              ...previous,
+              ...Object.fromEntries(
+                Object.entries(candidate).filter(
+                  ([key, value]) =>
+                    [
+                      "name",
+                      "bank",
+                      "region",
+                      "type",
+                      "brand",
+                      "level",
+                    ].includes(key) &&
+                    typeof value === "string" &&
+                    value.trim(),
+                ),
+              ),
+            }))
+          }
+        />
+      </WorkspaceView>
+
+      <WorkspaceView
+        active={workspaceSection === "preferences"}
+        label="卡面图库"
+      >
+        <CardPreferenceSettings
+          images={snapshot?.availableImages || []}
+          session={session}
+          active={active}
+          cards={cardChoices.cards}
+          invalid={cardChoices.invalid}
+          revisionHint={snapshot?.preferenceRevision ?? 0}
+          onChanged={() => void refresh().catch(report)}
+          onPermissionError={report}
+        />
+      </WorkspaceView>
+
+      <WorkspaceView active={workspaceSection === "wallet"} label="我的卡包">
+        <CardWalletPanel
+          session={session}
+          active={active}
+          cards={cardChoices.cards}
+          revisionHint={snapshot?.preferenceRevision ?? 0}
+          onChanged={() => void refresh().catch(report)}
+          onPermissionError={report}
+        />
+      </WorkspaceView>
+
+      <WorkspaceView
+        active={workspaceSection === "custom"}
+        label="自建卡与识别"
+      >
+        <article className="card-catalog-panel">
+          <h2>自建卡</h2>
+          <form
+            className="card-catalog-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void write(
+                "custom_create",
+                "/account/card-catalog/custom",
+                "POST",
+                form,
+              );
+            }}
+          >
+            {(
+              [
+                ["name", "卡名", 60],
+                ["bank", "银行", 60],
+                ["region", "地区", 24],
+                ["brand", "卡组织", 24],
+                ["level", "等级", 24],
+                ["image", "卡面图片地址", 300],
+              ] as const
+            ).map(([key, label, maxLength]) => (
+              <label key={key}>
+                {label}
+                <input
+                  value={form[key]}
+                  maxLength={maxLength}
+                  required={["name", "bank", "image"].includes(key)}
+                  disabled={disabled}
+                  list={key === "image" ? "card-catalog-images" : undefined}
+                  onChange={(event) =>
+                    setForm((value) => ({
+                      ...value,
+                      [key]: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            ))}
             <label>
-              清单
-              <input
-                type="file"
-                accept="application/json,.json"
+              类型
+              <SelectMenu
+                label="卡片类型"
+                value={form.type}
+                options={types}
                 disabled={disabled}
-                onChange={(event) =>
-                  void loadFile(event.target.files?.[0]).catch(report)
+                onChange={(value) =>
+                  setForm((previous) => ({ ...previous, type: value }))
                 }
+                variant="field"
               />
             </label>
             <label>
-              来源名称
-              <input
-                value={sourceLabel}
-                maxLength={120}
+              币种范围
+              <SelectMenu
+                label="币种范围"
+                value={form.currencyScope}
+                options={currencies}
                 disabled={disabled}
-                onChange={(event) => {
-                  sourceGeneration.current += 1;
-                  setSourceLabel(event.target.value);
-                  setPreview(null);
-                }}
+                onChange={(value) =>
+                  setForm((previous) => ({ ...previous, currencyScope: value }))
+                }
+                variant="field"
               />
             </label>
             <div className="card-catalog-actions">
               <button
-                className="button secondary"
-                disabled={disabled || !sourceText || !sourceLabel}
-                onClick={() => void previewSource()}
+                className="button primary"
+                disabled={disabled || !snapshot?.source}
+                type="submit"
               >
-                核对清单
+                添加
               </button>
-              {preview && (
-                <>
-                  <span>
-                    {preview.regionCount} 个地区 · {preview.cardCount} 张
-                  </span>
-                  <button
-                    className="button primary"
-                    disabled={disabled}
-                    onClick={() =>
-                      void write(
-                        "source_import",
-                        "/admin/card-catalog/imports",
-                        "POST",
-                        {
-                          manifestText: sourceText,
-                          sourceLabel,
-                          expectedRevision: preview.sourceRevision,
-                          expectedDigest: preview.sha256,
-                        },
-                      )
-                    }
-                  >
-                    确认导入
-                  </button>
-                </>
-              )}
             </div>
-          </div>
-        )}
-      </article>
-      <CardRecognition session={session} active={active} blocked={busy||!!pending} images={snapshot?.availableImages||[]} onDenied={report} onApply={candidate=>setForm(previous=>({...previous,...Object.fromEntries(Object.entries(candidate).filter(([key,value])=>['name','bank','region','type','brand','level'].includes(key)&&typeof value==='string'&&value.trim()))}))}/>
-      <CardPreferenceSettings
-        session={session}
-        active={active}
-        cards={cardChoices.cards}
-        invalid={cardChoices.invalid}
-        revisionHint={snapshot?.preferenceRevision ?? 0}
-        onChanged={() => void refresh().catch(report)}
-        onPermissionError={report}
-      />
-      <CardWalletPanel
-        session={session}
-        active={active}
-        cards={cardChoices.cards}
-        revisionHint={snapshot?.preferenceRevision ?? 0}
-        onChanged={() => void refresh().catch(report)}
-        onPermissionError={report}
-      />
-      <article className="card-catalog-panel">
-        <h2>自建卡</h2>
-        <form
-          className="card-catalog-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void write(
-              "custom_create",
-              "/account/card-catalog/custom",
-              "POST",
-              form,
-            );
-          }}
-        >
-          {(
-            [
-              ["name", "卡名", 60],
-              ["bank", "银行", 60],
-              ["region", "地区", 24],
-              ["brand", "卡组织", 24],
-              ["level", "等级", 24],
-              ["image", "卡面图片地址", 300],
-            ] as const
-          ).map(([key, label, maxLength]) => (
-            <label key={key}>
-              {label}
-              <input
-                value={form[key]}
-                maxLength={maxLength}
-                required={["name", "bank", "image"].includes(key)}
-                disabled={disabled}
-                list={key === "image" ? "card-catalog-images" : undefined}
-                onChange={(event) =>
-                  setForm((value) => ({ ...value, [key]: event.target.value }))
-                }
-              />
-            </label>
-          ))}
-          <label>
-            类型
-            <SelectMenu
-              label="卡片类型"
-              value={form.type}
-              options={types}
-              disabled={disabled}
-              onChange={(value) =>
-                setForm((previous) => ({ ...previous, type: value }))
-              }
-              variant="field"
-            />
-          </label>
-          <label>
-            币种范围
-            <SelectMenu
-              label="币种范围"
-              value={form.currencyScope}
-              options={currencies}
-              disabled={disabled}
-              onChange={(value) =>
-                setForm((previous) => ({ ...previous, currencyScope: value }))
-              }
-              variant="field"
-            />
-          </label>
-          <div className="card-catalog-actions">
-            <button
-              className="button primary"
-              disabled={disabled || !snapshot?.source}
-              type="submit"
-            >
-              添加
-            </button>
-          </div>
-        </form>
-        <datalist id="card-catalog-images">
-          {snapshot?.availableImages.map((image) => (
-            <option key={image.path} value={image.path} />
-          ))}
-        </datalist>
-        {snapshot?.availableImagesPartial && <p>图片候选仅显示前1000项</p>}
-        <div className="card-catalog-list">
-          {snapshot?.customCards.map((card) => (
-            <div key={card.id} className="card-catalog-row">
-              <div>
-                <strong>{card.name}</strong>
+          </form>
+          <datalist id="card-catalog-images">
+            {snapshot?.availableImages.map((image) => (
+              <option key={image.path} value={image.path} />
+            ))}
+          </datalist>
+          {snapshot?.availableImagesPartial && <p>图片候选仅显示前1000项</p>}
+          <div className="card-catalog-list">
+            {snapshot?.customCards.map((card) => (
+              <div key={card.id} className="card-catalog-row">
                 <div>
-                  {card.bank}
-                  {card.region ? ` · ${card.region}` : ""}
+                  <strong>{card.name}</strong>
+                  <div>
+                    {card.bank}
+                    {card.region ? ` · ${card.region}` : ""}
+                  </div>
+                  {card.materialState === "unverified-reference" && (
+                    <span>图片来源未核对</span>
+                  )}
                 </div>
-                {card.materialState === "unverified-reference" && (
-                  <span>图片来源未核对</span>
-                )}
+                <button
+                  className="button secondary"
+                  disabled={disabled}
+                  onClick={() => {
+                    if (window.confirm(`删除自建卡“${card.name}”？`))
+                      void write(
+                        "custom_delete",
+                        "/account/card-catalog/custom?id=" +
+                          encodeURIComponent(card.id),
+                        "DELETE",
+                      );
+                  }}
+                >
+                  删除
+                </button>
               </div>
-              <button
-                className="button secondary"
-                disabled={disabled}
-                onClick={() => {
-                  if (window.confirm(`删除自建卡“${card.name}”？`))
-                    void write(
-                      "custom_delete",
-                      "/account/card-catalog/custom?id=" +
-                        encodeURIComponent(card.id),
-                      "DELETE",
-                    );
-                }}
-              >
-                删除
-              </button>
-            </div>
-          ))}
-        </div>
-      </article>
+            ))}
+          </div>
+        </article>
+      </WorkspaceView>
     </section>
   );
 }

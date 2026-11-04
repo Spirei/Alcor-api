@@ -1,9 +1,17 @@
-import {watchRecordsPath,allDisplayedRecordsSelected} from './watch-display-state';
+import {
+  watchRecordsPath,
+  allDisplayedRecordsSelected,
+} from "./watch-display-state";
 import { PrivateAmount, MarketBadge } from "./financial-display";
-import {PortfolioAnalysis} from "./portfolio-analysis";
-import {WatchDisplaySettings,watchDisplayValue,type WatchDisplayState} from "./watch-display-settings";
-import {RecordFiles} from "./record-files";
-import {RecordBatchDelete} from "./record-batch-delete";
+import { PortfolioAnalysis } from "./portfolio-analysis";
+import { WorkspaceTabs, WorkspaceView, WorkspaceEmpty } from "./workspace-ui";
+import {
+  WatchDisplaySettings,
+  watchDisplayValue,
+  type WatchDisplayState,
+} from "./watch-display-settings";
+import { RecordFiles } from "./record-files";
+import { RecordBatchDelete } from "./record-batch-delete";
 import { Activity, useCallback, useEffect, useRef, useState } from "react";
 import { Plus, RefreshCw, Trash2, Pencil } from "lucide-react";
 import { api, ApiError } from "./api";
@@ -41,7 +49,13 @@ import {
   type BrokerAccount as Broker,
 } from "./broker-account-state";
 type RecordRow = {
-  accountMarket?: string; source?: string; watchGroupId?: string; note?: string; registeredQty?: string|null; registeredCost?: string|null; registeredPrice?: string|null;
+  accountMarket?: string;
+  source?: string;
+  watchGroupId?: string;
+  note?: string;
+  registeredQty?: string | null;
+  registeredCost?: string | null;
+  registeredPrice?: string | null;
   id: string;
   name: string;
   code: string;
@@ -57,8 +71,8 @@ type RecordRow = {
   group: string;
 };
 type Listing = {
-  displayRevision?: string|null;
-  displayMode?: "all"|"watch";
+  displayRevision?: string | null;
+  displayMode?: "all" | "watch";
   records: RecordRow[];
   total: number;
   page: number;
@@ -81,7 +95,9 @@ const emptyDraft = {
   brokerAccountId: "",
   group: "",
   note: "",
-  accountMarket: "", source: "", watchGroupId: "",
+  accountMarket: "",
+  source: "",
+  watchGroupId: "",
 };
 const display = (value: string | null) => (value === null ? "—" : value);
 
@@ -96,30 +112,34 @@ export function PortfolioPage({ session }: { session: Session }) {
 }
 
 function PortfolioSession({ session }: { session: Session }) {
-  const [instrumentRecord,setInstrumentRecord] = useState<string | null>(null);
-  const [sharedBrokersOpen,setSharedBrokersOpen] = useState(false);
-  const [transferAccount,setTransferAccount] = useState<string | null>(null);
-  const [iconAccount,setIconAccount] = useState<Broker | null>(null);
-  const [sourceAccount,setSourceAccount] = useState<string | null>(null);
-  const [section, setSection] = useState<"records" | "brokers" | "ledger">(
-    "records",
+  const [instrumentRecord, setInstrumentRecord] = useState<string | null>(null);
+  const [sharedBrokersOpen, setSharedBrokersOpen] = useState(false);
+  const [transferAccount, setTransferAccount] = useState<string | null>(null);
+  const [iconAccount, setIconAccount] = useState<Broker | null>(null);
+  const [sourceAccount, setSourceAccount] = useState<string | null>(null);
+  const [section, setSection] = useState<
+    "records" | "brokers" | "analysis" | "ledger"
+  >("brokers");
+  const [watchDisplay, setWatchDisplay] = useState<WatchDisplayState | null>(
+    null,
   );
-  const [watchDisplay,setWatchDisplay]=useState<WatchDisplayState|null>(null);
-  const [onlyFollowed,setOnlyFollowed]=useState(true);
-  const [selectedRecords,setSelectedRecords]=useState<Set<string>>(new Set());
-  useEffect(()=>setSelectedRecords(new Set()),[watchDisplay,onlyFollowed]);
+  const [onlyFollowed, setOnlyFollowed] = useState(true);
+  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(
+    new Set(),
+  );
+  useEffect(() => setSelectedRecords(new Set()), [watchDisplay, onlyFollowed]);
   const [records, setRecords] = useState<Listing | null>(null);
-  useEffect(()=>setSelectedRecords(new Set()),[records]);
+  useEffect(() => setSelectedRecords(new Set()), [records]);
   const [brokers, setBrokers] = useState<Broker[] | null>(null);
   const [page, setPage] = useState(1);
   const [brokerFilter, setBrokerFilter] = useState("");
   const collectionRevision = useRef<number | null>(null);
-  const displayRevision = useRef<string|null>(null);
+  const displayRevision = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [receiptMessage, setReceiptMessage] = useState("");
   const [recordsError, setRecordsError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [editingRecord,setEditingRecord]=useState<RecordRow|null>(null);
+  const [editingRecord, setEditingRecord] = useState<RecordRow | null>(null);
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -230,7 +250,14 @@ function PortfolioSession({ session }: { session: Session }) {
   }, []);
   useEffect(() => {
     if (document.hidden) return;
-    if(page>1&&(collectionRevision.current===null||(onlyFollowed&&!displayRevision.current))){setPage(1);return;}
+    if (
+      page > 1 &&
+      (collectionRevision.current === null ||
+        (onlyFollowed && !displayRevision.current))
+    ) {
+      setPage(1);
+      return;
+    }
     active.current = true;
     try {
       const stored = restoreOperation(sessionStorage, receiptScope);
@@ -249,9 +276,16 @@ function PortfolioSession({ session }: { session: Session }) {
     setRecordsError("");
     const revision = collectionRevision.current;
     Promise.allSettled([
-      api<Listing>(watchRecordsPath(recordsPagePath(page, revision, brokerFilter),onlyFollowed,displayRevision.current), {
-        signal: controller.signal,
-      }),
+      api<Listing>(
+        watchRecordsPath(
+          recordsPagePath(page, revision, brokerFilter),
+          onlyFollowed,
+          displayRevision.current,
+        ),
+        {
+          signal: controller.signal,
+        },
+      ),
       api<{ items: Broker[] }>("/broker-accounts", {
         signal: controller.signal,
       }),
@@ -274,8 +308,16 @@ function PortfolioSession({ session }: { session: Session }) {
       }
       if (directory.status === "fulfilled") setBrokers(directory.value.items);
       if (listing.status === "fulfilled") {
-        if(onlyFollowed&&(listing.value.displayMode!=="watch"||!listing.value.displayRevision||!/^[a-f0-9]{64}$/.test(listing.value.displayRevision))){setRecordsError("关注显示版本待核对，请重新读取");return;}
-        displayRevision.current=listing.value.displayRevision??null;
+        if (
+          onlyFollowed &&
+          (listing.value.displayMode !== "watch" ||
+            !listing.value.displayRevision ||
+            !/^[a-f0-9]{64}$/.test(listing.value.displayRevision))
+        ) {
+          setRecordsError("关注显示版本待核对，请重新读取");
+          return;
+        }
+        displayRevision.current = listing.value.displayRevision ?? null;
         collectionRevision.current = listing.value.collectionRevision;
         setRecords(listing.value);
       } else {
@@ -308,7 +350,7 @@ function PortfolioSession({ session }: { session: Session }) {
       setRecords(null);
       setBrokers(null);
     };
-  }, [page, generation, brokerFilter,onlyFollowed]);
+  }, [page, generation, brokerFilter, onlyFollowed]);
   useEffect(() => {
     const onVisibility = () => {
       if (document.hidden) {
@@ -338,7 +380,10 @@ function PortfolioSession({ session }: { session: Session }) {
     const timer = setTimeout(expire, remaining);
     return () => clearTimeout(timer);
   }, [preview]);
-  const prepare = async (kind: "create" | "update" | "delete", row?: RecordRow) => {
+  const prepare = async (
+    kind: "create" | "update" | "delete",
+    row?: RecordRow,
+  ) => {
     if (
       document.hidden ||
       !active.current ||
@@ -359,7 +404,12 @@ function PortfolioSession({ session }: { session: Session }) {
             kind !== "delete"
               ? {
                   kind,
-                  ...(kind === "update" && editingRecord ? {recordId:editingRecord.id,revision:editingRecord.revision}:{}),
+                  ...(kind === "update" && editingRecord
+                    ? {
+                        recordId: editingRecord.id,
+                        revision: editingRecord.revision,
+                      }
+                    : {}),
                   data: {
                     ...draft,
                     qty: draft.qty || null,
@@ -379,10 +429,55 @@ function PortfolioSession({ session }: { session: Session }) {
       if (active.current && current === epoch.current) setBusy(false);
     }
   };
-  const startRecordEdit = async (row:RecordRow) => {
-    if(busy||pendingRef.current||document.hidden||!active.current)return;
-    const run=epoch.current;setBusy(true);setError("");setPreview(null);
-    try{const result=await api<{record:RecordRow}>("/portfolio/records/"+encodeURIComponent(row.id));if(!active.current||epoch.current!==run||document.hidden)return;const current=result.record;const registered=(name:"qty"|"cost"|"price")=>{const key=({qty:"registeredQty",cost:"registeredCost",price:"registeredPrice"} as const)[name];return (Object.prototype.hasOwnProperty.call(current,key)?current[key]:current[name])??"";};setEditingRecord(current);setDraft({...emptyDraft,name:current.name,code:current.code,market:current.market,qty:registered("qty"),cost:registered("cost"),price:registered("price"),group:current.group,note:current.note||"",brokerAccountId:current.brokerAccountId,accountMarket:current.accountMarket||"",source:current.source||"",watchGroupId:current.watchGroupId||""});setEdit(true);}catch(e){if(epoch.current===run)report(e);}finally{if(epoch.current===run)setBusy(false);}
+  const startRecordEdit = async (row: RecordRow) => {
+    if (busy || pendingRef.current || document.hidden || !active.current)
+      return;
+    const run = epoch.current;
+    setBusy(true);
+    setError("");
+    setPreview(null);
+    try {
+      const result = await api<{ record: RecordRow }>(
+        "/portfolio/records/" + encodeURIComponent(row.id),
+      );
+      if (!active.current || epoch.current !== run || document.hidden) return;
+      const current = result.record;
+      const registered = (name: "qty" | "cost" | "price") => {
+        const key = (
+          {
+            qty: "registeredQty",
+            cost: "registeredCost",
+            price: "registeredPrice",
+          } as const
+        )[name];
+        return (
+          (Object.prototype.hasOwnProperty.call(current, key)
+            ? current[key]
+            : current[name]) ?? ""
+        );
+      };
+      setEditingRecord(current);
+      setDraft({
+        ...emptyDraft,
+        name: current.name,
+        code: current.code,
+        market: current.market,
+        qty: registered("qty"),
+        cost: registered("cost"),
+        price: registered("price"),
+        group: current.group,
+        note: current.note || "",
+        brokerAccountId: current.brokerAccountId,
+        accountMarket: current.accountMarket || "",
+        source: current.source || "",
+        watchGroupId: current.watchGroupId || "",
+      });
+      setEdit(true);
+    } catch (e) {
+      if (epoch.current === run) report(e);
+    } finally {
+      if (epoch.current === run) setBusy(false);
+    }
   };
   const confirm = async () => {
     if (!preview || pendingRef.current) return;
@@ -399,7 +494,7 @@ function PortfolioSession({ session }: { session: Session }) {
     setPreview(null);
     setEdit(false);
     try {
-      const result=await api<{requestId:string;state:string}>(
+      const result = await api<{ requestId: string; state: string }>(
         "/portfolio/records/confirm",
         {
           method: "POST",
@@ -407,7 +502,8 @@ function PortfolioSession({ session }: { session: Session }) {
         },
         session.csrf,
       );
-      if(result.requestId!==id||result.state!=="completed")throw new Error("原记录操作仍待核对");
+      if (result.requestId !== id || result.state !== "completed")
+        throw new Error("原记录操作仍待核对");
       if (!changeReceipt(id, null)) return;
       setEditingRecord(null);
       setEdit(false);
@@ -432,7 +528,14 @@ function PortfolioSession({ session }: { session: Session }) {
   };
   const checkReceipt = async (close = false) => {
     const original = pendingRef.current;
-    if (!original || busy || !active.current || document.hidden || (close && original.kind !== "cash")) return;
+    if (
+      !original ||
+      busy ||
+      !active.current ||
+      document.hidden ||
+      (close && original.kind !== "cash")
+    )
+      return;
     const current = epoch.current;
     setBusy(true);
     setError("");
@@ -444,11 +547,29 @@ function PortfolioSession({ session }: { session: Session }) {
         executed?: boolean;
         message?: string;
         error?: { message?: string };
-      }>(`${operationPath(original.kind)}/operations/${original.id}${close ? "/close" : ""}`,close ? { method: "POST",body: "{}" } : {},close ? session.csrf : undefined);
-      if (!active.current || epoch.current !== current || document.hidden) return;
-      if (["record","cash","trade","order","trade_amendment"].includes(original.kind) && result.requestId !== original.id)
+      }>(
+        `${operationPath(original.kind)}/operations/${original.id}${close ? "/close" : ""}`,
+        close ? { method: "POST", body: "{}" } : {},
+        close ? session.csrf : undefined,
+      );
+      if (!active.current || epoch.current !== current || document.hidden)
+        return;
+      if (
+        ["record", "cash", "trade", "order", "trade_amendment"].includes(
+          original.kind,
+        ) &&
+        result.requestId !== original.id
+      )
         throw new Error("原请求回执仍待核对");
-      if (result.state !== "failed" && result.state !== "completed" && !(original.kind === "cash" && result.state === "closed" && result.executed === false))
+      if (
+        result.state !== "failed" &&
+        result.state !== "completed" &&
+        !(
+          original.kind === "cash" &&
+          result.state === "closed" &&
+          result.executed === false
+        )
+      )
         throw new Error("原请求尚无最终回执，请稍后继续查询。");
       if (result.state === "failed") {
         if (!changeReceipt(original.id, null)) return;
@@ -462,9 +583,13 @@ function PortfolioSession({ session }: { session: Session }) {
       setNewBroker(false);
       refresh();
     } catch (e) {
-      if (!active.current || epoch.current !== current || document.hidden) return;
+      if (!active.current || epoch.current !== current || document.hidden)
+        return;
       if (e instanceof ApiError && e.status === 404) {
-        if (original.kind !== "cash" && mayReleaseMissingReceipt(original.submissionStatus)) {
+        if (
+          original.kind !== "cash" &&
+          mayReleaseMissingReceipt(original.submissionStatus)
+        ) {
           if (changeReceipt(original.id, null)) refresh();
         } else setError("原请求尚无最终回执，请稍后继续查询。");
       } else report(e);
@@ -473,9 +598,19 @@ function PortfolioSession({ session }: { session: Session }) {
     }
   };
   const editBroker = (id: string) => {
-    if (busy || pendingRef.current || journalError || !active.current || document.hidden) return;
-    const row = brokers?.find(account => account.id === id);
-    if (!row) { setError("账户已变化，请重新读取"); return; }
+    if (
+      busy ||
+      pendingRef.current ||
+      journalError ||
+      !active.current ||
+      document.hidden
+    )
+      return;
+    const row = brokers?.find((account) => account.id === id);
+    if (!row) {
+      setError("账户已变化，请重新读取");
+      return;
+    }
     setBrokerEditing(row);
     setNewBroker(true);
   };
@@ -494,7 +629,8 @@ function PortfolioSession({ session }: { session: Session }) {
         { method: "POST", body: JSON.stringify({ data, preview: proof }) },
         session.csrf,
       );
-      if (result.state !== "completed" || result.requestId !== id) throw new Error("操作结果待核对");
+      if (result.state !== "completed" || result.requestId !== id)
+        throw new Error("操作结果待核对");
       if (!changeReceipt(id, null)) return false;
       refresh();
       return true;
@@ -516,7 +652,7 @@ function PortfolioSession({ session }: { session: Session }) {
       setBusy(false);
     }
   };
-  const displayedRecords=records?.records??[];
+  const displayedRecords = records?.records ?? [];
   return (
     <section className="portfolio-page">
       <div className="page-heading">
@@ -530,26 +666,17 @@ function PortfolioSession({ session }: { session: Session }) {
           <RefreshCw size={18} />
         </button>
       </div>
-      <div className="portfolio-tabs" role="group" aria-label="资产视图">
-        <button
-          className={section === "records" ? "button primary" : "button"}
-          onClick={() => setSection("records")}
-        >
-          持仓与自选
-        </button>
-        <button
-          className={section === "brokers" ? "button primary" : "button"}
-          onClick={() => setSection("brokers")}
-        >
-          券商账户
-        </button>
-        <button
-          className={section === "ledger" ? "button primary" : "button"}
-          onClick={() => setSection("ledger")}
-        >
-          现金与交易
-        </button>
-      </div>
+      <WorkspaceTabs
+        label="资产视图"
+        value={section}
+        onChange={setSection}
+        items={[
+          { value: "brokers", label: "账户资产" },
+          { value: "analysis", label: "资产分析" },
+          { value: "records", label: "持仓与自选" },
+          { value: "ledger", label: "现金与交易" },
+        ]}
+      />
       {section === "records" && recordsError && (
         <p role="alert" className="error">
           {recordsError}
@@ -571,10 +698,18 @@ function PortfolioSession({ session }: { session: Session }) {
           >
             查询原请求
           </button>
-          {pending.kind === "cash" && <button className="button" disabled={busy} onClick={() => void checkReceipt(true)}>关闭未执行请求</button>}
+          {pending.kind === "cash" && (
+            <button
+              className="button"
+              disabled={busy}
+              onClick={() => void checkReceipt(true)}
+            >
+              关闭未执行请求
+            </button>
+          )}
         </div>
       )}
-      <Activity mode={section === "ledger" ? "visible" : "hidden"}>
+      <WorkspaceView active={section === "ledger"} label="现金与交易">
         <FinancialLedger
           session={session}
           brokers={brokers}
@@ -583,7 +718,15 @@ function PortfolioSession({ session }: { session: Session }) {
           blocked={!!pending || !!journalError || busy}
           onSubmit={submitFinancial}
         />
-      </Activity>
+      </WorkspaceView>
+      <WorkspaceView active={section === "analysis"} label="资产分析">
+        <PortfolioAnalysis
+          session={session}
+          active={section === "analysis"}
+          generation={generation}
+          onDenied={report}
+        />
+      </WorkspaceView>
       {section === "records" ? (
         <>
           <div className="portfolio-actions">
@@ -605,19 +748,82 @@ function PortfolioSession({ session }: { session: Session }) {
             />
             <button
               className="button"
-              onClick={() => {setEditingRecord(null);setDraft(emptyDraft);setEdit(true);}}
+              onClick={() => {
+                setEditingRecord(null);
+                setDraft(emptyDraft);
+                setEdit(true);
+              }}
               disabled={!!pending || !!journalError || busy || !brokers}
             >
               <Plus size={16} />
               添加记录
             </button>
           </div>
-          <PortfolioAnalysis session={session} active={section==="records"} generation={generation} onDenied={report}/>
-          <WatchDisplaySettings session={session} records={records?.records||[]} complete={!!records&&records.total===records.records.length&&!brokerFilter} active={section==="records"} blocked={busy||!!pending||!!journalError} onState={setWatchDisplay} onChanged={refresh} onDenied={report}/>
-          <label><input type="checkbox" checked={onlyFollowed} onChange={e=>{setOnlyFollowed(e.target.checked);refresh();}}/>仅显示关注记录</label>
-          <RecordFiles session={session} records={records?.records||[]} brokers={brokers||[]} generation={generation} blocked={busy||!!pending||!!journalError} onChanged={refresh} onDenied={report}/>
-          <RecordBatchDelete session={session} records={(records?.records||[]).filter(row=>selectedRecords.has(row.id))} collectionRevision={records?.collectionRevision??0} generation={generation} blocked={busy||!!pending||!!journalError||!records} onChanged={refresh} onDenied={report}/>
-          {records&&records.records.some(row=>watchDisplayValue(watchDisplay,"hidden",row.id)===true)&&<p>本页已取消关注 {records.records.filter(row=>watchDisplayValue(watchDisplay,"hidden",row.id)===true).length} 条；持仓与原记录保留</p>}
+          <WatchDisplaySettings
+            session={session}
+            records={records?.records || []}
+            complete={
+              !!records &&
+              records.total === records.records.length &&
+              !brokerFilter
+            }
+            active={section === "records"}
+            blocked={busy || !!pending || !!journalError}
+            onState={setWatchDisplay}
+            onChanged={refresh}
+            onDenied={report}
+          />
+          <label>
+            <input
+              type="checkbox"
+              checked={onlyFollowed}
+              onChange={(e) => {
+                setOnlyFollowed(e.target.checked);
+                refresh();
+              }}
+            />
+            仅显示关注记录
+          </label>
+          <details className="workspace-tools">
+            <summary>记录文件与批量操作</summary>
+            <RecordFiles
+              session={session}
+              records={records?.records || []}
+              brokers={brokers || []}
+              generation={generation}
+              blocked={busy || !!pending || !!journalError}
+              onChanged={refresh}
+              onDenied={report}
+            />
+            <RecordBatchDelete
+              session={session}
+              records={(records?.records || []).filter((row) =>
+                selectedRecords.has(row.id),
+              )}
+              collectionRevision={records?.collectionRevision ?? 0}
+              generation={generation}
+              blocked={busy || !!pending || !!journalError || !records}
+              onChanged={refresh}
+              onDenied={report}
+            />
+          </details>
+          {records &&
+            records.records.some(
+              (row) =>
+                watchDisplayValue(watchDisplay, "hidden", row.id) === true,
+            ) && (
+              <p>
+                本页已取消关注{" "}
+                {
+                  records.records.filter(
+                    (row) =>
+                      watchDisplayValue(watchDisplay, "hidden", row.id) ===
+                      true,
+                  ).length
+                }{" "}
+                条；持仓与原记录保留
+              </p>
+            )}
           {!records ? (
             !error ? (
               <p role="status">正在读取…</p>
@@ -630,7 +836,24 @@ function PortfolioSession({ session }: { session: Session }) {
                 <table>
                   <thead>
                     <tr>
-                      <th><input type="checkbox" aria-label="选择本页全部记录" checked={allDisplayedRecordsSelected(displayedRecords,selectedRecords)} disabled={busy||!!pending||!!journalError} onChange={event=>setSelectedRecords(event.target.checked?new Set(displayedRecords.map(row=>row.id)):new Set())}/></th>
+                      <th>
+                        <input
+                          type="checkbox"
+                          aria-label="选择本页全部记录"
+                          checked={allDisplayedRecordsSelected(
+                            displayedRecords,
+                            selectedRecords,
+                          )}
+                          disabled={busy || !!pending || !!journalError}
+                          onChange={(event) =>
+                            setSelectedRecords(
+                              event.target.checked
+                                ? new Set(displayedRecords.map((row) => row.id))
+                                : new Set(),
+                            )
+                          }
+                        />
+                      </th>
                       <th>证券</th>
                       <th>市场</th>
                       <th>数量</th>
@@ -645,23 +868,129 @@ function PortfolioSession({ session }: { session: Session }) {
                   <tbody>
                     {displayedRecords.map((row) => (
                       <tr key={row.id}>
-                        <td><input type="checkbox" aria-label={`选择 ${row.name}`} checked={selectedRecords.has(row.id)} disabled={busy||!!pending||!!journalError} onChange={event=>setSelectedRecords(previous=>{const next=new Set(previous);if(event.target.checked)next.add(row.id);else next.delete(row.id);return next;})}/></td>
                         <td>
-                          {typeof watchDisplayValue(watchDisplay,'aliases',row.id)==='string'&&String(watchDisplayValue(watchDisplay,'aliases',row.id)).trim()?String(watchDisplayValue(watchDisplay,'aliases',row.id)):row.name}
-                          <small>{row.code}{watchDisplayValue(watchDisplay,'pinned',row.id)===true?' · 置顶':''}{watchDisplayValue(watchDisplay,'hidden',row.id)===true?' · 已取消关注':''}</small>
-                          {typeof watchDisplayValue(watchDisplay,'notes',row.id)==='string'&&<small>显示备注 · {String(watchDisplayValue(watchDisplay,'notes',row.id))}</small>}
-                          {row.officialObservation && <small>官方账单 · {row.officialObservation.reportDate ? `截至 ${row.officialObservation.reportDate}` : "报告日期未知"}</small>}
+                          <input
+                            type="checkbox"
+                            aria-label={`选择 ${row.name}`}
+                            checked={selectedRecords.has(row.id)}
+                            disabled={busy || !!pending || !!journalError}
+                            onChange={(event) =>
+                              setSelectedRecords((previous) => {
+                                const next = new Set(previous);
+                                if (event.target.checked) next.add(row.id);
+                                else next.delete(row.id);
+                                return next;
+                              })
+                            }
+                          />
                         </td>
-                        <td><MarketBadge market={row.market}/></td>
-                        <td><PrivateAmount>{row.officialObservation ? row.qty ?? "未知" : display(row.qty)}</PrivateAmount></td>
-                        <td><PrivateAmount>{row.officialObservation ? row.cost ?? "未知" : display(row.cost)}</PrivateAmount>
-                          {row.costAuthority === "official_reported_cost_basis" && <small>报告成本基础 · 非实付费用确认</small>}
+                        <td>
+                          {typeof watchDisplayValue(
+                            watchDisplay,
+                            "aliases",
+                            row.id,
+                          ) === "string" &&
+                          String(
+                            watchDisplayValue(watchDisplay, "aliases", row.id),
+                          ).trim()
+                            ? String(
+                                watchDisplayValue(
+                                  watchDisplay,
+                                  "aliases",
+                                  row.id,
+                                ),
+                              )
+                            : row.name}
+                          <small>
+                            {row.code}
+                            {watchDisplayValue(
+                              watchDisplay,
+                              "pinned",
+                              row.id,
+                            ) === true
+                              ? " · 置顶"
+                              : ""}
+                            {watchDisplayValue(
+                              watchDisplay,
+                              "hidden",
+                              row.id,
+                            ) === true
+                              ? " · 已取消关注"
+                              : ""}
+                          </small>
+                          {typeof watchDisplayValue(
+                            watchDisplay,
+                            "notes",
+                            row.id,
+                          ) === "string" && (
+                            <small>
+                              显示备注 ·{" "}
+                              {String(
+                                watchDisplayValue(
+                                  watchDisplay,
+                                  "notes",
+                                  row.id,
+                                ),
+                              )}
+                            </small>
+                          )}
+                          {row.officialObservation && (
+                            <small>
+                              官方账单 ·{" "}
+                              {row.officialObservation.reportDate
+                                ? `截至 ${row.officialObservation.reportDate}`
+                                : "报告日期未知"}
+                            </small>
+                          )}
                         </td>
-                        <td><PrivateAmount>{row.officialObservation ? row.price ?? "未知" : display(row.price)}</PrivateAmount><small>{row.officialObservation ? "报告价格" : "登记价格"}</small></td>
+                        <td>
+                          <MarketBadge market={row.market} />
+                        </td>
+                        <td>
+                          <PrivateAmount>
+                            {row.officialObservation
+                              ? (row.qty ?? "未知")
+                              : display(row.qty)}
+                          </PrivateAmount>
+                        </td>
+                        <td>
+                          <PrivateAmount>
+                            {row.officialObservation
+                              ? (row.cost ?? "未知")
+                              : display(row.cost)}
+                          </PrivateAmount>
+                          {row.costAuthority ===
+                            "official_reported_cost_basis" && (
+                            <small>报告成本基础 · 非实付费用确认</small>
+                          )}
+                        </td>
+                        <td>
+                          <PrivateAmount>
+                            {row.officialObservation
+                              ? (row.price ?? "未知")
+                              : display(row.price)}
+                          </PrivateAmount>
+                          <small>
+                            {row.officialObservation ? "报告价格" : "登记价格"}
+                          </small>
+                        </td>
                         <td>{accountLabel(row.brokerAccountId, brokers)}</td>
                         <td>
-                          <button className="icon-button" aria-label={`编辑 ${row.name}`} disabled={busy||!!pending||!!journalError} onClick={()=>void startRecordEdit(row)}><Pencil size={16}/></button>
-                          <button className="button" disabled={busy || !!pending || !!journalError} onClick={()=>setInstrumentRecord(row.id)}>证券声明</button>
+                          <button
+                            className="icon-button"
+                            aria-label={`编辑 ${row.name}`}
+                            disabled={busy || !!pending || !!journalError}
+                            onClick={() => void startRecordEdit(row)}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            className="button"
+                            disabled={busy || !!pending || !!journalError}
+                            onClick={() => setInstrumentRecord(row.id)}
+                          >
+                            证券声明
+                          </button>
                           <button
                             className="icon-button"
                             aria-label={`删除 ${row.name}`}
@@ -705,7 +1034,7 @@ function PortfolioSession({ session }: { session: Session }) {
               className="button"
               onClick={() => {
                 setBrokerEditing(null);
-                          setNewBroker(true);
+                setNewBroker(true);
               }}
               disabled={!!pending || !!journalError || busy || !brokers}
             >
@@ -716,12 +1045,24 @@ function PortfolioSession({ session }: { session: Session }) {
           {!brokers ? (
             <p role="status">正在读取…</p>
           ) : brokers.length === 0 ? (
-            <p>暂无账户</p>
+            <WorkspaceEmpty
+              title="暂无账户"
+              description="添加账户后，在这里查看资产与原币现金。"
+            />
           ) : (
             <ul className="portfolio-brokers">
               {brokers.map((b) => (
                 <li key={b.id}>
-                  <span>{b.name}<small>{b.holding_source === "official" ? "官方账单" : b.holding_source === "manual" ? "手工登记" : "来源未核实"}</small></span>
+                  <span>
+                    {b.name}
+                    <small>
+                      {b.holding_source === "official"
+                        ? "官方账单"
+                        : b.holding_source === "manual"
+                          ? "手工登记"
+                          : "来源未核实"}
+                    </small>
+                  </span>
                   <span>
                     {b.account_kind === "real"
                       ? "真实"
@@ -736,9 +1077,32 @@ function PortfolioSession({ session }: { session: Session }) {
                       "未指定机构"}
                   </span>
                   <span className="broker-row-actions">
-                    {b.holding_source === "manual" && ["real","simulated"].includes(b.account_kind) && <button className="button" disabled={busy || !!pending || !!journalError} onClick={()=>setTransferAccount(b.id)}>持仓转仓</button>}
-                    <button className="button" disabled={busy || !!pending || !!journalError} onClick={()=>setIconAccount(b)}>图标</button>
-                    {b.holding_source === "official" && <button className="button" disabled={busy || !!pending || !!journalError} onClick={()=>setSourceAccount(b.id)}>持仓来源</button>}
+                    {b.holding_source === "manual" &&
+                      ["real", "simulated"].includes(b.account_kind) && (
+                        <button
+                          className="button"
+                          disabled={busy || !!pending || !!journalError}
+                          onClick={() => setTransferAccount(b.id)}
+                        >
+                          持仓转仓
+                        </button>
+                      )}
+                    <button
+                      className="button"
+                      disabled={busy || !!pending || !!journalError}
+                      onClick={() => setIconAccount(b)}
+                    >
+                      图标
+                    </button>
+                    {b.holding_source === "official" && (
+                      <button
+                        className="button"
+                        disabled={busy || !!pending || !!journalError}
+                        onClick={() => setSourceAccount(b.id)}
+                      >
+                        持仓来源
+                      </button>
+                    )}
                     <button
                       className="button"
                       onClick={() => {
@@ -751,8 +1115,26 @@ function PortfolioSession({ session }: { session: Session }) {
                     >
                       原币现金
                     </button>
-                    <button className="button" disabled={busy || !!pending || !!journalError || b.holding_source !== "manual" || !["real","simulated"].includes(b.account_kind)} onClick={() => setBindingAccount(b.id)}>记录归属</button>
-                    <button className="button" disabled={busy || !!pending || !!journalError} onClick={() => setStatementAccount(b.id)}>账单预览</button>
+                    <button
+                      className="button"
+                      disabled={
+                        busy ||
+                        !!pending ||
+                        !!journalError ||
+                        b.holding_source !== "manual" ||
+                        !["real", "simulated"].includes(b.account_kind)
+                      }
+                      onClick={() => setBindingAccount(b.id)}
+                    >
+                      记录归属
+                    </button>
+                    <button
+                      className="button"
+                      disabled={busy || !!pending || !!journalError}
+                      onClick={() => setStatementAccount(b.id)}
+                    >
+                      账单预览
+                    </button>
                     <button
                       className="icon-button"
                       aria-label={`编辑账户 ${b.name}`}
@@ -771,12 +1153,23 @@ function PortfolioSession({ session }: { session: Session }) {
               ))}
             </ul>
           )}
-          {session.user.role === "admin" && <details onToggle={event=>setSharedBrokersOpen(event.currentTarget.open)}><summary>共享券商目录</summary><Activity mode={sharedBrokersOpen ? "visible" : "hidden"}><SharedBrokerSettings session={session}/></Activity></details>}
+          {session.user.role === "admin" && (
+            <details
+              onToggle={(event) =>
+                setSharedBrokersOpen(event.currentTarget.open)
+              }
+            >
+              <summary>共享券商目录</summary>
+              <Activity mode={sharedBrokersOpen ? "visible" : "hidden"}>
+                <SharedBrokerSettings session={session} />
+              </Activity>
+            </details>
+          )}
         </>
       ) : null}
       {edit && !preview && (
         <Dialog
-          title={editingRecord?"编辑记录":"添加记录"}
+          title={editingRecord ? "编辑记录" : "添加记录"}
           onClose={() => {
             if (!busy) setEdit(false);
           }}
@@ -785,7 +1178,7 @@ function PortfolioSession({ session }: { session: Session }) {
             className="portfolio-form"
             onSubmit={(e) => {
               e.preventDefault();
-              void prepare(editingRecord?"update":"create");
+              void prepare(editingRecord ? "update" : "create");
             }}
           >
             {section === "records" && recordsError && (
@@ -847,7 +1240,23 @@ function PortfolioSession({ session }: { session: Session }) {
                 ]}
               />
             </label>
-            {draft.market === "HK" && <label>账户市场<SelectMenu label="账户市场" variant="field" value={draft.accountMarket} onChange={value=>setDraft({...draft,accountMarket:value})} options={[{value:"",label:"HK"},{value:"CN",label:"CN · 港股通"}]}/></label>}
+            {draft.market === "HK" && (
+              <label>
+                账户市场
+                <SelectMenu
+                  label="账户市场"
+                  variant="field"
+                  value={draft.accountMarket}
+                  onChange={(value) =>
+                    setDraft({ ...draft, accountMarket: value })
+                  }
+                  options={[
+                    { value: "", label: "HK" },
+                    { value: "CN", label: "CN · 港股通" },
+                  ]}
+                />
+              </label>
+            )}
             {(["qty", "cost", "price"] as const).map((key) => (
               <label key={key}>
                 {key === "qty" ? "数量" : key === "cost" ? "成本" : "登记价格"}
@@ -860,8 +1269,20 @@ function PortfolioSession({ session }: { session: Session }) {
                 />
               </label>
             ))}
-            <label>分组<input value={draft.group} maxLength={100} onChange={e=>setDraft({...draft,group:e.target.value})}/></label>
-            {editingRecord&&<p>原记录 {editingRecord.id} · 来源 {draft.source||"未知"} · 历史 {editingRecord.historyState}</p>}
+            <label>
+              分组
+              <input
+                value={draft.group}
+                maxLength={100}
+                onChange={(e) => setDraft({ ...draft, group: e.target.value })}
+              />
+            </label>
+            {editingRecord && (
+              <p>
+                原记录 {editingRecord.id} · 来源 {draft.source || "未知"} · 历史{" "}
+                {editingRecord.historyState}
+              </p>
+            )}
             <label>
               备注
               <input
@@ -955,12 +1376,74 @@ function PortfolioSession({ session }: { session: Session }) {
           />
         </Dialog>
       )}
-      {instrumentRecord && <Dialog title="证券声明" onClose={()=>setInstrumentRecord(null)}><AssetInstrumentSettings session={session} recordId={instrumentRecord} onChanged={()=>{setInstrumentRecord(null);refresh();}} /></Dialog>}
-      {transferAccount && <Dialog title="持仓转仓" onClose={()=>setTransferAccount(null)}><BrokerPositionTransferSettings session={session} accountId={transferAccount} onChanged={()=>{setTransferAccount(null);refresh();}} /></Dialog>}
-      {iconAccount && <Dialog title="账户图标" onClose={()=>setIconAccount(null)}><BrokerIconSettings session={session} account={iconAccount} onChanged={()=>{setIconAccount(null);refresh();}} /></Dialog>}
-      {sourceAccount && <Dialog title="持仓来源" onClose={()=>setSourceAccount(null)}><BrokerHoldingSourceSettings session={session} accountId={sourceAccount} onChanged={()=>{setSourceAccount(null);refresh();}} /></Dialog>}
-      {bindingAccount && <Dialog title="记录归属" onClose={() => setBindingAccount(null)}><BrokerBindingsSettings session={session} initialAccountId={bindingAccount} onChanged={() => { setBindingAccount(null); refresh(); }} /></Dialog>}
-      {statementAccount && <Dialog title="账单预览" onClose={() => setStatementAccount(null)}><BrokerStatementPreview session={session} initialAccountId={statementAccount} /></Dialog>}
+      {instrumentRecord && (
+        <Dialog title="证券声明" onClose={() => setInstrumentRecord(null)}>
+          <AssetInstrumentSettings
+            session={session}
+            recordId={instrumentRecord}
+            onChanged={() => {
+              setInstrumentRecord(null);
+              refresh();
+            }}
+          />
+        </Dialog>
+      )}
+      {transferAccount && (
+        <Dialog title="持仓转仓" onClose={() => setTransferAccount(null)}>
+          <BrokerPositionTransferSettings
+            session={session}
+            accountId={transferAccount}
+            onChanged={() => {
+              setTransferAccount(null);
+              refresh();
+            }}
+          />
+        </Dialog>
+      )}
+      {iconAccount && (
+        <Dialog title="账户图标" onClose={() => setIconAccount(null)}>
+          <BrokerIconSettings
+            session={session}
+            account={iconAccount}
+            onChanged={() => {
+              setIconAccount(null);
+              refresh();
+            }}
+          />
+        </Dialog>
+      )}
+      {sourceAccount && (
+        <Dialog title="持仓来源" onClose={() => setSourceAccount(null)}>
+          <BrokerHoldingSourceSettings
+            session={session}
+            accountId={sourceAccount}
+            onChanged={() => {
+              setSourceAccount(null);
+              refresh();
+            }}
+          />
+        </Dialog>
+      )}
+      {bindingAccount && (
+        <Dialog title="记录归属" onClose={() => setBindingAccount(null)}>
+          <BrokerBindingsSettings
+            session={session}
+            initialAccountId={bindingAccount}
+            onChanged={() => {
+              setBindingAccount(null);
+              refresh();
+            }}
+          />
+        </Dialog>
+      )}
+      {statementAccount && (
+        <Dialog title="账单预览" onClose={() => setStatementAccount(null)}>
+          <BrokerStatementPreview
+            session={session}
+            initialAccountId={statementAccount}
+          />
+        </Dialog>
+      )}
     </section>
   );
 }

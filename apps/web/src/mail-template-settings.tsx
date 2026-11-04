@@ -34,27 +34,44 @@ const fields = [
   ["signature", "落款"],
 ] as const;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function MailTemplateSettings({ session }: { session: Session }) {
+export function MailTemplateSettings({
+  session,
+  expanded = false,
+}: {
+  session: Session;
+  expanded?: boolean;
+}) {
   const scope = JSON.stringify([
     session.instance_id,
     session.user.id,
     session.user.role,
     session.receipt_scope,
   ]);
-  return <TemplateSession key={JSON.stringify([scope, session.csrf, session.expires_at])} session={session} scope={scope} />;
+  return (
+    <TemplateSession
+      key={JSON.stringify([scope, session.csrf, session.expires_at])}
+      session={session}
+      scope={scope}
+      expanded={expanded}
+    />
+  );
 }
 function TemplateSession({
   session,
   scope,
+  expanded,
 }: {
   session: Session;
   scope: string;
+  expanded: boolean;
 }) {
-  const [opened, setOpened] = useState(false),
+  const [opened, setOpened] = useState(expanded),
     [head, setHead] = useState<Head | null>(null),
     [draft, setDraft] = useState<Template | null>(null);
   const [unresolved, setUnresolved] = useState(false);
-  const [preview, setPreview] = useState<(Preview & { draft: string }) | null>(null);
+  const [preview, setPreview] = useState<(Preview & { draft: string }) | null>(
+    null,
+  );
   const [previewBusy, setPreviewBusy] = useState(false);
   const previewSequence = useRef(0);
   const previewController = useRef<AbortController | null>(null);
@@ -117,7 +134,12 @@ function TemplateSession({
   }, [storageKey]);
   function failure(reason: unknown) {
     setError(reason instanceof Error ? reason.message : "操作失败");
-    if (!displayed() || (reason instanceof ApiError && ([401, 403].includes(reason.status) || reason.code === "session_changed"))) {
+    if (
+      !displayed() ||
+      (reason instanceof ApiError &&
+        ([401, 403].includes(reason.status) ||
+          reason.code === "session_changed"))
+    ) {
       ++epoch.current;
       live.current = false;
       setLocked(true);
@@ -130,7 +152,11 @@ function TemplateSession({
       previewController.current?.abort();
       previewController.current = null;
       setUnresolved(false);
-      try { sessionStorage.removeItem(storageKey); } catch { /* Retired UI never exposes a retained identifier. */ }
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch {
+        /* Retired UI never exposes a retained identifier. */
+      }
     }
   }
   async function load(preserveDraft = false) {
@@ -163,7 +189,14 @@ function TemplateSession({
     if (opened && !locked) void load(true);
   }, [opened, locked, visible]);
   async function query() {
-    if (!uuid.test(identifier) || !live.current || busy || locked || !displayed()) return;
+    if (
+      !uuid.test(identifier) ||
+      !live.current ||
+      busy ||
+      locked ||
+      !displayed()
+    )
+      return;
     const current = epoch.current;
     setBusy(true);
     setReceipt(null);
@@ -191,8 +224,8 @@ function TemplateSession({
       !uuid.test(identifier) ||
       !live.current ||
       busy ||
-      locked
-      || !displayed()
+      locked ||
+      !displayed()
     )
       return;
     const current = epoch.current;
@@ -219,7 +252,15 @@ function TemplateSession({
     }
   }
   async function save() {
-    if (!head || !draft || !live.current || busy || locked || unresolved || !displayed())
+    if (
+      !head ||
+      !draft ||
+      !live.current ||
+      busy ||
+      locked ||
+      unresolved ||
+      !displayed()
+    )
       return;
     const current = epoch.current,
       id = requestId();
@@ -261,7 +302,15 @@ function TemplateSession({
     }
   }
   async function previewDraft() {
-    if (!draft || !live.current || locked || busy || previewBusy || !displayed()) return;
+    if (
+      !draft ||
+      !live.current ||
+      locked ||
+      busy ||
+      previewBusy ||
+      !displayed()
+    )
+      return;
     const current = epoch.current,
       sequence = ++previewSequence.current,
       input = JSON.stringify(draft);
@@ -276,18 +325,28 @@ function TemplateSession({
         { method: "POST", body: input, signal: controller.signal },
         session.csrf,
       );
-      if (!live.current || !displayed() || current !== epoch.current || sequence !== previewSequence.current) return;
+      if (
+        !live.current ||
+        !displayed() ||
+        current !== epoch.current ||
+        sequence !== previewSequence.current
+      )
+        return;
       setPreview({ ...value, draft: input });
       setError("");
     } catch (reason) {
-      if (current === epoch.current && sequence === previewSequence.current) failure(reason);
+      if (current === epoch.current && sequence === previewSequence.current)
+        failure(reason);
     } finally {
-      if (current === epoch.current && sequence === previewSequence.current) setPreviewBusy(false);
-      if (previewController.current === controller) previewController.current = null;
+      if (current === epoch.current && sequence === previewSequence.current)
+        setPreviewBusy(false);
+      if (previewController.current === controller)
+        previewController.current = null;
     }
   }
   return (
     <details
+      open={opened}
       className="card padded settings-section"
       onToggle={(event) => setOpened(event.currentTarget.open)}
     >
@@ -360,21 +419,24 @@ function TemplateSession({
           >
             预览
           </button>
-          {visible && !locked && preview && preview.draft === JSON.stringify(draft) && (
-            <>
-              <p>{preview.subject}</p>
-              <iframe
-                title="邮件预览"
-                sandbox=""
-                referrerPolicy="no-referrer"
-                srcDoc={preview.html.replace(
-                  "<head>",
-                  '<head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; form-action \'none\'; base-uri \'none\'">',
-                )}
-                style={{ width: "100%", height: 640, border: 0 }}
-              />
-            </>
-          )}
+          {visible &&
+            !locked &&
+            preview &&
+            preview.draft === JSON.stringify(draft) && (
+              <>
+                <p>{preview.subject}</p>
+                <iframe
+                  title="邮件预览"
+                  sandbox=""
+                  referrerPolicy="no-referrer"
+                  srcDoc={preview.html.replace(
+                    "<head>",
+                    "<head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'\">",
+                  )}
+                  style={{ width: "100%", height: 640, border: 0 }}
+                />
+              </>
+            )}
         </>
       )}
       <label>

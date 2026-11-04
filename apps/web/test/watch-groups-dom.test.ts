@@ -64,7 +64,7 @@ test("actual watch-group SSR exposes member preferences while preserving market/
             }),
           );
           assert.equal((html.match(/<h1>/g) || []).length, 1);
-          for (const label of ["自选分组", "创建分组", "记录归属", "查询回执"])
+          for (const label of ["自选分组", "创建分组", "记录归属", "操作回执"])
             assert.ok(html.includes(label));
           for (const prohibited of [
             "需要管理员",

@@ -1,3 +1,5 @@
+import { Dialog } from "./dialog";
+import { CardGallery } from "./card-gallery";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
@@ -27,6 +29,7 @@ type PreferenceProps = {
   session: Session;
   active?: boolean;
   cards: readonly PreferenceCard[];
+  images?: readonly { path: string }[];
   invalid?: number;
   revisionHint: number;
   onChanged?: () => void;
@@ -52,6 +55,7 @@ function CardPreferenceContent({
   session,
   active = true,
   cards,
+  images = [],
   invalid = 0,
   revisionHint,
   onChanged,
@@ -60,6 +64,7 @@ function CardPreferenceContent({
   session: Session;
   active?: boolean;
   cards: readonly PreferenceCard[];
+  images?: readonly { path: string }[];
   invalid?: number;
   revisionHint: number;
   onChanged?: () => void;
@@ -88,7 +93,8 @@ function CardPreferenceContent({
   }, [scope]);
   const [stateScope, setStateScope] = useState(scope);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(""),
+    [editing, setEditing] = useState(false);
   const [query, setQuery] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string[]>>({});
   const [pending, setPending] = useState<CardPreferenceOperation | null>(null);
@@ -293,7 +299,7 @@ function CardPreferenceContent({
     busy || pending !== null || !preferences || !selectedAvailable;
   return (
     <article className="card-catalog-panel" aria-label="卡包偏好">
-      <h2>卡包偏好</h2>
+      <h2>卡面图库</h2>
       {error && (
         <p role="alert" className="card-catalog-error">
           {error}
@@ -328,98 +334,118 @@ function CardPreferenceContent({
           />
         </label>
       )}
+      <CardGallery
+        cards={filtered}
+        images={images}
+        selected={selected}
+        onSelect={(key) => {
+          setSelected(key);
+          setEditing(true);
+        }}
+        disabled={busy || !!pending}
+      />
       {filtered.length > 200 && <p>当前仅显示前200项</p>}
-      {options.length ? (
-        <>
-          <SelectMenu
-            label="卡面"
-            value={selected}
-            options={options}
-            disabled={busy}
-            onChange={setSelected}
-            variant="field"
-          />
-          {!selectedAvailable && <p>原卡面来源已变化，请选择当前卡面</p>}
-          <div className="card-catalog-actions">
-            <button
-              className="button secondary"
-              disabled={disabled}
-              onClick={() =>
-                void save("holdings", !preferences?.holdings.includes(selected))
-              }
+      {editing && options.length ? (
+        <Dialog
+          title={selectedCard?.label || "卡包偏好"}
+          onClose={() => {
+            if (!busy) setEditing(false);
+          }}
+        >
+          <div className="dialog-content card-preference-editor">
+            <SelectMenu
+              label="卡面"
+              value={selected}
+              options={options}
+              disabled={busy}
+              onChange={setSelected}
+              variant="field"
+            />
+            {!selectedAvailable && <p>原卡面来源已变化，请选择当前卡面</p>}
+            <div className="card-catalog-actions">
+              <button
+                className="button secondary"
+                disabled={disabled}
+                onClick={() =>
+                  void save(
+                    "holdings",
+                    !preferences?.holdings.includes(selected),
+                  )
+                }
+              >
+                {preferences
+                  ? preferences.holdings.includes(selected)
+                    ? "移出我的卡"
+                    : "加入我的卡"
+                  : "正在读取"}
+              </button>
+            </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void save("tags", tags);
+              }}
+              className="card-preference-tags"
             >
-              {preferences
-                ? preferences.holdings.includes(selected)
-                  ? "移出我的卡"
-                  : "加入我的卡"
-                : "正在读取"}
-            </button>
-          </div>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save("tags", tags);
-            }}
-            className="card-preference-tags"
-          >
-            <label>标签</label>
-            {tags.map((tag, index) => (
-              <div className="card-catalog-actions" key={index}>
-                <input
-                  aria-label={`标签 ${index + 1}`}
-                  value={tag}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    setDrafts((previous) => ({
-                      ...previous,
-                      [selected]: tags.map((value, at) =>
-                        at === index ? event.target.value : value,
-                      ),
-                    }))
-                  }
-                />
+              <label>标签</label>
+              {tags.map((tag, index) => (
+                <div className="card-catalog-actions" key={index}>
+                  <input
+                    aria-label={`标签 ${index + 1}`}
+                    value={tag}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      setDrafts((previous) => ({
+                        ...previous,
+                        [selected]: tags.map((value, at) =>
+                          at === index ? event.target.value : value,
+                        ),
+                      }))
+                    }
+                  />
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      setDrafts((previous) => ({
+                        ...previous,
+                        [selected]: tags.filter((_, at) => at !== index),
+                      }))
+                    }
+                  >
+                    移除
+                  </button>
+                </div>
+              ))}
+              <div className="card-catalog-actions">
                 <button
-                  className="button secondary"
                   type="button"
-                  disabled={disabled}
+                  className="button secondary"
+                  disabled={disabled || tags.length >= 10}
                   onClick={() =>
                     setDrafts((previous) => ({
                       ...previous,
-                      [selected]: tags.filter((_, at) => at !== index),
+                      [selected]: [...tags, ""],
                     }))
                   }
                 >
-                  移除
+                  添加标签
+                </button>
+                <button
+                  type="submit"
+                  className="button primary"
+                  disabled={disabled}
+                >
+                  保存标签
                 </button>
               </div>
-            ))}
-            <div className="card-catalog-actions">
-              <button
-                type="button"
-                className="button secondary"
-                disabled={disabled || tags.length >= 10}
-                onClick={() =>
-                  setDrafts((previous) => ({
-                    ...previous,
-                    [selected]: [...tags, ""],
-                  }))
-                }
-              >
-                添加标签
-              </button>
-              <button
-                type="submit"
-                className="button primary"
-                disabled={disabled}
-              >
-                保存标签
-              </button>
-            </div>
-          </form>
-        </>
-      ) : (
+            </form>
+          </div>
+        </Dialog>
+      ) : !options.length ? (
         <p>尚无可选卡面</p>
-      )}
+      ) : null}
       {invalid > 0 && <p>{invalid} 项卡面标识无法核对</p>}
     </article>
   );

@@ -1,6 +1,13 @@
-import {WatchDisplaySettings,arrangeWatchRows,watchDisplayValue,type WatchDisplayState} from "./watch-display-settings";
-import {WatchGroupSourcePanel} from "./watch-group-source";
-import {WatchGroupIcons} from "./watch-group-icons";
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
+import { useState as useWorkspaceState } from "react";
+import {
+  WatchDisplaySettings,
+  arrangeWatchRows,
+  watchDisplayValue,
+  type WatchDisplayState,
+} from "./watch-display-settings";
+import { WatchGroupSourcePanel } from "./watch-group-source";
+import { WatchGroupIcons } from "./watch-group-icons";
 import {
   useCallback,
   useEffect,
@@ -65,19 +72,29 @@ function WatchGroupsSession({
   active: boolean;
   scope: string;
 }) {
+  const [workspaceSection, setWorkspaceSection] = useWorkspaceState("groups");
+
   const [visible, setVisible] = useState(
       typeof document === "undefined" || !document.hidden,
     ),
     [locked, setLocked] = useState(false),
     [ready, setReady] = useState(false),
     [journalReady, setJournalReady] = useState(false);
-  const [watchDisplay,setWatchDisplay]=useState<WatchDisplayState|null>(null);
-  const [sourceBlocked,setSourceBlocked]=useState(false);
-  const sourcePending=useRef(false);
-  const changeSourceBlocked=useCallback((value:boolean)=>{sourcePending.current=value;setSourceBlocked(value);},[]);
+  const [watchDisplay, setWatchDisplay] = useState<WatchDisplayState | null>(
+    null,
+  );
+  const [sourceBlocked, setSourceBlocked] = useState(false);
+  const sourcePending = useRef(false);
+  const changeSourceBlocked = useCallback((value: boolean) => {
+    sourcePending.current = value;
+    setSourceBlocked(value);
+  }, []);
   const [iconBlocked, setIconBlocked] = useState(true);
   const iconPending = useRef(true);
-  const changeIconBlocked = useCallback((value: boolean) => { iconPending.current=value;setIconBlocked(value); }, []);
+  const changeIconBlocked = useCallback((value: boolean) => {
+    iconPending.current = value;
+    setIconBlocked(value);
+  }, []);
   const [groups, setGroups] = useState<GroupListing | null>(null),
     [filter, setFilter] = useState(""),
     [name, setName] = useState(""),
@@ -116,13 +133,13 @@ function WatchGroupsSession({
     () => apiSessionSnapshot().csrf === session.csrf,
     [session.csrf],
   );
-  const displayRevision=useRef<string|null>(null);
+  const displayRevision = useRef<string | null>(null);
   const clearFinancial = useCallback(() => {
     ++recordRead.current;
     financial.current?.abort();
     financial.current = null;
     collection.current = null;
-    displayRevision.current=null;
+    displayRevision.current = null;
     setRecords(null);
     setBrokers(null);
     setSelected([]);
@@ -259,9 +276,19 @@ function WatchGroupsSession({
     setRecordError("");
     setDirectoryError("");
     const results = await Promise.allSettled([
-      api<unknown>(groupRecordsPath(page, collection.current, view, account,displayRevision.current,"watch"), {
-        signal: controller.signal,
-      }),
+      api<unknown>(
+        groupRecordsPath(
+          page,
+          collection.current,
+          view,
+          account,
+          displayRevision.current,
+          "watch",
+        ),
+        {
+          signal: controller.signal,
+        },
+      ),
       api<{ items: Broker[] }>("/broker-accounts", {
         signal: controller.signal,
       }),
@@ -288,15 +315,17 @@ function WatchGroupsSession({
     if (listing.status === "fulfilled") {
       try {
         const value = groupRecords(listing.value, page);
-        if(value.displayMode!=="watch"||!value.displayRevision)throw new Error("自选显示版本待核对，请重新读取");
+        if (value.displayMode !== "watch" || !value.displayRevision)
+          throw new Error("自选显示版本待核对，请重新读取");
         collection.current = value.collectionRevision;
-        displayRevision.current=value.displayRevision??null;
+        displayRevision.current = value.displayRevision ?? null;
         setRecords(value);
       } catch (reason) {
         setRecordError(reason instanceof Error ? reason.message : "记录待核对");
       }
     } else {
-      if(listing.reason instanceof ApiError&&listing.reason.status===409)clearFinancial();
+      if (listing.reason instanceof ApiError && listing.reason.status === 409)
+        clearFinancial();
       setRecordError(
         listing.reason instanceof Error
           ? listing.reason.message
@@ -430,7 +459,8 @@ function WatchGroupsSession({
       !displayed() ||
       work.current ||
       original.current ||
-      iconPending.current || sourcePending.current ||
+      iconPending.current ||
+      sourcePending.current ||
       !ready ||
       !journalReady ||
       !groups
@@ -526,7 +556,9 @@ function WatchGroupsSession({
     !ready ||
     !journalReady ||
     busy ||
-    !!pending || iconBlocked || sourceBlocked;
+    !!pending ||
+    iconBlocked ||
+    sourceBlocked;
   const shown =
     groups?.groups.filter((g) =>
       g.name.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()),
@@ -580,228 +612,306 @@ function WatchGroupsSession({
       </div>
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
-      <div className="watch-group-create">
-        <label>
-          新分组名称
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+      <WorkspaceTabs
+        label="自选分组视图"
+        value={workspaceSection}
+        onChange={setWorkspaceSection}
+        items={[
+          { value: "groups", label: "分组管理" },
+          { value: "members", label: "记录归属" },
+          { value: "sources", label: "图标与来源" },
+          { value: "receipts", label: "操作回执" },
+        ]}
+      />
+
+      <WorkspaceView active={workspaceSection === "groups"} label="分组管理">
+        <div className="watch-group-create">
+          <label>
+            新分组名称
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={disabled}
+              maxLength={30}
+            />
+          </label>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void mutate("create", { name })}
+            disabled={disabled || !name.trim()}
+          >
+            创建分组
+          </button>
+        </div>
+        {groups && !groups.initialized && (
+          <button
+            type="button"
             disabled={disabled}
-            maxLength={30}
-          />
-        </label>
-        <button
-          type="button"
-          className="primary"
-          onClick={() => void mutate("create", { name })}
-          disabled={disabled || !name.trim()}
-        >
-          创建分组
-        </button>
-      </div>
-      {groups && !groups.initialized && (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => void mutate("initialize", {})}
-        >
-          初始化市场分组
-        </button>
-      )}
-      <label className="watch-group-search">
-        筛选分组
-        <input
-          type="search"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          disabled={locked}
-        />
-      </label>
-      {!groups && !locked && <p role="status">正在读取分组…</p>}
-      {groups && (
-        <WatchGroupRows
-          groups={shown}
-          all={groups.groups}
-          disabled={disabled}
-          edits={edits}
-          onEdit={(id, edit) => setEdits((old) => ({ ...old, [id]: edit }))}
-          onSave={(g, edit) => void mutate("update", { id: g.id, ...edit })}
-          onDelete={setDeleting}
-          onReorder={reorder}
-        />
-      )}
-      <WatchGroupIcons session={session} groups={groups} active={active && visible && !locked} blocked={busy || !!pending || locked || !ready || sourceBlocked} onBlocked={changeIconBlocked} onChanged={load} onDenied={fail}/>
-      <WatchGroupSourcePanel session={session} active={active && visible && !locked} blocked={busy || !!pending || locked || !ready || iconBlocked} revision={groups?.revision ?? null} onBlocked={changeSourceBlocked} onChanged={load} onDenied={fail}/>
-    <div className="watch-group-member-heading">
-        <h2>记录归属</h2>
-        <button
-          type="button"
-          onClick={() => {
-            if (members) clearFinancial();
-            setMembers((v) => !v);
-          }}
-          disabled={locked}
-        >
-          {members ? "收起记录" : "查看记录"}
-        </button>
-      </div>
-      {members && (
-        <>
-          <div className="watch-group-filters">
-            <SelectMenu
-              label="记录分组"
-              value={view}
-              options={viewOptions}
-              onChange={(value) => changeRecordFilter(value, account)}
-              disabled={busy || locked}
-              variant="field"
-            />
-            <SelectMenu
-              label="记录账户"
-              value={account}
-              options={accountOptions}
-              onChange={(value) => changeRecordFilter(view, value)}
-              disabled={busy || locked}
-              variant="field"
-            />
-            <button
-              type="button"
-              disabled={busy || locked}
-              onClick={clearFinancial}
-            >
-              重新读取
-            </button>
-          </div>
-          {directoryError && <p role="alert">{directoryError}</p>}
-          {recordError && <p role="alert">{recordError}</p>}
-          {!records && !recordError && !locked && (
-            <p role="status">正在读取记录…</p>
-          )}
-          {records && (
-            <>
-              <WatchDisplaySettings session={session} records={records.records} groups={groups?.groups||[]} complete={!account&&records.total===records.records.length} viewId={view==="__all"?"ALL":groups?.groups.find(group=>group.id===view||(group.kind==="market"&&"market:"+group.market===view))?.id||view} active={active&&visible&&!locked} blocked={disabled} onState={value=>{setWatchDisplay(value);setSelected([]);}} onChanged={clearFinancial} onDenied={fail}/>
-              <WatchGroupRecords
-                display={watchDisplay}
-                viewId={view==="__all"?"ALL":groups?.groups.find(group=>group.id===view||(group.kind==="market"&&"market:"+group.market===view))?.id||view}
-                records={records}
-                groups={groups?.groups ?? []}
-                selected={selected}
-                disabled={disabled}
-                onSelect={(id, checked) =>
-                  setSelected((old) =>
-                    checked
-                      ? [...old, id]
-                      : old.filter((value) => value !== id),
-                  )
-                }
-              />
-              <div className="watch-group-assign">
-                <SelectMenu
-                  label="移至分组"
-                  value={target}
-                  options={targetOptions}
-                  onChange={setTarget}
-                  disabled={disabled}
-                  variant="field"
-                />
-                <button
-                  type="button"
-                  disabled={disabled || !selected.length}
-                  onClick={() =>
-                    void mutate("assign", { ids: selected, groupId: target })
-                  }
-                >
-                  {target ? "移动所选记录" : "移出自定义分组"}
-                </button>
-                <span>已选 {selected.length} 条</span>
-              </div>
-              <div className="watch-group-pagination">
-                <span>
-                  第 {records.page} 页 · 共 {records.total} 条
-                </span>
-                <button
-                  type="button"
-                  disabled={busy || page <= 1}
-                  onClick={() => {
-                    setRecords(null);
-                    setSelected([]);
-                    setPage((p) => p - 1);
-                  }}
-                >
-                  上一页
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || page * records.pageSize >= records.total}
-                  onClick={() => {
-                    setRecords(null);
-                    setSelected([]);
-                    setPage((p) => p + 1);
-                  }}
-                >
-                  下一页
-                </button>
-              </div>
-            </>
-          )}
-        </>
-      )}
-      <div className="watch-group-lookup">
-        <label>
-          操作编号
+            onClick={() => void mutate("initialize", {})}
+          >
+            初始化市场分组
+          </button>
+        )}
+        <label className="watch-group-search">
+          筛选分组
           <input
-            value={pending ?? lookup}
-            onChange={(e) => setLookup(e.target.value)}
-            readOnly={!!pending}
-            spellCheck={false}
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
             disabled={locked}
           />
         </label>
-        <button
-          type="button"
-          onClick={() => void check()}
-          disabled={
-            busy ||
-            locked ||
-            !active ||
-            !visible ||
-            !validGroupRequest(pending ?? lookup.trim())
-          }
-        >
-          查询回执
-        </button>
-      </div>
-      {pending && <p role="status">原操作待核对 · {pending}</p>}
-      {receipt && (
-        <div className="watch-group-receipt" role="status">
-          <p>
-            {receipt.group
-              ? "分组已保存 · " + receipt.group.name
-              : receipt.initialized
-                ? "市场分组已初始化"
-                : typeof receipt.deleted === "boolean"
-                  ? receipt.deleted
-                    ? "分组已删除"
-                    : "分组已不存在"
-                  : "已更新 " + receipt.updated + " 条"}
-          </p>
-          <details>
-            <summary>操作详情</summary>
-            <dl>
-              <dt>操作编号</dt>
-              <dd>{receipt.requestId}</dd>
-              <dt>分组版本</dt>
-              <dd>{receipt.revision}</dd>
-              {receipt.collectionRevision !== undefined && (
-                <>
-                  <dt>记录集合版本</dt>
-                  <dd>{receipt.collectionRevision}</dd>
-                </>
-              )}
-            </dl>
-          </details>
+        {!groups && !locked && <p role="status">正在读取分组…</p>}
+        {groups && (
+          <WatchGroupRows
+            groups={shown}
+            all={groups.groups}
+            disabled={disabled}
+            edits={edits}
+            onEdit={(id, edit) => setEdits((old) => ({ ...old, [id]: edit }))}
+            onSave={(g, edit) => void mutate("update", { id: g.id, ...edit })}
+            onDelete={setDeleting}
+            onReorder={reorder}
+          />
+        )}
+      </WorkspaceView>
+
+      <WorkspaceView
+        keepEffects
+        active={workspaceSection === "sources"}
+        label="图标与来源"
+      >
+        <WatchGroupIcons
+          session={session}
+          groups={groups}
+          active={active && visible && !locked}
+          blocked={busy || !!pending || locked || !ready || sourceBlocked}
+          onBlocked={changeIconBlocked}
+          onChanged={load}
+          onDenied={fail}
+        />
+        <WatchGroupSourcePanel
+          session={session}
+          active={active && visible && !locked}
+          blocked={busy || !!pending || locked || !ready || iconBlocked}
+          revision={groups?.revision ?? null}
+          onBlocked={changeSourceBlocked}
+          onChanged={load}
+          onDenied={fail}
+        />
+      </WorkspaceView>
+
+      <WorkspaceView active={workspaceSection === "members"} label="记录归属">
+        <div className="watch-group-member-heading">
+          <h2>记录归属</h2>
+          <button
+            type="button"
+            onClick={() => {
+              if (members) clearFinancial();
+              setMembers((v) => !v);
+            }}
+            disabled={locked}
+          >
+            {members ? "收起记录" : "查看记录"}
+          </button>
         </div>
-      )}
+        {members && (
+          <>
+            <div className="watch-group-filters">
+              <SelectMenu
+                label="记录分组"
+                value={view}
+                options={viewOptions}
+                onChange={(value) => changeRecordFilter(value, account)}
+                disabled={busy || locked}
+                variant="field"
+              />
+              <SelectMenu
+                label="记录账户"
+                value={account}
+                options={accountOptions}
+                onChange={(value) => changeRecordFilter(view, value)}
+                disabled={busy || locked}
+                variant="field"
+              />
+              <button
+                type="button"
+                disabled={busy || locked}
+                onClick={clearFinancial}
+              >
+                重新读取
+              </button>
+            </div>
+            {directoryError && <p role="alert">{directoryError}</p>}
+            {recordError && <p role="alert">{recordError}</p>}
+            {!records && !recordError && !locked && (
+              <p role="status">正在读取记录…</p>
+            )}
+            {records && (
+              <>
+                <WatchDisplaySettings
+                  session={session}
+                  records={records.records}
+                  groups={groups?.groups || []}
+                  complete={
+                    !account && records.total === records.records.length
+                  }
+                  viewId={
+                    view === "__all"
+                      ? "ALL"
+                      : groups?.groups.find(
+                          (group) =>
+                            group.id === view ||
+                            (group.kind === "market" &&
+                              "market:" + group.market === view),
+                        )?.id || view
+                  }
+                  active={active && visible && !locked}
+                  blocked={disabled}
+                  onState={(value) => {
+                    setWatchDisplay(value);
+                    setSelected([]);
+                  }}
+                  onChanged={clearFinancial}
+                  onDenied={fail}
+                />
+                <WatchGroupRecords
+                  display={watchDisplay}
+                  viewId={
+                    view === "__all"
+                      ? "ALL"
+                      : groups?.groups.find(
+                          (group) =>
+                            group.id === view ||
+                            (group.kind === "market" &&
+                              "market:" + group.market === view),
+                        )?.id || view
+                  }
+                  records={records}
+                  groups={groups?.groups ?? []}
+                  selected={selected}
+                  disabled={disabled}
+                  onSelect={(id, checked) =>
+                    setSelected((old) =>
+                      checked
+                        ? [...old, id]
+                        : old.filter((value) => value !== id),
+                    )
+                  }
+                />
+                <div className="watch-group-assign">
+                  <SelectMenu
+                    label="移至分组"
+                    value={target}
+                    options={targetOptions}
+                    onChange={setTarget}
+                    disabled={disabled}
+                    variant="field"
+                  />
+                  <button
+                    type="button"
+                    disabled={disabled || !selected.length}
+                    onClick={() =>
+                      void mutate("assign", { ids: selected, groupId: target })
+                    }
+                  >
+                    {target ? "移动所选记录" : "移出自定义分组"}
+                  </button>
+                  <span>已选 {selected.length} 条</span>
+                </div>
+                <div className="watch-group-pagination">
+                  <span>
+                    第 {records.page} 页 · 共 {records.total} 条
+                  </span>
+                  <button
+                    type="button"
+                    disabled={busy || page <= 1}
+                    onClick={() => {
+                      setRecords(null);
+                      setSelected([]);
+                      setPage((p) => p - 1);
+                    }}
+                  >
+                    上一页
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || page * records.pageSize >= records.total}
+                    onClick={() => {
+                      setRecords(null);
+                      setSelected([]);
+                      setPage((p) => p + 1);
+                    }}
+                  >
+                    下一页
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </WorkspaceView>
+
+      <WorkspaceView active={workspaceSection === "receipts"} label="操作回执">
+        <div className="watch-group-lookup">
+          <label>
+            操作编号
+            <input
+              value={pending ?? lookup}
+              onChange={(e) => setLookup(e.target.value)}
+              readOnly={!!pending}
+              spellCheck={false}
+              disabled={locked}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => void check()}
+            disabled={
+              busy ||
+              locked ||
+              !active ||
+              !visible ||
+              !validGroupRequest(pending ?? lookup.trim())
+            }
+          >
+            查询回执
+          </button>
+        </div>
+        {pending && <p role="status">原操作待核对 · {pending}</p>}
+        {receipt && (
+          <div className="watch-group-receipt" role="status">
+            <p>
+              {receipt.group
+                ? "分组已保存 · " + receipt.group.name
+                : receipt.initialized
+                  ? "市场分组已初始化"
+                  : typeof receipt.deleted === "boolean"
+                    ? receipt.deleted
+                      ? "分组已删除"
+                      : "分组已不存在"
+                    : "已更新 " + receipt.updated + " 条"}
+            </p>
+            <details>
+              <summary>操作详情</summary>
+              <dl>
+                <dt>操作编号</dt>
+                <dd>{receipt.requestId}</dd>
+                <dt>分组版本</dt>
+                <dd>{receipt.revision}</dd>
+                {receipt.collectionRevision !== undefined && (
+                  <>
+                    <dt>记录集合版本</dt>
+                    <dd>{receipt.collectionRevision}</dd>
+                  </>
+                )}
+              </dl>
+            </details>
+          </div>
+        )}
+      </WorkspaceView>
+
       {deleting && active && visible && (
         <Dialog title="删除分组" onClose={() => setDeleting(null)}>
           <p>删除“{deleting.name}”？组内记录将保留并移出该分组。</p>
@@ -924,21 +1034,26 @@ export function WatchGroupRows({
   );
 }
 export function WatchGroupRecords({
-  display=null,viewId="ALL",
+  display = null,
+  viewId = "ALL",
   records,
   groups,
   selected,
   disabled,
   onSelect,
 }: {
-  display?:WatchDisplayState|null;viewId?:string;
+  display?: WatchDisplayState | null;
+  viewId?: string;
   records: GroupRecords;
   groups: WatchGroup[];
   selected: string[];
   disabled: boolean;
   onSelect: (id: string, checked: boolean) => void;
 }) {
-  const displayedRecords=records.displayMode==="watch"?records.records:arrangeWatchRows(display,records.records,viewId);
+  const displayedRecords =
+    records.displayMode === "watch"
+      ? records.records
+      : arrangeWatchRows(display, records.records, viewId);
   return (
     <div className="watch-group-records">
       {displayedRecords.length ? (
@@ -952,12 +1067,46 @@ export function WatchGroupRecords({
               onChange={(e) => onSelect(record.id, e.target.checked)}
             />
             <span>
-              <strong>{typeof watchDisplayValue(display,"aliases",record.id)==="string"&&String(watchDisplayValue(display,"aliases",record.id)).trim()?String(watchDisplayValue(display,"aliases",record.id)):record.name || record.code || "记录待核对"}{watchDisplayValue(display,"pinned",record.id)===true?" · 置顶":""}</strong>{typeof watchDisplayValue(display,"notes",record.id)==="string"&&<small>显示备注 · {String(watchDisplayValue(display,"notes",record.id))}</small>}
+              <strong>
+                {typeof watchDisplayValue(display, "aliases", record.id) ===
+                  "string" &&
+                String(watchDisplayValue(display, "aliases", record.id)).trim()
+                  ? String(watchDisplayValue(display, "aliases", record.id))
+                  : record.name || record.code || "记录待核对"}
+                {watchDisplayValue(display, "pinned", record.id) === true
+                  ? " · 置顶"
+                  : ""}
+              </strong>
+              {typeof watchDisplayValue(display, "notes", record.id) ===
+                "string" && (
+                <small>
+                  显示备注 ·{" "}
+                  {String(watchDisplayValue(display, "notes", record.id))}
+                </small>
+              )}
               <small>
                 {record.market} · {record.code || "代码未提供"}
               </small>
             </span>
-            <span>{typeof watchDisplayValue(display,"moved",record.id)==="string"?groupLabel(String(watchDisplayValue(display,"moved",record.id)),groups):groupLabel(record.watchGroupId, groups)}{groups.filter(group=>display?.fields[JSON.stringify(["groups",group.id,record.id])]?.value===true).map(group=><small key={group.id}>附加显示 · {group.name}</small>)}</span>
+            <span>
+              {typeof watchDisplayValue(display, "moved", record.id) ===
+              "string"
+                ? groupLabel(
+                    String(watchDisplayValue(display, "moved", record.id)),
+                    groups,
+                  )
+                : groupLabel(record.watchGroupId, groups)}
+              {groups
+                .filter(
+                  (group) =>
+                    display?.fields[
+                      JSON.stringify(["groups", group.id, record.id])
+                    ]?.value === true,
+                )
+                .map((group) => (
+                  <small key={group.id}>附加显示 · {group.name}</small>
+                ))}
+            </span>
           </label>
         ))
       ) : (

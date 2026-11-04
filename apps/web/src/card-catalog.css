@@ -117,3 +117,61 @@
 .card-wallet-check input {
   width: auto !important;
 }
+.card-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 20px;
+}
+.card-gallery-item {
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: start;
+  min-width: 0;
+}
+.card-gallery-item[aria-pressed="true"] {
+  outline: 2px solid var(--accent, #3478f6);
+  outline-offset: 2px;
+}
+.card-gallery-item img,
+.card-face-missing {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 1.586;
+  object-fit: contain;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--soft);
+  border-radius: 10px;
+  color: var(--muted);
+}
+.card-gallery-item > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.card-face-missing small {
+  font-size: 11px;
+}
+@media (max-width: 540px) {
+  .card-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .card-gallery-item {
+    padding: 8px;
+  }
+}
+
+.card-preference-editor {
+  display: grid;
+  gap: 18px;
+}

@@ -1,3 +1,4 @@
+import { WorkspaceTabs } from "./workspace-ui";
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
@@ -531,9 +532,9 @@ function SimpleAppEditor({
 
   const disabled = busy || !!pending || locked || !active;
   return (
-    <section className="simple-app panel">
+    <section className="simple-app panel workspace-ui">
       <header>
-        <h2>家庭与投资记账</h2>
+        <h1>家庭与投资记账</h1>
         <p>独立本人登记账本 · 与券商持仓、实际成交及现金权限分离</p>
         <div className="module-actions">
           <button
@@ -572,8 +573,11 @@ function SimpleAppEditor({
       )}
       {ledger && (
         <>
-          <nav aria-label="独立账本页面">
-            {(
+          <WorkspaceTabs<Page>
+            label="独立账本页面"
+            value={page}
+            onChange={go}
+            items={(
               [
                 ["home", "总览"],
                 ["weather", "晴雨表"],
@@ -587,16 +591,8 @@ function SimpleAppEditor({
                 ["settings", "设置"],
                 ["help", "说明"],
               ] as [Page, string][]
-            ).map(([name, label]) => (
-              <button
-                aria-current={page === name ? "page" : undefined}
-                key={name}
-                onClick={() => go(name)}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
+            ).map(([value, label]) => ({ value, label }))}
+          />
           <fieldset disabled={disabled}>
             <SimplePages
               key={readGeneration}

@@ -412,7 +412,7 @@ function ReportSession({
           </button>
         </div>
       )}
-      <form
+      <details className="workspace-tools"><summary>上传财报文件</summary><form
         className="panel"
         onSubmit={(event) => {
           event.preventDefault();
@@ -457,7 +457,7 @@ function ReportSession({
         >
           上传
         </button>
-      </form>
+      </form></details>
       <p>仅当前平台文件，历史覆盖未知；上传来源未核验。</p>
       {resource.data && (
         <div className="table-wrap">
@@ -504,7 +504,11 @@ function ReportSession({
           </table>
         </div>
       )}
-      <ReportMediaAliases session={session} reports={listing?.reports ?? []} onDenied={fail} />
+      <details className="workspace-tools"><summary>素材关联</summary><ReportMediaAliases
+        session={session}
+        reports={listing?.reports ?? []}
+        onDenied={fail}
+      /></details>
       {deleting && (
         <Dialog title="删除财报文件" onClose={() => setDeleting(null)}>
           <p>{deleting.fileName}</p>

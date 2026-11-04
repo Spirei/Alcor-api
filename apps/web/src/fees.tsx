@@ -1,5 +1,10 @@
-import {FeeRuleOriginalEditor,type FeeRuleOriginal} from "./fee-rule-original";
-import {FeeSourceAttributionPanel} from "./fee-source-attribution";
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
+import { useState as useWorkspaceState } from "react";
+import {
+  FeeRuleOriginalEditor,
+  type FeeRuleOriginal,
+} from "./fee-rule-original";
+import { FeeSourceAttributionPanel } from "./fee-source-attribution";
 import {
   nativeActualFeeCommand,
   type NativeActualFeeSnapshot,
@@ -105,10 +110,10 @@ type Plan = {
   revision: number;
   current_revision: number;
   effective_from: string;
-  effective_through: string|null;
-  market?:string|null;
-  legacy_original_base64?:string|null;
-  retired_at?:string|null;
+  effective_through: string | null;
+  market?: string | null;
+  legacy_original_base64?: string | null;
+  retired_at?: string | null;
   components: Record<
     string,
     { basis: string; rate?: string; minimum?: string; [key: string]: unknown }
@@ -157,9 +162,9 @@ type Proof = {
   sourceAccount?: { name: string; accountKind: string };
   data?: {
     effectiveFrom: string;
-    effectiveThrough: string|null;
-    market?:string;
-    legacyOriginal?:string|null;
+    effectiveThrough: string | null;
+    market?: string;
+    legacyOriginal?: string | null;
     components: Plan["components"];
   };
   preview?: string;
@@ -198,7 +203,12 @@ export function FeesPage({
     session.receipt_scope,
   ]);
   return (
-    <FeeSession key={JSON.stringify([scope,session.csrf,session.expires_at])} session={session} scope={scope} active={active} />
+    <FeeSession
+      key={JSON.stringify([scope, session.csrf, session.expires_at])}
+      session={session}
+      scope={scope}
+      active={active}
+    />
   );
 }
 function FeeSession({
@@ -210,13 +220,15 @@ function FeeSession({
   scope: string;
   active: boolean;
 }) {
+  const [workspaceSection, setWorkspaceSection] = useWorkspaceState("confirm");
+
   const [visible, setVisible] = useState(!document.hidden),
     [brokers, setBrokers] = useState<Broker[]>([]),
     [account, setAccount] = useState("");
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [market,setMarket]=useState("");
-  const [original,setOriginal]=useState<FeeRuleOriginal|null>(null);
-  const [viewOriginal,setViewOriginal]=useState<string|null>(null);
+  const [market, setMarket] = useState("");
+  const [original, setOriginal] = useState<FeeRuleOriginal | null>(null);
+  const [viewOriginal, setViewOriginal] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState("");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [selection, setSelection] = useState<Record<string, Selection>>({});
@@ -299,7 +311,9 @@ function FeeSession({
         setSnapshot(null);
         setPlans([]);
         setSelectedPlan("");
-        setOriginal(null);setViewOriginal(null);setMarket("");
+        setOriginal(null);
+        setViewOriginal(null);
+        setMarket("");
         setSelection({});
         setActualSnapshot(null);
         setNativeSnapshot(null);
@@ -326,7 +340,8 @@ function FeeSession({
     ++epoch.current;
     if (!live.current) {
       clearProof();
-      setOriginal(null);setViewOriginal(null);
+      setOriginal(null);
+      setViewOriginal(null);
       setLookedUpReceipt(null);
       setReceiptLoading(false);
       ++receiptReads.current;
@@ -458,14 +473,23 @@ function FeeSession({
       );
       if (selectedPlan && !saved)
         throw new Error("个人费率版本已变化，请重新读取");
-      if(planOnly&&!market)throw new Error("请选择明确的费率市场");
-      if(planOnly&&original&&(original.accountId!==account||original.providerId!==snapshot.providerId||original.market!==market||original.effectiveFrom!==from||original.effectiveThrough!==(through||null)))throw new Error("旧原件账户、来源、市场或生效期间与当前选择不一致");
+      if (planOnly && !market) throw new Error("请选择明确的费率市场");
+      if (
+        planOnly &&
+        original &&
+        (original.accountId !== account ||
+          original.providerId !== snapshot.providerId ||
+          original.market !== market ||
+          original.effectiveFrom !== from ||
+          original.effectiveThrough !== (through || null))
+      )
+        throw new Error("旧原件账户、来源、市场或生效期间与当前选择不一致");
       kind.current = planOnly ? "fee_plan" : "fee_repair";
       const data: Record<string, unknown> = planOnly
         ? {
             requestId: requestId(),
             planId: original?.planId ?? saved?.id ?? requestId(),
-            revision: original ? original.revision-1 : saved?.revision ?? 0,
+            revision: original ? original.revision - 1 : (saved?.revision ?? 0),
             accountId: account,
             providerId: snapshot.providerId,
             effectiveFrom: from,
@@ -915,6 +939,18 @@ function FeeSession({
       </header>
       {error && <p role="alert">{error}</p>}
       {result && <p role="status">{result}</p>}
+      <WorkspaceTabs
+        label="费用视图"
+        value={workspaceSection}
+        onChange={setWorkspaceSection}
+        items={[
+          { value: "confirm", label: "实付与基线核对" },
+          { value: "plans", label: "个人费率" },
+          { value: "repair", label: "历史费用核对" },
+          { value: "sources", label: "来源归属" },
+        ]}
+      />
+
       <details>
         <summary>费用回执</summary>
         <label>
@@ -1002,7 +1038,9 @@ function FeeSession({
             setSnapshot(null);
             setPlans([]);
             setSelectedPlan("");
-            setOriginal(null);setViewOriginal(null);setMarket("");
+            setOriginal(null);
+            setViewOriginal(null);
+            setMarket("");
             setSelection({});
             setActualSnapshot(null);
             setNativeSnapshot(null);
@@ -1033,59 +1071,66 @@ function FeeSession({
           ))}
         </select>
       </label>
-      {snapshot && (
-        <BaselineFeeFields
-          source={sourceBaseline}
-          targets={snapshot.items}
-          draft={baselineDraft}
-          disabled={busy || locked || !!pending || !active || !visible}
-          loading={baselineLoading}
-          onRead={() => void readBaseline()}
-          onEdit={(value) => {
-            setBaselineDraft((draft) => ({ ...draft, ...value }));
-            clearProof();
-          }}
-          onPreview={() => void previewBaseline()}
-          onEstimate={() => void previewBaseline(true)}
-        />
-      )}
-      {actualSnapshot && (
-        <ActualFeeFields
-          snapshot={actualSnapshot}
-          selected={actualSelected}
-          draft={actualDraft}
-          disabled={busy || locked || !!pending || !active || !visible}
-          onSelect={(value) => {
-            setActualSelected(value);
-            setActualDraft(emptyActualFeeDraft());
-            setNativeDraft(emptyActualFeeDraft());
-            clearProof();
-          }}
-          onEdit={(value) => {
-            setActualDraft((draft) => ({ ...draft, ...value }));
-            clearProof();
-          }}
-          onPreview={() => void previewActual()}
-        />
-      )}
-      {nativeSnapshot && (
-        <ActualFeeFields
-          snapshot={nativeSnapshot}
-          selected={nativeSelected}
-          draft={nativeDraft}
-          disabled={busy || locked || !!pending || !active || !visible}
-          onSelect={(value) => {
-            setNativeSelected(value);
-            setNativeDraft(emptyActualFeeDraft());
-            clearProof();
-          }}
-          onEdit={(value) => {
-            setNativeDraft((draft) => ({ ...draft, ...value }));
-            clearProof();
-          }}
-          onPreview={() => void previewNativeActual()}
-        />
-      )}
+
+      <WorkspaceView
+        active={workspaceSection === "confirm"}
+        label="实付与基线核对"
+      >
+        {snapshot && (
+          <BaselineFeeFields
+            source={sourceBaseline}
+            targets={snapshot.items}
+            draft={baselineDraft}
+            disabled={busy || locked || !!pending || !active || !visible}
+            loading={baselineLoading}
+            onRead={() => void readBaseline()}
+            onEdit={(value) => {
+              setBaselineDraft((draft) => ({ ...draft, ...value }));
+              clearProof();
+            }}
+            onPreview={() => void previewBaseline()}
+            onEstimate={() => void previewBaseline(true)}
+          />
+        )}
+        {actualSnapshot && (
+          <ActualFeeFields
+            snapshot={actualSnapshot}
+            selected={actualSelected}
+            draft={actualDraft}
+            disabled={busy || locked || !!pending || !active || !visible}
+            onSelect={(value) => {
+              setActualSelected(value);
+              setActualDraft(emptyActualFeeDraft());
+              setNativeDraft(emptyActualFeeDraft());
+              clearProof();
+            }}
+            onEdit={(value) => {
+              setActualDraft((draft) => ({ ...draft, ...value }));
+              clearProof();
+            }}
+            onPreview={() => void previewActual()}
+          />
+        )}
+        {nativeSnapshot && (
+          <ActualFeeFields
+            snapshot={nativeSnapshot}
+            selected={nativeSelected}
+            draft={nativeDraft}
+            disabled={busy || locked || !!pending || !active || !visible}
+            onSelect={(value) => {
+              setNativeSelected(value);
+              setNativeDraft(emptyActualFeeDraft());
+              clearProof();
+            }}
+            onEdit={(value) => {
+              setNativeDraft((draft) => ({ ...draft, ...value }));
+              clearProof();
+            }}
+            onPreview={() => void previewNativeActual()}
+          />
+        )}
+      </WorkspaceView>
+
       <div className="fees-period">
         <label>
           适用开始
@@ -1134,386 +1179,484 @@ function FeeSession({
           </label>
         )}
       </div>
-      <FeeSourceAttributionPanel session={session} active={active&&visible&&!locked}/>
-      <details className="fees-plan">
-        <summary>个人费率</summary>
-        <div className="fees-plan-fields">
-          <label>费率市场<select value={market} disabled={busy||!!pending} onChange={event=>{setMarket(event.target.value);setOriginal(null);clearProof();}}><option value="">选择市场</option>{[["us","美股"],["hk","港股"],["cn","A股"],["connect","港股通"],["options","期权"]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
-          <FeeRuleOriginalEditor active={active&&visible&&!locked} disabled={busy||!!pending} original={original} savedBase64={viewOriginal??plans.find(item=>item.id===selectedPlan&&item.revision===item.current_revision)?.legacy_original_base64} onChange={value=>{setOriginal(value);clearProof();if(value){setMarket(value.market);setFrom(value.effectiveFrom);setThrough(value.effectiveThrough??"");setConfirmed(false);}}}/>
-          {original&&<p>本次按原件完整覆盖规则提交；下方单项编辑不会改写原文件或替换原件规则。</p>}
-          <label>
-            保存的费率
-            <select
-              value={selectedPlan}
-              disabled={busy || !!pending}
-              onChange={(event) => {
-                setSelectedPlan(event.target.value);
-                setOriginal(null);setViewOriginal(null);
-                clearProof();
-                const plan = plans.find(
-                  (item) =>
-                    item.id === event.target.value &&
-                    item.revision === item.current_revision,
-                );
-                if (plan) {
-                  setFrom(plan.effective_from);
-                  setThrough(plan.effective_through??"");
-                  setMarket(plan.market??"");
-                  setConfirmed(false);
-                  const component = plan.components[ruleKind];
-                  setBasis(component?.basis ?? "share");
-                  setRate(component?.rate ?? "");
-                  setMinimum(component?.minimum ?? "");
-                  setMaximum(
-                    typeof component?.maximum === "string"
-                      ? component.maximum
-                      : "",
-                  );
-                  setMaximumPercent(
-                    typeof component?.maximumPercent === "string"
-                      ? component.maximumPercent
-                      : "",
-                  );
-                  setMinimumWins(component?.minimumWins !== false);
-                  setSide(
-                    typeof component?.side === "string"
-                      ? component.side
-                      : "both",
-                  );
-                }
-              }}
-            >
-              <option value="">新增费率</option>
-              {plans
-                .filter((item) => item.revision === item.current_revision && !item.retired_at)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.effective_from} — {item.effective_through??"开放结束"} · 修订{" "}
-                    {item.revision}
+
+      <WorkspaceView active={workspaceSection === "sources"} label="来源归属">
+        <FeeSourceAttributionPanel
+          session={session}
+          active={active && visible && !locked}
+        />
+      </WorkspaceView>
+
+      <WorkspaceView active={workspaceSection === "plans"} label="个人费率">
+        <details className="fees-plan" open>
+          <summary>个人费率</summary>
+          <div className="fees-plan-fields">
+            <label>
+              费率市场
+              <select
+                value={market}
+                disabled={busy || !!pending}
+                onChange={(event) => {
+                  setMarket(event.target.value);
+                  setOriginal(null);
+                  clearProof();
+                }}
+              >
+                <option value="">选择市场</option>
+                {[
+                  ["us", "美股"],
+                  ["hk", "港股"],
+                  ["cn", "A股"],
+                  ["connect", "港股通"],
+                  ["options", "期权"],
+                ].map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
                   </option>
                 ))}
-            </select>
-          </label>
-          {plans.length > 0 && (
-            <details>
-              <summary>费率记录</summary>
-              {plans.map((item) => (
-                <article key={`${item.id}:${item.revision}`}>
-                  {item.legacy_original_base64&&<button type="button" disabled={busy||!!pending} onClick={()=>setViewOriginal(item.legacy_original_base64!)}>查看该修订旧原件</button>}
-                  <small>{item.market??"市场未核对"} · {item.retired_at?"已停用 · 历史规则保留 · ":""}{item.legacy_original_base64?"保留旧原件":"平台规则 · 无旧原件"}</small>
-                  <p>
-                    {item.effective_from} — {item.effective_through??"开放结束"} · 修订{" "}
-                    {item.revision}
-                  </p>
-                  {Object.entries(item.components).map(([name, component]) => (
-                    <p key={name}>
-                      {(
-                        {
-                          commission: "佣金",
-                          platform: "平台费",
-                          fundCommission: "基金佣金",
-                        } as Record<string, string>
-                      )[name] ?? name}{" "}
-                      ·{" "}
-                      {component.basis === "free"
-                        ? "明确免收"
-                        : `${component.rate ?? "未知"} · ${({ share: "每股", order: "每单", percent: "百分比", permille: "千分比" } as Record<string, string>)[component.basis] ?? component.basis}`}
-                      {component.minimum ? ` · 最低 ${component.minimum}` : ""}
-                      {component.maximum !== undefined
-                        ? ` · 最高 ${component.maximum}`
-                        : ""}
-                      {component.maximumPercent !== undefined
-                        ? ` · 成交额上限 ${component.maximumPercent}%`
-                        : ""}
-                      {` · ${component.side === "buy" ? "买入" : component.side === "sell" ? "卖出" : "买入与卖出"}`}
-                      {component.basis !== "free"
-                        ? ` · 冲突时采用${component.minimumWins === false ? "上限" : "最低费用"}`
-                        : ""}
-                    </p>
-                  ))}
-                </article>
-              ))}
-            </details>
-          )}
-
-          <fieldset disabled={!!original||busy||!!pending}>
-          <label>
-            分项
-            <select
-              value={ruleKind}
-              onChange={(e) => {
-                setRuleKind(e.target.value);
-                const saved = plans.find(
+              </select>
+            </label>
+            <FeeRuleOriginalEditor
+              active={active && visible && !locked}
+              disabled={busy || !!pending}
+              original={original}
+              savedBase64={
+                viewOriginal ??
+                plans.find(
                   (item) =>
                     item.id === selectedPlan &&
                     item.revision === item.current_revision,
-                );
-                const component = saved?.components[e.target.value];
-                setBasis(component?.basis ?? "share");
-                setRate(component?.rate ?? "");
-                setMinimum(component?.minimum ?? "");
-                setMaximum(
-                  typeof component?.maximum === "string"
-                    ? component.maximum
-                    : "",
-                );
-                setMaximumPercent(
-                  typeof component?.maximumPercent === "string"
-                    ? component.maximumPercent
-                    : "",
-                );
-                setMinimumWins(component?.minimumWins !== false);
-                setSide(
-                  typeof component?.side === "string" ? component.side : "both",
-                );
+                )?.legacy_original_base64
+              }
+              onChange={(value) => {
+                setOriginal(value);
                 clearProof();
+                if (value) {
+                  setMarket(value.market);
+                  setFrom(value.effectiveFrom);
+                  setThrough(value.effectiveThrough ?? "");
+                  setConfirmed(false);
+                }
               }}
-            >
-              <option value="commission">佣金</option>
-              <option value="platform">平台费</option>
-              <option value="fundCommission">基金佣金</option>
-            </select>
-          </label>
-          <label>
-            方式
-            <select
-              value={basis}
-              onChange={(e) => {
-                setBasis(e.target.value);
-                clearProof();
-              }}
-            >
-              <option value="share">每股</option>
-              <option value="order">每单</option>
-              <option value="percent">百分比</option>
-              <option value="permille">千分比</option>
-              <option value="free">明确免收</option>
-            </select>
-          </label>
-          <label>
-            适用方向
-            <select
-              value={side}
-              onChange={(e) => {
-                setSide(e.target.value);
-                clearProof();
-              }}
-            >
-              <option value="both">买入与卖出</option>
-              <option value="buy">买入</option>
-              <option value="sell">卖出</option>
-            </select>
-          </label>
-          {basis !== "free" && (
-            <>
+            />
+            {original && (
+              <p>
+                本次按原件完整覆盖规则提交；下方单项编辑不会改写原文件或替换原件规则。
+              </p>
+            )}
+            <label>
+              保存的费率
+              <select
+                value={selectedPlan}
+                disabled={busy || !!pending}
+                onChange={(event) => {
+                  setSelectedPlan(event.target.value);
+                  setOriginal(null);
+                  setViewOriginal(null);
+                  clearProof();
+                  const plan = plans.find(
+                    (item) =>
+                      item.id === event.target.value &&
+                      item.revision === item.current_revision,
+                  );
+                  if (plan) {
+                    setFrom(plan.effective_from);
+                    setThrough(plan.effective_through ?? "");
+                    setMarket(plan.market ?? "");
+                    setConfirmed(false);
+                    const component = plan.components[ruleKind];
+                    setBasis(component?.basis ?? "share");
+                    setRate(component?.rate ?? "");
+                    setMinimum(component?.minimum ?? "");
+                    setMaximum(
+                      typeof component?.maximum === "string"
+                        ? component.maximum
+                        : "",
+                    );
+                    setMaximumPercent(
+                      typeof component?.maximumPercent === "string"
+                        ? component.maximumPercent
+                        : "",
+                    );
+                    setMinimumWins(component?.minimumWins !== false);
+                    setSide(
+                      typeof component?.side === "string"
+                        ? component.side
+                        : "both",
+                    );
+                  }
+                }}
+              >
+                <option value="">新增费率</option>
+                {plans
+                  .filter(
+                    (item) =>
+                      item.revision === item.current_revision &&
+                      !item.retired_at,
+                  )
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.effective_from} —{" "}
+                      {item.effective_through ?? "开放结束"} · 修订{" "}
+                      {item.revision}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            {plans.length > 0 && (
+              <details>
+                <summary>费率记录</summary>
+                {plans.map((item) => (
+                  <article key={`${item.id}:${item.revision}`}>
+                    {item.legacy_original_base64 && (
+                      <button
+                        type="button"
+                        disabled={busy || !!pending}
+                        onClick={() =>
+                          setViewOriginal(item.legacy_original_base64!)
+                        }
+                      >
+                        查看该修订旧原件
+                      </button>
+                    )}
+                    <small>
+                      {item.market ?? "市场未核对"} ·{" "}
+                      {item.retired_at ? "已停用 · 历史规则保留 · " : ""}
+                      {item.legacy_original_base64
+                        ? "保留旧原件"
+                        : "平台规则 · 无旧原件"}
+                    </small>
+                    <p>
+                      {item.effective_from} —{" "}
+                      {item.effective_through ?? "开放结束"} · 修订{" "}
+                      {item.revision}
+                    </p>
+                    {Object.entries(item.components).map(
+                      ([name, component]) => (
+                        <p key={name}>
+                          {(
+                            {
+                              commission: "佣金",
+                              platform: "平台费",
+                              fundCommission: "基金佣金",
+                            } as Record<string, string>
+                          )[name] ?? name}{" "}
+                          ·{" "}
+                          {component.basis === "free"
+                            ? "明确免收"
+                            : `${component.rate ?? "未知"} · ${({ share: "每股", order: "每单", percent: "百分比", permille: "千分比" } as Record<string, string>)[component.basis] ?? component.basis}`}
+                          {component.minimum
+                            ? ` · 最低 ${component.minimum}`
+                            : ""}
+                          {component.maximum !== undefined
+                            ? ` · 最高 ${component.maximum}`
+                            : ""}
+                          {component.maximumPercent !== undefined
+                            ? ` · 成交额上限 ${component.maximumPercent}%`
+                            : ""}
+                          {` · ${component.side === "buy" ? "买入" : component.side === "sell" ? "卖出" : "买入与卖出"}`}
+                          {component.basis !== "free"
+                            ? ` · 冲突时采用${component.minimumWins === false ? "上限" : "最低费用"}`
+                            : ""}
+                        </p>
+                      ),
+                    )}
+                  </article>
+                ))}
+              </details>
+            )}
+
+            <fieldset disabled={!!original || busy || !!pending}>
               <label>
-                费率
-                <input
-                  value={rate}
-                  onChange={(e) => {
-                    setRate(e.target.value);
-                    clearProof();
-                  }}
-                />
-              </label>
-              <label>
-                最高费用
-                <input
-                  value={maximum}
-                  onChange={(e) => {
-                    setMaximum(e.target.value);
-                    clearProof();
-                  }}
-                />
-              </label>
-              <label>
-                成交额上限百分比
-                <input
-                  value={maximumPercent}
-                  onChange={(e) => {
-                    setMaximumPercent(e.target.value);
-                    clearProof();
-                  }}
-                />
-              </label>
-              <label>
-                最低与上限冲突时
+                分项
                 <select
-                  value={minimumWins ? "minimum" : "maximum"}
+                  value={ruleKind}
                   onChange={(e) => {
-                    setMinimumWins(e.target.value === "minimum");
+                    setRuleKind(e.target.value);
+                    const saved = plans.find(
+                      (item) =>
+                        item.id === selectedPlan &&
+                        item.revision === item.current_revision,
+                    );
+                    const component = saved?.components[e.target.value];
+                    setBasis(component?.basis ?? "share");
+                    setRate(component?.rate ?? "");
+                    setMinimum(component?.minimum ?? "");
+                    setMaximum(
+                      typeof component?.maximum === "string"
+                        ? component.maximum
+                        : "",
+                    );
+                    setMaximumPercent(
+                      typeof component?.maximumPercent === "string"
+                        ? component.maximumPercent
+                        : "",
+                    );
+                    setMinimumWins(component?.minimumWins !== false);
+                    setSide(
+                      typeof component?.side === "string"
+                        ? component.side
+                        : "both",
+                    );
                     clearProof();
                   }}
                 >
-                  <option value="minimum">采用最低费用</option>
-                  <option value="maximum">采用费用上限</option>
+                  <option value="commission">佣金</option>
+                  <option value="platform">平台费</option>
+                  <option value="fundCommission">基金佣金</option>
                 </select>
               </label>
               <label>
-                最低费用
-                <input
-                  value={minimum}
+                方式
+                <select
+                  value={basis}
                   onChange={(e) => {
-                    setMinimum(e.target.value);
+                    setBasis(e.target.value);
                     clearProof();
                   }}
-                />
+                >
+                  <option value="share">每股</option>
+                  <option value="order">每单</option>
+                  <option value="percent">百分比</option>
+                  <option value="permille">千分比</option>
+                  <option value="free">明确免收</option>
+                </select>
               </label>
-            </>
-          )}
-          </fieldset>
-          <button
-            className="button"
-            disabled={busy || !!pending || !snapshot}
-            onClick={() => void preview(true)}
-          >
-            核对个人费率
-          </button>
-        </div>
-      </details>
-      {snapshot && (
-        <section>
-          <h2>历史费用核对</h2>
-          <p>
-            规则截至 {snapshot.ruleVersion.slice(0, 10)} · 按本人确认期间重建
-          </p>
-          {!snapshot.ordersComplete && (
-            <p role="status">
-              {snapshot.legacyCoverage.status === "unavailable"
-                ? "旧原账清单尚未导入，历史订单范围未知"
-                : "旧原账清单或成交映射尚未完整核对"}
-            </p>
-          )}
-          {snapshot.unassignedOrderIds === null ? (
-            <p>旧未分配订单范围未知</p>
-          ) : snapshot.unassignedOrders &&
-            snapshot.unassignedOrders.length > 0 ? (
-            <section>
-              <h3>原始未分配订单</h3>
-              {snapshot.unassignedOrders.map((item) => (
-                <article key={item.orderId}>
-                  <p>
-                    {item.input.code ?? "证券未知"} · {item.orderId}
-                  </p>
-                  <p>
-                    数量 {item.input.quantity ?? "未知"} · 原费用{" "}
-                    {item.input.fees ?? "未知"}{" "}
-                    {item.input.currency ?? "币种未知"}
-                  </p>
-                  {snapshot.sourceAttributions.some(
-                    (value) => value.orderId === item.orderId,
-                  ) ? (
-                    <p>归属证据已确认，尚未财务归账</p>
-                  ) : (
-                    <p>须逐笔核对历史归属及原现金，尚未财务归账</p>
-                  )}
-                </article>
-              ))}
-            </section>
-          ) : null}
-          {snapshot.items.map((item) => (
-            <article key={item.orderId}>
               <label>
-                <input
-                  type="checkbox"
-                  checked={!!selection[item.orderId]}
-                  disabled={!!item.exclusion || busy || !!pending}
+                适用方向
+                <select
+                  value={side}
                   onChange={(e) => {
-                    if (item.recordRevision === null) return;
-                    const recordRevision = item.recordRevision;
+                    setSide(e.target.value);
                     clearProof();
-                    setSelection((values) => {
-                      const copy = { ...values };
-                      if (e.target.checked)
-                        copy[item.orderId] = {
-                          orderId: item.orderId,
-                          revision: item.revision,
-                          recordRevision,
-                          instrumentKind: "unknown",
-                          wholeOrderConfirmed: false,
-                          brokerOwnershipConfirmed: false,
-                        };
-                      else delete copy[item.orderId];
-                      return copy;
-                    });
                   }}
-                />
-                {item.code ?? "证券未知"} · 登记费用{" "}
-                {item.registeredFees ?? item.fees ?? "未知"} · 实付{" "}
-                {item.actualFeeKnown ? (item.fees ?? "未知") : "未知"}
+                >
+                  <option value="both">买入与卖出</option>
+                  <option value="buy">买入</option>
+                  <option value="sell">卖出</option>
+                </select>
               </label>
-              {item.exclusion && <p>{item.exclusion}</p>}
-              {selection[item.orderId] && (
-                <div>
+              {basis !== "free" && (
+                <>
                   <label>
-                    证券类型
+                    费率
+                    <input
+                      value={rate}
+                      onChange={(e) => {
+                        setRate(e.target.value);
+                        clearProof();
+                      }}
+                    />
+                  </label>
+                  <label>
+                    最高费用
+                    <input
+                      value={maximum}
+                      onChange={(e) => {
+                        setMaximum(e.target.value);
+                        clearProof();
+                      }}
+                    />
+                  </label>
+                  <label>
+                    成交额上限百分比
+                    <input
+                      value={maximumPercent}
+                      onChange={(e) => {
+                        setMaximumPercent(e.target.value);
+                        clearProof();
+                      }}
+                    />
+                  </label>
+                  <label>
+                    最低与上限冲突时
                     <select
-                      value={selection[item.orderId].instrumentKind}
-                      onChange={(e) =>
-                        edit(item.orderId, { instrumentKind: e.target.value })
-                      }
+                      value={minimumWins ? "minimum" : "maximum"}
+                      onChange={(e) => {
+                        setMinimumWins(e.target.value === "minimum");
+                        clearProof();
+                      }}
                     >
-                      <option value="unknown">待核对</option>
-                      <option value="us_domestic_equity">美股普通股票</option>
-                      <option value="us_etf">美股 ETF</option>
-                      <option value="cn_a_equity">A 股普通股票</option>
+                      <option value="minimum">采用最低费用</option>
+                      <option value="maximum">采用费用上限</option>
                     </select>
                   </label>
                   <label>
+                    最低费用
                     <input
-                      type="checkbox"
-                      checked={selection[item.orderId].brokerOwnershipConfirmed}
-                      onChange={(e) =>
-                        edit(item.orderId, {
-                          brokerOwnershipConfirmed: e.target.checked,
-                        })
-                      }
+                      value={minimum}
+                      onChange={(e) => {
+                        setMinimum(e.target.value);
+                        clearProof();
+                      }}
                     />
-                    已核对成交当时的账户归属
                   </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={selection[item.orderId].wholeOrderConfirmed}
-                      onChange={(e) =>
-                        edit(item.orderId, {
-                          wholeOrderConfirmed: e.target.checked,
-                        })
-                      }
-                    />
-                    完整独立计费订单，无未处理优惠或附加费
-                  </label>
-                  {item.manualReviewRequired && (
+                </>
+              )}
+            </fieldset>
+            <button
+              className="button"
+              disabled={busy || !!pending || !snapshot}
+              onClick={() => void preview(true)}
+            >
+              核对个人费率
+            </button>
+          </div>
+        </details>
+      </WorkspaceView>
+
+      <WorkspaceView
+        active={workspaceSection === "repair"}
+        label="历史费用核对"
+      >
+        {snapshot && (
+          <section>
+            <h2>历史费用核对</h2>
+            <p>
+              规则截至 {snapshot.ruleVersion.slice(0, 10)} · 按本人确认期间重建
+            </p>
+            {!snapshot.ordersComplete && (
+              <p role="status">
+                {snapshot.legacyCoverage.status === "unavailable"
+                  ? "旧原账清单尚未导入，历史订单范围未知"
+                  : "旧原账清单或成交映射尚未完整核对"}
+              </p>
+            )}
+            {snapshot.unassignedOrderIds === null ? (
+              <p>旧未分配订单范围未知</p>
+            ) : snapshot.unassignedOrders &&
+              snapshot.unassignedOrders.length > 0 ? (
+              <section>
+                <h3>原始未分配订单</h3>
+                {snapshot.unassignedOrders.map((item) => (
+                  <article key={item.orderId}>
+                    <p>
+                      {item.input.code ?? "证券未知"} · {item.orderId}
+                    </p>
+                    <p>
+                      数量 {item.input.quantity ?? "未知"} · 原费用{" "}
+                      {item.input.fees ?? "未知"}{" "}
+                      {item.input.currency ?? "币种未知"}
+                    </p>
+                    {snapshot.sourceAttributions.some(
+                      (value) => value.orderId === item.orderId,
+                    ) ? (
+                      <p>归属证据已确认，尚未财务归账</p>
+                    ) : (
+                      <p>须逐笔核对历史归属及原现金，尚未财务归账</p>
+                    )}
+                  </article>
+                ))}
+              </section>
+            ) : null}
+            {snapshot.items.map((item) => (
+              <article key={item.orderId}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={!!selection[item.orderId]}
+                    disabled={!!item.exclusion || busy || !!pending}
+                    onChange={(e) => {
+                      if (item.recordRevision === null) return;
+                      const recordRevision = item.recordRevision;
+                      clearProof();
+                      setSelection((values) => {
+                        const copy = { ...values };
+                        if (e.target.checked)
+                          copy[item.orderId] = {
+                            orderId: item.orderId,
+                            revision: item.revision,
+                            recordRevision,
+                            instrumentKind: "unknown",
+                            wholeOrderConfirmed: false,
+                            brokerOwnershipConfirmed: false,
+                          };
+                        else delete copy[item.orderId];
+                        return copy;
+                      });
+                    }}
+                  />
+                  {item.code ?? "证券未知"} · 登记费用{" "}
+                  {item.registeredFees ?? item.fees ?? "未知"} · 实付{" "}
+                  {item.actualFeeKnown ? (item.fees ?? "未知") : "未知"}
+                </label>
+                {item.exclusion && <p>{item.exclusion}</p>}
+                {selection[item.orderId] && (
+                  <div>
+                    <label>
+                      证券类型
+                      <select
+                        value={selection[item.orderId].instrumentKind}
+                        onChange={(e) =>
+                          edit(item.orderId, { instrumentKind: e.target.value })
+                        }
+                      >
+                        <option value="unknown">待核对</option>
+                        <option value="us_domestic_equity">美股普通股票</option>
+                        <option value="us_etf">美股 ETF</option>
+                        <option value="cn_a_equity">A 股普通股票</option>
+                      </select>
+                    </label>
                     <label>
                       <input
                         type="checkbox"
                         checked={
-                          selection[item.orderId].legacyImportConfirmed === true
+                          selection[item.orderId].brokerOwnershipConfirmed
                         }
                         onChange={(e) =>
                           edit(item.orderId, {
-                            legacyImportConfirmed: e.target.checked
-                              ? true
-                              : undefined,
+                            brokerOwnershipConfirmed: e.target.checked,
                           })
                         }
                       />
-                      逐笔确认旧导入遗漏费用
+                      已核对成交当时的账户归属
                     </label>
-                  )}
-                </div>
-              )}
-            </article>
-          ))}
-          <button
-            className="button"
-            disabled={busy || !!pending || !Object.keys(selection).length}
-            onClick={() => void preview()}
-          >
-            核对所选费用
-          </button>
-        </section>
-      )}
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={selection[item.orderId].wholeOrderConfirmed}
+                        onChange={(e) =>
+                          edit(item.orderId, {
+                            wholeOrderConfirmed: e.target.checked,
+                          })
+                        }
+                      />
+                      完整独立计费订单，无未处理优惠或附加费
+                    </label>
+                    {item.manualReviewRequired && (
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={
+                            selection[item.orderId].legacyImportConfirmed ===
+                            true
+                          }
+                          onChange={(e) =>
+                            edit(item.orderId, {
+                              legacyImportConfirmed: e.target.checked
+                                ? true
+                                : undefined,
+                            })
+                          }
+                        />
+                        逐笔确认旧导入遗漏费用
+                      </label>
+                    )}
+                  </div>
+                )}
+              </article>
+            ))}
+            <button
+              className="button"
+              disabled={busy || !!pending || !Object.keys(selection).length}
+              onClick={() => void preview()}
+            >
+              核对所选费用
+            </button>
+          </section>
+        )}
+      </WorkspaceView>
+
       {proof && (
         <section>
           <h2>
@@ -1533,7 +1676,9 @@ function FeeSession({
                 {proof.sourceAccount?.accountKind === "simulated"
                   ? "模拟"
                   : "真实"}{" "}
-                · {proof.data.market??"市场未核对"} · {proof.data.effectiveFrom} — {proof.data.effectiveThrough??"开放结束"}
+                · {proof.data.market ?? "市场未核对"} ·{" "}
+                {proof.data.effectiveFrom} —{" "}
+                {proof.data.effectiveThrough ?? "开放结束"}
               </p>
               {Object.entries(proof.data.components).map(
                 ([name, component]) => (

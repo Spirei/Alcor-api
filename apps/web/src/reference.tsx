@@ -1,3 +1,4 @@
+import { TradingMonth } from "./trading-month";
 import {
   Activity,
   useCallback,
@@ -26,6 +27,8 @@ import "./reference.css";
 import { CalendarComparison } from "./calendar-comparison";
 import { FxObservations } from "./fx-observations";
 import { FxProviderEditor, type CustomProvider } from "./fx-provider-editor";
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
+import { FxConverter } from "./fx-converter";
 
 type Rates = {
   refreshEnabled: boolean;
@@ -39,9 +42,15 @@ type Rates = {
   source: string;
   sourcePrecision?: string;
   identityCurrencies?: string[];
-  exactRatios?: Record<string,{numerator:string;denominator:string}>;
+  exactRatios?: Record<string, { numerator: string; denominator: string }>;
   quarantined?: boolean;
-  budget?: {dayUTC:string;limit:number;used:number;remaining:number;scope:string};
+  budget?: {
+    dayUTC: string;
+    limit: number;
+    used: number;
+    remaining: number;
+    scope: string;
+  };
 };
 type HistoryEntry = {
   requestId: string;
@@ -76,8 +85,19 @@ export type Calendar = {
   timeZone?: string;
   year: number;
   days: Day[];
-  coverage: { status: string; verifiedAt: string | null; temporaryClosures?: string; verifiedYears?: number[] };
-  sources: { id: string; title: string; url: string;publishedAt?:string|null;verifiedAt?:string|null }[];
+  coverage: {
+    status: string;
+    verifiedAt: string | null;
+    temporaryClosures?: string;
+    verifiedYears?: number[];
+  };
+  sources: {
+    id: string;
+    title: string;
+    url: string;
+    publishedAt?: string | null;
+    verifiedAt?: string | null;
+  }[];
 };
 export function ReferencePage({
   session,
@@ -94,7 +114,7 @@ export function ReferencePage({
   ]);
   return (
     <ReferenceSession
-      key={JSON.stringify([scope,session.csrf,session.expires_at])}
+      key={JSON.stringify([scope, session.csrf, session.expires_at])}
       scope={scope}
       session={session}
       active={active}
@@ -110,6 +130,7 @@ function ReferenceSession({
   session: Session;
   active: boolean;
 }) {
+  const [view, setView] = useState<"rates" | "calendar" | "source">("rates");
   const [visible, setVisible] = useState(!document.hidden);
   const [rates, setRates] = useState<Rates | null>(null),
     [config, setConfig] = useState<Config | null>(null);
@@ -119,7 +140,8 @@ function ReferenceSession({
     [month, setMonth] = useState(
       String(new Date().getMonth() + 1).padStart(2, "0"),
     );
-  const [calendarMode,setCalendarMode] = useState("single"),[observationsOpen,setObservationsOpen] = useState(false);
+  const [calendarMode, setCalendarMode] = useState("single"),
+    [observationsOpen, setObservationsOpen] = useState(false);
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [receipt, setReceipt] = useState<Receipt | null>(null);
@@ -287,7 +309,16 @@ function ReferenceSession({
   }, [active, visible, locked, load, session.user.role, failure]);
   useEffect(() => {
     setCalendar(null);
-    if (!active || !visible || locked || calendarMode!=="single" || !/^\d{4}$/.test(year) || Number(year)<2000 || Number(year)>2100) return;
+    if (
+      !active ||
+      !visible ||
+      locked ||
+      calendarMode !== "single" ||
+      !/^\d{4}$/.test(year) ||
+      Number(year) < 2000 ||
+      Number(year) > 2100
+    )
+      return;
     const controller = new AbortController();
     const generation = epoch.current;
     void api<{ data: Calendar }>(
@@ -308,7 +339,7 @@ function ReferenceSession({
           failure(reason);
       });
     return () => controller.abort();
-  }, [active, visible, locked, market, year, failure,calendarMode]);
+  }, [active, visible, locked, market, year, failure, calendarMode]);
   const check = useCallback(async () => {
     if (!id || !live.current || locked || busy || polling.current) return;
     polling.current = true;
@@ -559,298 +590,405 @@ function ReferenceSession({
         </button>
       </header>
       {error && <p role="alert">{error}</p>}
-      <section aria-label="汇率">
-        <div className="reference-actions">
-          <h2>汇率 · 1 {rates?.base ?? "USD"}</h2>
-          <button
-            className="button"
-            type="button"
-            onClick={() => void refresh()}
-            disabled={busy || locked || id !== null || !rates?.refreshEnabled}
-          >
-            刷新报价
-          </button>
-        </div>
-        {rates ? (
-          <>
-            <dl className="reference-rates">
-              {[
-                ...new Set([
-                  "USD",
-                  "CNY",
-                  "HKD",
-                  "JPY",
-                  "EUR",
-                  ...Object.keys(rates.rates),
-                ]),
-              ].map((code) => (
-                <div key={code}>
-                  <dt>{code}</dt>
-                  <dd>
-                    {rates.roundedCurrencies?.includes(code) ? "≈ " : ""}
-                    {Object.hasOwn(rates.rates, code) ? rateLabel(rates.rates, code) : "未知"}
-                    {rates.identityCurrencies?.includes(code) && <small>基准恒等值，非外部报价</small>}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <details>
-              <summary>来源</summary>
-              <p>{rates.source}</p>
-              <p>{rates.sourcePrecision === "date" ? "来源仅提供日期，日内时效未知" : rates.sourcePrecision ? `来源时间精度 ${rates.sourcePrecision}` : "来源时间精度未知"}</p>
-              <p>
-                报价时间：
-                {rates.observationInstant ?? rates.observationDate ?? "未知"}
-              </p>
-              <p>
-                接收时间：
-                {rates.updatedAt === null
-                  ? "未取得"
-                  : new Date(rates.updatedAt).toLocaleString()}
-              </p>
-              {!!Object.keys(rates.exactRatios || {}).length && <dl className="portfolio-proof">{Object.entries(rates.exactRatios || {}).map(([code,ratio])=><div key={code}><dt>{code} 原始比率</dt><dd>{ratio.numerator} / {ratio.denominator}</dd></div>)}</dl>}
-              {rates.budget && <p>共享来源预算 · {rates.budget.dayUTC} UTC · 已用 {rates.budget.used} / {rates.budget.limit} · 剩余 {rates.budget.remaining}</p>}
-              {rates.quarantined === true && <p role="status">恢复隔离中，仅可读取保留观察，不执行来源刷新</p>}
-            </details>
-          </>
-        ) : (
-          <p>暂无汇率</p>
-        )}
-        {id && (
-          <div className="reference-receipt">
-            <span>
-              {receipt
-                ? {
-                    queued: "等待处理",
-                    running: "正在读取",
-                    completed: "刷新完成",
-                    failed: "刷新失败",
-                    interrupted: "处理已中断",
-                  }[receipt.state]
-                : "结果待核对"}
-            </span>
-            {receipt?.error_code && (
-              <span>
-                {receipt.error_code === "daily_budget"
-                  ? "每日额度已用完"
-                  : receipt.error_code === "provider_disabled"
-                    ? "供应商读取未启用"
-                    : "供应商读取未完成"}
-              </span>
-            )}
+      <WorkspaceTabs
+        label="汇率与日历功能"
+        value={view}
+        onChange={setView}
+        items={[
+          { value: "rates", label: "汇率换算" },
+          { value: "calendar", label: "休市日历" },
+          ...(session.user.role === "admin"
+            ? [{ value: "source" as const, label: "来源设置" }]
+            : []),
+        ]}
+      />
+      <WorkspaceView active={view === "rates"} label="汇率换算与观察">
+        <FxConverter rates={rates} />
+        <section aria-label="汇率">
+          <div className="reference-actions">
+            <h2>汇率 · 1 {rates?.base ?? "USD"}</h2>
             <button
               className="button"
               type="button"
-              onClick={() => void check()}
-              disabled={locked}
+              onClick={() => void refresh()}
+              disabled={busy || locked || id !== null || !rates?.refreshEnabled}
             >
-              查询原请求
+              刷新报价
             </button>
-            {receipt && terminal(receipt.state) && (
-              <button className="button" type="button" onClick={finish}>
-                完成
-              </button>
-            )}
-            <details>
-              <summary>请求编号</summary>
-              <code>{id}</code>
-            </details>
           </div>
-        )}
-      </section>
-      <details onToggle={event=>setObservationsOpen(event.currentTarget.open)}><summary>来源观察与原件</summary><Activity mode={observationsOpen && active && visible && !locked ? "visible" : "hidden"}><FxObservations session={session} disabled={busy || id!==null || locked} onSelect={observation=>{selectedObservation.current=observation;void load(observation);}} onDenied={failure}/></Activity></details>
-      <details
-        open={historyOpen}
-        onToggle={(e) => setHistoryOpen(e.currentTarget.open)}
-      >
-        <summary>刷新记录</summary>
-        <div className="reference-calendar">
-          <table>
-            <thead>
-              <tr>
-                <th>请求时间</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history?.items.map((entry) => (
-                <tr key={entry.requestId}>
-                  <td>{new Date(entry.requestedAt).toLocaleString()}</td>
-                  <td>
-                    {{
+          {rates ? (
+            <>
+              <dl className="reference-rates">
+                {[
+                  ...new Set([
+                    "USD",
+                    "CNY",
+                    "HKD",
+                    "JPY",
+                    "EUR",
+                    ...Object.keys(rates.rates),
+                  ]),
+                ].map((code) => (
+                  <div key={code}>
+                    <dt>{code}</dt>
+                    <dd>
+                      {rates.roundedCurrencies?.includes(code) ? "≈ " : ""}
+                      {Object.hasOwn(rates.rates, code)
+                        ? rateLabel(rates.rates, code)
+                        : "未知"}
+                      {rates.identityCurrencies?.includes(code) && (
+                        <small>基准恒等值，非外部报价</small>
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <details>
+                <summary>来源</summary>
+                <p>{rates.source}</p>
+                <p>
+                  {rates.sourcePrecision === "date"
+                    ? "来源仅提供日期，日内时效未知"
+                    : rates.sourcePrecision
+                      ? `来源时间精度 ${rates.sourcePrecision}`
+                      : "来源时间精度未知"}
+                </p>
+                <p>
+                  报价时间：
+                  {rates.observationInstant ?? rates.observationDate ?? "未知"}
+                </p>
+                <p>
+                  接收时间：
+                  {rates.updatedAt === null
+                    ? "未取得"
+                    : new Date(rates.updatedAt).toLocaleString()}
+                </p>
+                {!!Object.keys(rates.exactRatios || {}).length && (
+                  <dl className="portfolio-proof">
+                    {Object.entries(rates.exactRatios || {}).map(
+                      ([code, ratio]) => (
+                        <div key={code}>
+                          <dt>{code} 原始比率</dt>
+                          <dd>
+                            {ratio.numerator} / {ratio.denominator}
+                          </dd>
+                        </div>
+                      ),
+                    )}
+                  </dl>
+                )}
+                {rates.budget && (
+                  <p>
+                    共享来源预算 · {rates.budget.dayUTC} UTC · 已用{" "}
+                    {rates.budget.used} / {rates.budget.limit} · 剩余{" "}
+                    {rates.budget.remaining}
+                  </p>
+                )}
+                {rates.quarantined === true && (
+                  <p role="status">
+                    恢复隔离中，仅可读取保留观察，不执行来源刷新
+                  </p>
+                )}
+              </details>
+            </>
+          ) : (
+            <p>暂无汇率</p>
+          )}
+          {id && (
+            <div className="reference-receipt">
+              <span>
+                {receipt
+                  ? {
                       queued: "等待处理",
                       running: "正在读取",
-                      completed: "已完成",
-                      failed: "失败",
-                      interrupted: "已中断",
-                    }[entry.state] || "待核对"}
-                  </td>
-                  <td>
-                    <button
-                      className="button small"
-                      type="button"
-                      disabled={locked || (!!id && id !== entry.requestId)}
-                      onClick={() => resume(entry)}
-                    >
-                      查询原请求
-                    </button>
-                    <details>
-                      <summary>请求编号</summary>
-                      <code>{entry.requestId}</code>
-                    </details>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!historyBusy && history?.items.length === 0 && <p>暂无刷新记录</p>}
-        {historyBusy && <p role="status">正在读取…</p>}
-        {history?.nextCursor && (
-          <button
-            className="button"
-            type="button"
-            disabled={historyBusy || locked}
-            onClick={() => void loadHistory(history.nextCursor!)}
-          >
-            更多记录
-          </button>
-        )}
-      </details>
-      <section aria-label="交易日历">
-        <div className="reference-actions">
-          <h2>交易日历</h2>
-          <SelectMenu label="日历范围" value={calendarMode} onChange={setCalendarMode} options={[{value:"single",label:"单市场"},{value:"batch",label:"三市场对比"}]}/>
-          <SelectMenu
-            label="市场"
-            disabled={calendarMode === "batch"}
-            value={market}
-            onChange={setMarket}
-            options={[
-              { value: "CN", label: "A 股" },
-              { value: "HK", label: "港股" },
-              { value: "US", label: "美股" },
-            ]}
-          />
-          <SelectMenu
-            label="月份"
-            value={month}
-            onChange={setMonth}
-            options={Array.from({ length: 12 }, (_, index) => ({
-              value: String(index + 1).padStart(2, "0"),
-              label: `${index + 1}月`,
-            }))}
-          />
-          <label>
-            年份
-            <input
-              type="number"
-              min="2000"
-              max="2100"
-              value={year}
-              onChange={(event) => setYear(event.target.value)}
-            />
-          </label>
-        </div>
-        {calendarMode === "batch" ? <CalendarComparison year={year} month={month} active={active && visible && !locked} onDenied={failure}/> : calendar ? (
-          <>
-            <p role="status">{calendar.coverage.status === "verified" ? "年度安排已收录" : "该年份年度安排未确认"} · 临时停市和当日实际交易状态未知</p>
-            <p>{calendar.marketName || calendar.market} · {calendar.timeZone || "时区未知"}</p>
-            <div className="reference-calendar">
-              <table>
-                <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>安排</th>
-                    <th>名称</th>
-                    <th>收市时间（当地）</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {calendar.days
-                    .filter((day) => day.date.slice(5, 7) === month)
-                    .map((day) => (
-                      <tr key={day.date}>
-                        <td>{day.date}</td>
-                        <td>{dayLabel(day.status)}</td>
-                        <td>{day.name ?? "—"}</td>
-                        <td>
-                          {day.close
-                            ? `${day.close.continuous}${day.close.auction ? ` · ${day.close.auction.earliest}–${day.close.auction.latest}` : ""}`
-                            : day.isTradingDay === false ? "不适用" : "未知"}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            <details>
-              <summary>来源</summary>
-              {calendar.sources.length ? (
-                calendar.sources.map((source) => (
-                  <p key={source.id}>
-                    <a href={source.url} target="_blank" rel="noreferrer">
-                      {source.title}
-                    </a>
-                    {source.publishedAt && <small>发布 {source.publishedAt}</small>}{source.verifiedAt && <small>核对 {source.verifiedAt}</small>}
-                  </p>
-                ))
-              ) : (
-                <p>该年份尚未确认</p>
+                      completed: "刷新完成",
+                      failed: "刷新失败",
+                      interrupted: "处理已中断",
+                    }[receipt.state]
+                  : "结果待核对"}
+              </span>
+              {receipt?.error_code && (
+                <span>
+                  {receipt.error_code === "daily_budget"
+                    ? "每日额度已用完"
+                    : receipt.error_code === "provider_disabled"
+                      ? "供应商读取未启用"
+                      : "供应商读取未完成"}
+                </span>
               )}
-            </details>
-          </>
-        ) : (
-          <p>日历尚未取得</p>
-        )}
-      </section>
-      {session.user.role === "admin" && config && (
-        <section aria-label="汇率供应商">
-          <h2>汇率供应商</h2>
-          <p>{config.custom ? "自定义来源" : "默认来源"}</p>
-          <FxProviderEditor
-            key={providerEditorEpoch}
-            active={active && visible}
-            disabled={busy || locked}
-            onChange={setCustomProvider}
-          />
-          <div className="reference-actions">
-            <label>
-              <input
-                type="checkbox"
-                checked={draft.enabled}
-                disabled={busy || locked}
-                onChange={(event) => {
-                  dirty.current = true;
-                  setDraft({ ...draft, enabled: event.target.checked });
-                }}
-              />
-              允许读取
-            </label>
-            <label>
-              每日额度
-              <input
-                inputMode="numeric"
-                value={draft.dailyBudget}
-                disabled={busy || locked}
-                onChange={(event) => {
-                  dirty.current = true;
-                  setDraft({ ...draft, dailyBudget: event.target.value });
-                }}
-              />
-            </label>
+              <button
+                className="button"
+                type="button"
+                onClick={() => void check()}
+                disabled={locked}
+              >
+                查询原请求
+              </button>
+              {receipt && terminal(receipt.state) && (
+                <button className="button" type="button" onClick={finish}>
+                  完成
+                </button>
+              )}
+              <details>
+                <summary>请求编号</summary>
+                <code>{id}</code>
+              </details>
+            </div>
+          )}
+        </section>
+        <details
+          onToggle={(event) => setObservationsOpen(event.currentTarget.open)}
+        >
+          <summary>来源观察与原件</summary>
+          <Activity
+            mode={
+              observationsOpen && active && visible && !locked
+                ? "visible"
+                : "hidden"
+            }
+          >
+            <FxObservations
+              session={session}
+              disabled={busy || id !== null || locked}
+              onSelect={(observation) => {
+                selectedObservation.current = observation;
+                void load(observation);
+              }}
+              onDenied={failure}
+            />
+          </Activity>
+        </details>
+        <details
+          open={historyOpen}
+          onToggle={(e) => setHistoryOpen(e.currentTarget.open)}
+        >
+          <summary>刷新记录</summary>
+          <div className="reference-calendar">
+            <table>
+              <thead>
+                <tr>
+                  <th>请求时间</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history?.items.map((entry) => (
+                  <tr key={entry.requestId}>
+                    <td>{new Date(entry.requestedAt).toLocaleString()}</td>
+                    <td>
+                      {{
+                        queued: "等待处理",
+                        running: "正在读取",
+                        completed: "已完成",
+                        failed: "失败",
+                        interrupted: "已中断",
+                      }[entry.state] || "待核对"}
+                    </td>
+                    <td>
+                      <button
+                        className="button small"
+                        type="button"
+                        disabled={locked || (!!id && id !== entry.requestId)}
+                        onClick={() => resume(entry)}
+                      >
+                        查询原请求
+                      </button>
+                      <details>
+                        <summary>请求编号</summary>
+                        <code>{entry.requestId}</code>
+                      </details>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!historyBusy && history?.items.length === 0 && <p>暂无刷新记录</p>}
+          {historyBusy && <p role="status">正在读取…</p>}
+          {history?.nextCursor && (
             <button
               className="button"
               type="button"
-              onClick={() => void save()}
-              disabled={busy || locked}
+              disabled={historyBusy || locked}
+              onClick={() => void loadHistory(history.nextCursor!)}
             >
-              保存
+              更多记录
             </button>
+          )}
+        </details>
+      </WorkspaceView>
+      <WorkspaceView active={view === "calendar"} label="休市日历">
+        <section aria-label="交易日历">
+          <div className="reference-actions">
+            <h2>交易日历</h2>
+            <SelectMenu
+              label="日历范围"
+              value={calendarMode}
+              onChange={setCalendarMode}
+              options={[
+                { value: "single", label: "单市场" },
+                { value: "batch", label: "三市场对比" },
+              ]}
+            />
+            <SelectMenu
+              label="市场"
+              disabled={calendarMode === "batch"}
+              value={market}
+              onChange={setMarket}
+              options={[
+                { value: "CN", label: "A 股" },
+                { value: "HK", label: "港股" },
+                { value: "US", label: "美股" },
+              ]}
+            />
+            <SelectMenu
+              label="月份"
+              value={month}
+              onChange={setMonth}
+              options={Array.from({ length: 12 }, (_, index) => ({
+                value: String(index + 1).padStart(2, "0"),
+                label: `${index + 1}月`,
+              }))}
+            />
+            <label>
+              年份
+              <input
+                type="number"
+                min="2000"
+                max="2100"
+                value={year}
+                onChange={(event) => setYear(event.target.value)}
+              />
+            </label>
           </div>
+          {calendarMode === "batch" ? (
+            <CalendarComparison
+              year={year}
+              month={month}
+              active={active && visible && !locked && view === "calendar"}
+              onDenied={failure}
+            />
+          ) : calendar ? (
+            <>
+              <p role="status">
+                {calendar.coverage.status === "verified"
+                  ? "年度安排已收录"
+                  : "该年份年度安排未确认"}{" "}
+                · 临时停市和当日实际交易状态未知
+              </p>
+              <p>
+                {calendar.marketName || calendar.market} ·{" "}
+                {calendar.timeZone || "时区未知"}
+              </p>
+              <TradingMonth calendar={calendar} month={month} />
+              <details>
+                <summary>日期与收市明细</summary>
+                <div className="reference-calendar">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>安排</th>
+                        <th>名称</th>
+                        <th>收市时间（当地）</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calendar.days
+                        .filter((day) => day.date.slice(5, 7) === month)
+                        .map((day) => (
+                          <tr key={day.date}>
+                            <td>{day.date}</td>
+                            <td>{dayLabel(day.status)}</td>
+                            <td>{day.name ?? "—"}</td>
+                            <td>
+                              {day.close
+                                ? `${day.close.continuous}${day.close.auction ? ` · ${day.close.auction.earliest}–${day.close.auction.latest}` : ""}`
+                                : day.isTradingDay === false
+                                  ? "不适用"
+                                  : "未知"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+              <details>
+                <summary>来源</summary>
+                {calendar.sources.length ? (
+                  calendar.sources.map((source) => (
+                    <p key={source.id}>
+                      <a href={source.url} target="_blank" rel="noreferrer">
+                        {source.title}
+                      </a>
+                      {source.publishedAt && (
+                        <small>发布 {source.publishedAt}</small>
+                      )}
+                      {source.verifiedAt && (
+                        <small>核对 {source.verifiedAt}</small>
+                      )}
+                    </p>
+                  ))
+                ) : (
+                  <p>该年份尚未确认</p>
+                )}
+              </details>
+            </>
+          ) : (
+            <p>日历尚未取得</p>
+          )}
         </section>
-      )}
+      </WorkspaceView>
+      <WorkspaceView active={view === "source"} label="汇率来源设置">
+        {session.user.role === "admin" && config && (
+          <section aria-label="汇率供应商">
+            <h2>汇率供应商</h2>
+            <p>{config.custom ? "自定义来源" : "默认来源"}</p>
+            <FxProviderEditor
+              key={providerEditorEpoch}
+              active={active && visible}
+              disabled={busy || locked}
+              onChange={setCustomProvider}
+            />
+            <div className="reference-actions">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  disabled={busy || locked}
+                  onChange={(event) => {
+                    dirty.current = true;
+                    setDraft({ ...draft, enabled: event.target.checked });
+                  }}
+                />
+                允许读取
+              </label>
+              <label>
+                每日额度
+                <input
+                  inputMode="numeric"
+                  value={draft.dailyBudget}
+                  disabled={busy || locked}
+                  onChange={(event) => {
+                    dirty.current = true;
+                    setDraft({ ...draft, dailyBudget: event.target.value });
+                  }}
+                />
+              </label>
+              <button
+                className="button"
+                type="button"
+                onClick={() => void save()}
+                disabled={busy || locked}
+              >
+                保存
+              </button>
+            </div>
+          </section>
+        )}
+      </WorkspaceView>
       {verificationOpen && (
         <ConnectionVerification
           session={session}

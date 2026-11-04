@@ -1,12 +1,75 @@
-.portfolio-analysis { margin-block: 12px; }
-.portfolio-analysis label { display: grid; gap: 6px; }
-.portfolio-analysis .analysis-totals { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 16px; margin-block: 20px; }
-.portfolio-analysis dl>div { min-width: 0; }
-.portfolio-analysis dd { margin: 4px 0 0; overflow-wrap: anywhere; }
-.portfolio-analysis td { vertical-align: top; }
-.portfolio-analysis td small { display: block; overflow-wrap: anywhere; }
-.portfolio-analysis details { margin-block: 10px; }
-.portfolio-analysis h3 { font-size: 14px; margin-top: 20px; }
-.portfolio-analysis figure { margin: 16px 0; }
-.portfolio-analysis figure svg { display: block; width: 100%; max-width: 720px; height: auto; color: var(--text-primary, #4b5563); }
-.portfolio-analysis figcaption { font-size: 12px; }
+.portfolio-analysis {
+  margin-block: 12px;
+}
+.portfolio-analysis label {
+  display: grid;
+  gap: 6px;
+}
+.portfolio-analysis .analysis-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-block: 20px;
+}
+.portfolio-analysis dl > div {
+  min-width: 0;
+}
+.portfolio-analysis dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.portfolio-analysis td {
+  vertical-align: top;
+}
+.portfolio-analysis td small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.portfolio-analysis details {
+  margin-block: 10px;
+}
+.portfolio-analysis h3 {
+  font-size: 14px;
+  margin-top: 20px;
+}
+.portfolio-analysis figure {
+  margin: 16px 0;
+}
+.portfolio-analysis figure svg {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+  color: var(--text-primary, #4b5563);
+}
+.portfolio-analysis figcaption {
+  font-size: 12px;
+}
+.portfolio-analysis > h2 {
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+.portfolio-analysis .analysis-totals {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+.analysis-totals > div {
+  padding: 20px;
+  background: var(--soft);
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+}
+.analysis-totals dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.analysis-totals dd {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+.analysis-totals > div:last-child {
+  background: color-mix(in srgb, var(--accent, #3478f6) 8%, var(--bg));
+}

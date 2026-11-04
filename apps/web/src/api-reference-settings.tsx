@@ -7,11 +7,17 @@ import {
   type ReferenceReceipt,
 } from "./api-reference-state";
 
-export function ApiReferenceSettings({ session }: { session: Session }) {
+export function ApiReferenceSettings({
+  session,
+  expanded = false,
+}: {
+  session: Session;
+  expanded?: boolean;
+}) {
   const [version, setVersion] = useState<1 | 2>(1);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   return (
-    <details>
+    <details open={expanded}>
       <summary>接口文档</summary>
       <select
         aria-label="文档版本"

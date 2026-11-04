@@ -151,10 +151,11 @@ test("actual market page SSR has explicit empty source selection and makes no re
     const html = renderToStaticMarkup(
       React.createElement(page.MarketHistoryPage, { session }),
     );
-    assert.match(html, /选择已许可来源/);
-    assert.match(html, /选择来源/);
-    assert.match(html, /登记采集需求/);
-    assert.match(html, /读取已采集/);
+    assert.match(html, /全球市场/);
+    assert.match(html, /历史行情/);
+    assert.match(html, /未指定来源版本/);
+    assert.match(html, /按当前许可采集一次/);
+    assert.doesNotMatch(html, /登记采集需求/); // History controls mount only when that view is selected.
     assert.equal(requests, 0);
     const hidden = renderToStaticMarkup(
       React.createElement(page.MarketHistoryPage, { session, active: false }),

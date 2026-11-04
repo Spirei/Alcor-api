@@ -1,17 +1,39 @@
-import { SystemOperationsPanel } from "./system-operations";
-import { AgentRuntimeControls } from "./agent-runtime";
-import { FinancialDisplayProvider, AmountVisibilityControl } from "./financial-display";
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
+const SystemOperationsPanel = lazy(() =>
+  import("./system-operations").then((module) => ({
+    default: module.SystemOperationsPanel,
+  })),
+);
+const AgentRuntimeControls = lazy(() =>
+  import("./agent-runtime").then((module) => ({
+    default: module.AgentRuntimeControls,
+  })),
+);
+import {
+  FinancialDisplayProvider,
+  AmountVisibilityControl,
+} from "./financial-display";
 import { mobileNavigation } from "./site-navigation";
 import { WorkspaceNavigation } from "./workspace-navigation";
-import { PublicSiteProvider, PublicHomeNav, usePublicSite, registerSiteWorker } from "./public-site";
+import "./workspace-ui.css";
+import {
+  PublicSiteProvider,
+  PublicHomeNav,
+  usePublicSite,
+  registerSiteWorker,
+} from "./public-site";
 import { SiteTicker } from "./site-ticker";
 import { legacySitePath, loginDestination } from "./site-paths";
-const MarketAssetDetails = lazy(() => import("./market-asset-details").then(module => ({ default: module.MarketAssetDetails })));
-import {PersonalFontsProvider} from "./personal-font-runtime";
+const MarketAssetDetails = lazy(() =>
+  import("./market-asset-details").then((module) => ({
+    default: module.MarketAssetDetails,
+  })),
+);
+import { PersonalFontsProvider } from "./personal-font-runtime";
 import { useVisitedViews } from "./visited-views";
-import {clearFontRequests} from "./personal-font-state";
-import {clearAttachmentImportRequests} from "./attachment-import-state";
-import {clearIconRequests} from "./watch-group-icon-state";
+import { clearFontRequests } from "./personal-font-state";
+import { clearAttachmentImportRequests } from "./attachment-import-state";
+import { clearIconRequests } from "./watch-group-icon-state";
 import { clearGroupRequests } from "./watch-groups-state";
 import { clearSharedAssetRequests } from "./shared-assets-state";
 import { clearFireRequests } from "./fire-state";
@@ -21,7 +43,7 @@ import { clearLegacyImportRequests } from "./legacy-import-state";
 import { clearPreferenceDrafts } from "./preference-draft";
 import { apiSessionSnapshot, bindApiSession } from "./api-session";
 import { AvatarStatusProvider } from "./avatar-status";
-import {clearSourceRequests} from "./watch-group-source-state";
+import { clearSourceRequests } from "./watch-group-source-state";
 import { PasswordRecoveryBoundary } from "./password-recovery";
 import { EmailVerificationBoundary } from "./email-verification";
 import { clearOperationJournal } from "./operation-journal";
@@ -40,27 +62,73 @@ import React, {
   Suspense,
 } from "react";
 import type { ReactNode } from "react";
-const SimpleApp = lazy(() => import("./simple-app").then(module => ({default:module.SimpleApp})));
-const CelebsPage = lazy(() => import("./celebs").then(module => ({default:module.CelebsPage})));
-const FeedPage = lazy(() => import("./feed").then(module => ({default:module.FeedPage})));
-const WatchGroupsPage = lazy(() => import("./watch-groups").then(module => ({default:module.WatchGroupsPage})));
-const PortfolioPage = lazy(() => import("./portfolio").then(module => ({default:module.PortfolioPage})));
-const MigrationPage = lazy(() => import("./migration").then(module => ({default:module.MigrationPage})));
-const ActivityPage = lazy(() => import("./audit-activity").then(module => ({default:module.ActivityPage})));
-const LegacyImportPage = lazy(() => import("./legacy-import").then(module => ({default:module.LegacyImportPage})));
-const FirePage = lazy(() => import("./fire").then(module => ({default:module.FirePage})));
-const SharedAssetsPage = lazy(() => import("./shared-assets").then(module => ({default:module.SharedAssetsPage})));
-const AdminAttachmentsPage = lazy(() => import("./admin-attachments").then(module => ({default:module.AdminAttachmentsPage})));
-const ResourcesPage = lazy(() => import("./resources").then(module => ({default:module.ResourcesPage})));
-const FinancialReportsPage = lazy(() => import("./financial-reports").then(module => ({default:module.FinancialReportsPage})));
-const CardCatalogPage = lazy(() => import("./card-catalog").then(module => ({default:module.CardCatalogPage})));
+const SimpleApp = lazy(() =>
+  import("./simple-app").then((module) => ({ default: module.SimpleApp })),
+);
+const CelebsPage = lazy(() =>
+  import("./celebs").then((module) => ({ default: module.CelebsPage })),
+);
+const FeedPage = lazy(() =>
+  import("./feed").then((module) => ({ default: module.FeedPage })),
+);
+const WatchGroupsPage = lazy(() =>
+  import("./watch-groups").then((module) => ({
+    default: module.WatchGroupsPage,
+  })),
+);
+const PortfolioPage = lazy(() =>
+  import("./portfolio").then((module) => ({ default: module.PortfolioPage })),
+);
+const MigrationPage = lazy(() =>
+  import("./migration").then((module) => ({ default: module.MigrationPage })),
+);
+const ActivityPage = lazy(() =>
+  import("./audit-activity").then((module) => ({
+    default: module.ActivityPage,
+  })),
+);
+const LegacyImportPage = lazy(() =>
+  import("./legacy-import").then((module) => ({
+    default: module.LegacyImportPage,
+  })),
+);
+const FirePage = lazy(() =>
+  import("./fire").then((module) => ({ default: module.FirePage })),
+);
+const SharedAssetsPage = lazy(() =>
+  import("./shared-assets").then((module) => ({
+    default: module.SharedAssetsPage,
+  })),
+);
+const AdminAttachmentsPage = lazy(() =>
+  import("./admin-attachments").then((module) => ({
+    default: module.AdminAttachmentsPage,
+  })),
+);
+const ResourcesPage = lazy(() =>
+  import("./resources").then((module) => ({ default: module.ResourcesPage })),
+);
+const FinancialReportsPage = lazy(() =>
+  import("./financial-reports").then((module) => ({
+    default: module.FinancialReportsPage,
+  })),
+);
+const CardCatalogPage = lazy(() =>
+  import("./card-catalog").then((module) => ({
+    default: module.CardCatalogPage,
+  })),
+);
 const FeesPage = lazy(() =>
   import("./fees").then((module) => ({ default: module.FeesPage })),
 );
 const ReferencePage = lazy(() =>
   import("./reference").then((module) => ({ default: module.ReferencePage })),
 );
-const MarketHistoryPage = lazy(() => import("./market-history").then(module => ({default: module.MarketHistoryPage})));
+const MarketHistoryPage = lazy(() =>
+  import("./market-history").then((module) => ({
+    default: module.MarketHistoryPage,
+  })),
+);
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -103,32 +171,77 @@ import type {
 } from "./api";
 import { ResourceProvider, useResource, useTaskInvalidation } from "./hooks";
 import { VersionHistory } from "./version-history";
-import { BackupsPage } from "./backups";
+const BackupsPage = lazy(() =>
+  import("./backups").then((module) => ({ default: module.BackupsPage })),
+);
 import { AccountPreferencesProvider } from "./account-preferences";
-import { AccountClosureSettings } from "./account-removal";
-import { AccountClosureBoundary, AccountClosureRecoveryLink } from "./self-account-closure";
-import { EmailRegistrationBoundary, EmailRegistrationLink } from "./email-registration";
-import { AccountPage, UsersPage } from "./accounts";
+const AccountClosureSettings = lazy(() =>
+  import("./account-removal").then((module) => ({
+    default: module.AccountClosureSettings,
+  })),
+);
+import {
+  AccountClosureBoundary,
+  AccountClosureRecoveryLink,
+} from "./self-account-closure";
+import {
+  EmailRegistrationBoundary,
+  EmailRegistrationLink,
+} from "./email-registration";
+const AccountPage = lazy(() =>
+  import("./accounts").then((module) => ({ default: module.AccountPage })),
+);
+const UsersPage = lazy(() =>
+  import("./accounts").then((module) => ({ default: module.UsersPage })),
+);
 import { AuthorizePage } from "./client-access";
 import { NativeAppAuthorize } from "./native-app-authorize";
 import { NativePasskeyLogin } from "./native-passkey-login";
 import { PasswordField, PasswordStrength } from "./password-fields";
 import { Dialog } from "./dialog";
-import { ProfilePage } from "./profile";
+const ProfilePage = lazy(() =>
+  import("./profile").then((module) => ({ default: module.ProfilePage })),
+);
 import { AccountMenu } from "./account-menu";
 import { SelectMenu } from "./select-menu";
 import { ServiceIllustration } from "./service-illustration";
-import { DeploymentSettings } from "./deployment";
-import { ConnectionSettingsForm } from "./connection-settings";
-import { ApiReferenceSettings } from "./api-reference-settings";
-import { MailTemplateSettings } from "./mail-template-settings";
-import { SiteSettings } from "./site-settings";
+const DeploymentSettings = lazy(() =>
+  import("./deployment").then((module) => ({
+    default: module.DeploymentSettings,
+  })),
+);
+const ConnectionSettingsForm = lazy(() =>
+  import("./connection-settings").then((module) => ({
+    default: module.ConnectionSettingsForm,
+  })),
+);
+const ApiReferenceSettings = lazy(() =>
+  import("./api-reference-settings").then((module) => ({
+    default: module.ApiReferenceSettings,
+  })),
+);
+const MailTemplateSettings = lazy(() =>
+  import("./mail-template-settings").then((module) => ({
+    default: module.MailTemplateSettings,
+  })),
+);
+const SiteSettings = lazy(() =>
+  import("./site-settings").then((module) => ({
+    default: module.SiteSettings,
+  })),
+);
 import { PostgresExplorerProvider } from "./postgres-explorer-context";
-import { PostgresExplorer } from "./postgres-explorer";
+const PostgresExplorer = lazy(() =>
+  import("./postgres-explorer").then((module) => ({
+    default: module.PostgresExplorer,
+  })),
+);
 import { servicePresentation } from "./connection-view";
 import type { Profile } from "./api";
 import "./styles.css";
-import { AppearancePage } from "./appearance";
+const AppearancePage = lazy(() =>
+  import("./appearance").then((module) => ({ default: module.AppearancePage })),
+);
 import { useAppearance } from "./use-appearance";
 import type { AppearanceController } from "./use-appearance";
 import {
@@ -169,19 +282,69 @@ const envLabels: Record<string, string> = {
   production: "生产环境",
 };
 const navigation = [
-  {path:"/celebs",name:"名人持仓",icon:Layers3,hint:"公开人物披露与来源观察"},
-  {path:"/feed",name:"动态",icon:Activity,hint:"本人订阅、文章与帖子讨论"},
-  {path:"/watch-groups",name:"自选分组",icon:Layers3,hint:"本人分组与记录归属"},
-  {path:"/shared-assets",name:"共享素材",icon:Layers3,hint:"管理员共享图片与原件"},
-  {path:"/activity",name:"活动",icon:Activity,hint:"本人活动与系统审计"},
-  {path:"/fire",name:"FIRE 规划",icon:Layers3,hint:"本人手填规划与资产观察"},
-  {path:"/attachments",name:"共享附件",icon:FileCheck2,hint:"管理员共享文件与目录"},
-  {path:"/financial-reports",name:"财报文件",icon:FileCheck2,hint:"管理员财报原件与上传回执"},
-  {path:"/legacy-import",name:"旧数据导入",icon:FileCheck2,hint:"本人来源授权与原始快照"},
-  {path:"/simple",name:"独立记账",icon:Layers3,hint:"家庭资产、现金流与投资登记"},
-  {path:"/resources",name:"资源库",icon:Layers3,hint:"本人文件与目录"},
-  {path:"/cards",name:"卡面",icon:Layers3,hint:"卡面目录与本人偏好"},
-  {path:"/market",name:"行情",icon:Activity,hint:"行情来源与历史数据"},
+  {
+    path: "/celebs",
+    name: "名人持仓",
+    icon: Layers3,
+    hint: "公开人物披露与来源观察",
+  },
+  {
+    path: "/feed",
+    name: "动态",
+    icon: Activity,
+    hint: "本人订阅、文章与帖子讨论",
+  },
+  {
+    path: "/watch-groups",
+    name: "自选分组",
+    icon: Layers3,
+    hint: "本人分组与记录归属",
+  },
+  {
+    path: "/shared-assets",
+    name: "共享素材",
+    icon: Layers3,
+    hint: "管理员共享图片与原件",
+  },
+  {
+    path: "/activity",
+    name: "活动",
+    icon: Activity,
+    hint: "本人活动与系统审计",
+  },
+  {
+    path: "/fire",
+    name: "FIRE 规划",
+    icon: Layers3,
+    hint: "本人手填规划与资产观察",
+  },
+  {
+    path: "/attachments",
+    name: "共享附件",
+    icon: FileCheck2,
+    hint: "管理员共享文件与目录",
+  },
+  {
+    path: "/financial-reports",
+    name: "财报文件",
+    icon: FileCheck2,
+    hint: "管理员财报原件与上传回执",
+  },
+  {
+    path: "/legacy-import",
+    name: "旧数据导入",
+    icon: FileCheck2,
+    hint: "本人来源授权与原始快照",
+  },
+  {
+    path: "/simple",
+    name: "独立记账",
+    icon: Layers3,
+    hint: "家庭资产、现金流与投资登记",
+  },
+  { path: "/resources", name: "资源库", icon: Layers3, hint: "本人文件与目录" },
+  { path: "/cards", name: "卡面", icon: Layers3, hint: "卡面目录与本人偏好" },
+  { path: "/market", name: "行情", icon: Activity, hint: "行情来源与历史数据" },
   {
     path: "/fees",
     name: "费用",
@@ -396,7 +559,11 @@ function Logo() {
   const site = usePublicSite();
   return (
     <div className="brand">
-      {site.siteLogo ? <img src={site.siteLogo} alt="" width={23} height={23} /> : <Layers3 size={23} />}
+      {site.siteLogo ? (
+        <img src={site.siteLogo} alt="" width={23} height={23} />
+      ) : (
+        <Layers3 size={23} />
+      )}
       <strong>{site.logoText}</strong>
     </div>
   );
@@ -416,11 +583,13 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
   const [factorCode, setFactorCode] = useState("");
   const [registrationUnknown, setRegistrationUnknown] = useState(false);
   const inFlight = useRef(false);
-  const loginGeneration = useRef(0), loginRequest = useRef<AbortController | null>(null);
+  const loginGeneration = useRef(0),
+    loginRequest = useRef<AbortController | null>(null);
   const [setupToken, setSetupToken] = useState("");
-  const registration = useResource<{ first_user: boolean; requires_setup_token: boolean }>(
-    "/auth/registration",
-  );
+  const registration = useResource<{
+    first_user: boolean;
+    requires_setup_token: boolean;
+  }>("/auth/registration");
   useEffect(() => {
     const invalidate = () => {
       ++loginGeneration.current;
@@ -443,15 +612,20 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
     setFactorCode("");
     setError("");
     document.title = (register ? "注册" : "登录") + " · " + publicSite.title;
-    const hidden = () => { if (document.hidden) invalidate(); };
+    const hidden = () => {
+      if (document.hidden) invalidate();
+    };
     document.addEventListener("visibilitychange", hidden);
-    return () => { document.removeEventListener("visibilitychange", hidden); invalidate(); };
+    return () => {
+      document.removeEventListener("visibilitychange", hidden);
+      invalidate();
+    };
   }, [register, location.pathname, publicSite.title]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (inFlight.current || pending || (register && !registration.data)) return;
     if (register && registrationUnknown) {
-      navigate("/login", {replace:true});
+      navigate("/login", { replace: true });
       return;
     }
     setError("");
@@ -474,7 +648,8 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
       return;
     }
     inFlight.current = true;
-    const mine = ++loginGeneration.current, controller = new AbortController();
+    const mine = ++loginGeneration.current,
+      controller = new AbortController();
     loginRequest.current = controller;
     setPending(true);
     try {
@@ -493,7 +668,13 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
             challenge
               ? { challenge_token: challenge, code: factorCode }
               : register
-                ? { username: login.trim(), password, ...(registration.data?.requires_setup_token ? { setup_token: setupToken } : {}) }
+                ? {
+                    username: login.trim(),
+                    password,
+                    ...(registration.data?.requires_setup_token
+                      ? { setup_token: setupToken }
+                      : {}),
+                  }
                 : { login, password },
           ),
         },
@@ -509,11 +690,16 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
       }
       setChallenge(null);
       setFactorCode("");
-      navigate(loginDestination(location.pathname, location.search, location.hash), { replace: true });
+      navigate(
+        loginDestination(location.pathname, location.search, location.hash),
+        { replace: true },
+      );
       onLogin(session);
     } catch (e) {
       if (mine !== loginGeneration.current) return;
-      const unknown = register && (!(e instanceof ApiError) || e.status === 0 || e.status >= 500);
+      const unknown =
+        register &&
+        (!(e instanceof ApiError) || e.status === 0 || e.status >= 500);
       if (unknown) setRegistrationUnknown(true);
       setError(
         unknown
@@ -600,8 +786,14 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
             {register && registration.data?.requires_setup_token && (
               <>
                 <label htmlFor="setup-token">安装令牌</label>
-                <PasswordField id="setup-token" autoComplete="off" maxLength={512}
-                  value={setupToken} onChange={(event) => setSetupToken(event.target.value)} required />
+                <PasswordField
+                  id="setup-token"
+                  autoComplete="off"
+                  maxLength={512}
+                  value={setupToken}
+                  onChange={(event) => setSetupToken(event.target.value)}
+                  required
+                />
               </>
             )}
             {challenge && (
@@ -623,14 +815,18 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
             <button
               className="button primary full"
               type={register && registrationUnknown ? "button" : "submit"}
-              onClick={() => { if (register && registrationUnknown) navigate("/login", {replace:true}); }}
+              onClick={() => {
+                if (register && registrationUnknown)
+                  navigate("/login", { replace: true });
+              }}
               disabled={
                 pending ||
-                (!(register && registrationUnknown) && (challenge
-                  ? !factorCode.trim()
-                  : !login.trim() ||
-                    !password ||
-                    (register && (!confirmation || !registration.data))))
+                (!(register && registrationUnknown) &&
+                  (challenge
+                    ? !factorCode.trim()
+                    : !login.trim() ||
+                      !password ||
+                      (register && (!confirmation || !registration.data))))
               }
             >
               {pending
@@ -640,10 +836,10 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
                 : register && registrationUnknown
                   ? "登录核对注册结果"
                   : register
-                  ? "注册并登录"
-                  : challenge
-                    ? "验证并登录"
-                    : "登录平台"}
+                    ? "注册并登录"
+                    : challenge
+                      ? "验证并登录"
+                      : "登录平台"}
             </button>
           </form>
           {challenge && (
@@ -667,7 +863,14 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
               onPending={setPending}
               onError={setError}
               onLogin={(session) => {
-                navigate(loginDestination(location.pathname, location.search, location.hash), { replace: true });
+                navigate(
+                  loginDestination(
+                    location.pathname,
+                    location.search,
+                    location.hash,
+                  ),
+                  { replace: true },
+                );
                 onLogin(session);
               }}
             />
@@ -686,7 +889,17 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
           )}
           <p className="auth-switch">
             <NavLink
-              to={(register ? "/login" : "/register") + "?returnTo=" + encodeURIComponent(loginDestination(location.pathname, location.search, location.hash))}
+              to={
+                (register ? "/login" : "/register") +
+                "?returnTo=" +
+                encodeURIComponent(
+                  loginDestination(
+                    location.pathname,
+                    location.search,
+                    location.hash,
+                  ),
+                )
+              }
               aria-disabled={pending}
               onClick={(e) => {
                 if (pending) e.preventDefault();
@@ -1022,6 +1235,8 @@ function useModuleVisibility(onHide: () => void) {
   return visible;
 }
 function OverviewPage({ session }: { session: Session }) {
+  const [workspaceSection, setWorkspaceSection] = useState("overview");
+
   const pageLocation = useLocation();
   const overview = useResource<Overview>("/system/overview", true),
     recent = useResource<TaskList>("/tasks?limit=4", true),
@@ -1055,137 +1270,168 @@ function OverviewPage({ session }: { session: Session }) {
               : "运行系统检查"}
         </button>
       </div>
+      <WorkspaceTabs
+        label="系统总览视图"
+        value={workspaceSection}
+        onChange={setWorkspaceSection}
+        items={[
+          { value: "overview", label: "运行总览" },
+          ...(session.user.role === "admin"
+            ? [{ value: "operations", label: "运行控制" }]
+            : []),
+        ]}
+      />
+
       <DiagnosticNotice diagnostic={diagnostic} />
-      {session.user.role === "admin" && <AgentRuntimeControls session={session} active={pageLocation.pathname === "/"} />}
-      {session.user.role === "admin" && <SystemOperationsPanel session={session} active={pageLocation.pathname === "/"} />}
-      <section className="section-block">
-        <div className="section-heading">
-          <h2 className="section-title">
-            <Network size={18} aria-hidden="true" />
-            连接状态
-          </h2>
-          <button
-            className="icon-button"
-            aria-label="刷新状态"
-            onClick={() => {
-              overview.reload();
-              recent.reload();
-            }}
-          >
-            <RefreshCw size={17} />
-          </button>
-        </div>
-        <ErrorNotice
-          message={
-            overview.error && overview.data
-              ? overview.error + "。以下为上次核对记录。"
-              : overview.error
-          }
-          onRetry={overview.reload}
-        />
-        {overview.data ? (
-          <div className="service-grid">
-            {servicePages.map(({ id, label, action }) => {
-              const service = overview.data!.services.find((s) => s.id === id);
-              if (!service) return null;
-              const path = "/connections/" + id;
-              return (
-                <NavLink
-                  className={"service-entry service-" + id}
-                  key={id}
-                  to={path}
-                  aria-label={label + "，" + action}
-                  onClick={() => beginNavigation(path)}
-                >
-                  <ServiceIllustration kind={id} />
-                  <h3 className="service-title">
-                    <ServiceBrand kind={id} />
-                    {label}
-                  </h3>
-                  <div className="service-entry-bottom">
-                    <ServiceState
-                      service={service}
-                      historical={Boolean(overview.error)}
-                    />
-                    <span className="service-entry-action">{action}</span>
-                  </div>
-                </NavLink>
-              );
-            })}
-          </div>
-        ) : (
-          <ReadPending error={overview.error} />
+      <WorkspaceView
+        active={workspaceSection === "operations"}
+        label="运行控制"
+      >
+        {session.user.role === "admin" && (
+          <AgentRuntimeControls
+            session={session}
+            active={pageLocation.pathname === "/"}
+          />
         )}
-      </section>
-      <section className="section-block">
-        <div className="section-heading">
-          <div>
+        {session.user.role === "admin" && (
+          <SystemOperationsPanel
+            session={session}
+            active={pageLocation.pathname === "/"}
+          />
+        )}
+      </WorkspaceView>
+      <WorkspaceView active={workspaceSection === "overview"} label="运行总览">
+        <section className="section-block">
+          <div className="section-heading">
             <h2 className="section-title">
-              <ClipboardList size={18} aria-hidden="true" />
-              最近任务
+              <Network size={18} aria-hidden="true" />
+              连接状态
             </h2>
-            <p>
-              {overview.data
-                ? `等待 ${overview.data.task_counts.queued || 0} · 运行 ${overview.data.task_counts.running || 0} · 完成 ${overview.data.task_counts.succeeded || 0}`
-                : "读取服务端记录"}
-            </p>
+            <button
+              className="icon-button"
+              aria-label="刷新状态"
+              onClick={() => {
+                overview.reload();
+                recent.reload();
+              }}
+            >
+              <RefreshCw size={17} />
+            </button>
           </div>
-          <button
-            className="text-button"
-            onClick={() => {
-              beginNavigation("/tasks");
-              navigate("/tasks");
-            }}
-          >
-            全部任务
-          </button>
-        </div>
-        <ErrorNotice message={recent.error} onRetry={recent.reload} />
-        {recent.data ? (
-          recent.data.items.length ? (
-            <TaskRows items={recent.data.items} onOpen={setSelected} />
+          <ErrorNotice
+            message={
+              overview.error && overview.data
+                ? overview.error + "。以下为上次核对记录。"
+                : overview.error
+            }
+            onRetry={overview.reload}
+          />
+          {overview.data ? (
+            <div className="service-grid">
+              {servicePages.map(({ id, label, action }) => {
+                const service = overview.data!.services.find(
+                  (s) => s.id === id,
+                );
+                if (!service) return null;
+                const path = "/connections/" + id;
+                return (
+                  <NavLink
+                    className={"service-entry service-" + id}
+                    key={id}
+                    to={path}
+                    aria-label={label + "，" + action}
+                    onClick={() => beginNavigation(path)}
+                  >
+                    <ServiceIllustration kind={id} />
+                    <h3 className="service-title">
+                      <ServiceBrand kind={id} />
+                      {label}
+                    </h3>
+                    <div className="service-entry-bottom">
+                      <ServiceState
+                        service={service}
+                        historical={Boolean(overview.error)}
+                      />
+                      <span className="service-entry-action">{action}</span>
+                    </div>
+                  </NavLink>
+                );
+              })}
+            </div>
           ) : (
-            <Empty title="还没有任务" />
-          )
-        ) : (
-          <ReadPending error={recent.error} />
-        )}
-      </section>
-      <section className="section-block migration-overview">
-        <div className="section-heading">
-          <div>
-            <h2 className="section-title">
-              <FileCheck2 size={18} aria-hidden="true" />
-              旧业务迁移
-            </h2>
-            <p>
-              {migration.data
-                ? `${migration.data.summary.domains} 个业务域 · ${migration.data.summary.method_bindings} 条旧方法`
-                : "正在读取清单"}
-            </p>
+            <ReadPending error={overview.error} />
+          )}
+        </section>
+        <section className="section-block">
+          <div className="section-heading">
+            <div>
+              <h2 className="section-title">
+                <ClipboardList size={18} aria-hidden="true" />
+                最近任务
+              </h2>
+              <p>
+                {overview.data
+                  ? `等待 ${overview.data.task_counts.queued || 0} · 运行 ${overview.data.task_counts.running || 0} · 完成 ${overview.data.task_counts.succeeded || 0}`
+                  : "读取服务端记录"}
+              </p>
+            </div>
+            <button
+              className="text-button"
+              onClick={() => {
+                beginNavigation("/tasks");
+                navigate("/tasks");
+              }}
+            >
+              全部任务
+            </button>
           </div>
-          <button
-            className="text-button"
-            onClick={() => {
-              beginNavigation("/migration");
-              navigate("/migration");
-            }}
-          >
-            查看清单
-          </button>
-        </div>
-        <div className="migration-inline">
-          <span>
-            {migration.data
-              ? migration.data.capability_plan
-                ? `${migration.data.capability_plan.summary.implementation_local_verified} / ${migration.data.capability_plan.summary.capabilities}`
-                : "—"
-              : "—"}
-          </span>
-          <span>能力候选已本地验证</span>
-        </div>
-        <ErrorNotice message={migration.error} onRetry={migration.reload} />
-      </section>
+          <ErrorNotice message={recent.error} onRetry={recent.reload} />
+          {recent.data ? (
+            recent.data.items.length ? (
+              <TaskRows items={recent.data.items} onOpen={setSelected} />
+            ) : (
+              <Empty title="还没有任务" />
+            )
+          ) : (
+            <ReadPending error={recent.error} />
+          )}
+        </section>
+        <section className="section-block migration-overview">
+          <div className="section-heading">
+            <div>
+              <h2 className="section-title">
+                <FileCheck2 size={18} aria-hidden="true" />
+                旧业务迁移
+              </h2>
+              <p>
+                {migration.data
+                  ? `${migration.data.summary.domains} 个业务域 · ${migration.data.summary.method_bindings} 条旧方法`
+                  : "正在读取清单"}
+              </p>
+            </div>
+            <button
+              className="text-button"
+              onClick={() => {
+                beginNavigation("/migration");
+                navigate("/migration");
+              }}
+            >
+              查看清单
+            </button>
+          </div>
+          <div className="migration-inline">
+            <span>
+              {migration.data
+                ? migration.data.capability_plan
+                  ? `${migration.data.capability_plan.summary.implementation_local_verified} / ${migration.data.capability_plan.summary.capabilities}`
+                  : "—"
+                : "—"}
+            </span>
+            <span>能力候选已本地验证</span>
+          </div>
+          <ErrorNotice message={migration.error} onRetry={migration.reload} />
+        </section>
+      </WorkspaceView>
       {selected && (
         <TaskDetail
           id={selected}
@@ -1443,7 +1689,14 @@ function TasksPage({ session }: { session: Session }) {
   );
 }
 
-function SettingsPage({ session, active = true }: { session: Session; active?: boolean }) {
+function SettingsPage({
+  session,
+  active = true,
+}: {
+  session: Session;
+  active?: boolean;
+}) {
+  const [view, setView] = useState("general");
   const meta = useResource<{
     version: string;
     build: number;
@@ -1457,50 +1710,86 @@ function SettingsPage({ session, active = true }: { session: Session; active?: b
           <h1>系统设置</h1>
         </div>
       </div>
-      <section className="card padded settings-section">
-        <h2>当前账号</h2>
-        <dl className="settings-list">
-          <div>
-            <dt>版本</dt>
-            <dd>
-              {meta.data ? (
-                <VersionHistory
-                  version={`v${meta.data.version} Build ${meta.data.build}`}
-                />
-              ) : (
-                "—"
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>环境</dt>
-            <dd>
-              {meta.data
-                ? envLabels[meta.data.environment] || meta.data.environment
-                : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt>用户名</dt>
-            <dd>{session.user.username}</dd>
-          </div>
-          <div>
-            <dt>角色</dt>
-            <dd>{session.user.role === "admin" ? "管理员" : "用户"}</dd>
-          </div>
-          <div>
-            <dt>登录有效期</dt>
-            <dd>{time(session.expires_at)}</dd>
-          </div>
-        </dl>
-      </section>
+      <WorkspaceTabs
+        label="设置分类"
+        value={view}
+        onChange={setView}
+        items={[
+          { value: "general", label: "常规" },
+          ...(session.user.role === "admin"
+            ? [
+                { value: "site", label: "站点外观" },
+                { value: "mail", label: "邮件模板" },
+                { value: "reference", label: "API 参考" },
+              ]
+            : []),
+          { value: "closure", label: "账号注销" },
+        ]}
+      />
+      <WorkspaceView active={view === "general"} label="常规">
+        <section className="card padded settings-section">
+          <h2>当前账号</h2>
+          <dl className="settings-list">
+            <div>
+              <dt>版本</dt>
+              <dd>
+                {meta.data ? (
+                  <VersionHistory
+                    version={`v${meta.data.version} Build ${meta.data.build}`}
+                  />
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>环境</dt>
+              <dd>
+                {meta.data
+                  ? envLabels[meta.data.environment] || meta.data.environment
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>用户名</dt>
+              <dd>{session.user.username}</dd>
+            </div>
+            <div>
+              <dt>角色</dt>
+              <dd>{session.user.role === "admin" ? "管理员" : "用户"}</dd>
+            </div>
+            <div>
+              <dt>登录有效期</dt>
+              <dd>{time(session.expires_at)}</dd>
+            </div>
+          </dl>
+        </section>
+        {session.user.role === "admin" && (
+          <NavLink className="button" to="/deploy-status">
+            发布与更新
+          </NavLink>
+        )}
+      </WorkspaceView>
       {session.user.role === "admin" && (
-        <NavLink className="button" to="/deploy-status">
-          发布与更新
-        </NavLink>
+        <>
+          <WorkspaceView active={view === "site"} label="站点外观">
+            <SiteSettings
+              expanded
+              session={session}
+              active={active && view === "site"}
+            />
+          </WorkspaceView>
+          <WorkspaceView active={view === "mail"} label="邮件模板">
+            <MailTemplateSettings session={session} expanded />
+          </WorkspaceView>
+          <WorkspaceView active={view === "reference"} label="API 参考">
+            <ApiReferenceSettings session={session} expanded />
+          </WorkspaceView>
+        </>
       )}
-      {session.user.role === "admin" && <><SiteSettings session={session} active={active} /><MailTemplateSettings session={session} /><ApiReferenceSettings session={session} /></>}
-      <AccountClosureSettings session={session} />
+      <WorkspaceView active={view === "closure"} label="账号注销">
+        <AccountClosureSettings session={session} />
+      </WorkspaceView>
     </>
   );
 }
@@ -1529,7 +1818,9 @@ function ModulePanel({
         if (active) scroll.current = e.currentTarget.scrollTop;
       }}
     >
-      <div className="module-content">{children}</div>
+      <div className="module-content workspace-ui" data-workspace-page={path}>
+        {children}
+      </div>
     </section>
   );
 }
@@ -1545,15 +1836,24 @@ function Workspace({
   const location = useLocation(),
     navigate = useNavigate();
   const publicSite = usePublicSite();
-  const [mobileViewport,setMobileViewport]=useState(()=>matchMedia('(max-width: 800px)').matches);
-  useEffect(()=>{const media=matchMedia('(max-width: 800px)'),changed=()=>setMobileViewport(media.matches);media.addEventListener('change',changed);return()=>media.removeEventListener('change',changed);},[]);
+  const [mobileViewport, setMobileViewport] = useState(
+    () => matchMedia("(max-width: 800px)").matches,
+  );
+  useEffect(() => {
+    const media = matchMedia("(max-width: 800px)"),
+      changed = () => setMobileViewport(media.matches);
+    media.addEventListener("change", changed);
+    return () => media.removeEventListener("change", changed);
+  }, []);
   useNavigationCommit(location.pathname);
   const visited = useVisitedViews(location.pathname);
   const [mobile, setMobile] = useState(false),
     [searchOpen, setSearchOpen] = useState(false),
     [query, setQuery] = useState(""),
     [logoutError, setLogoutError] = useState("");
-  useEffect(() => { if (!mobileViewport) setMobile(false); }, [mobileViewport]);
+  useEffect(() => {
+    if (!mobileViewport) setMobile(false);
+  }, [mobileViewport]);
   const collapsed = appearance.settings.sidebarCollapsed;
   const profile = useResource<Profile>("/profile");
   useEffect(() => {
@@ -1578,12 +1878,17 @@ function Workspace({
               ? "外观"
               : location.pathname === "/authorize"
                 ? "客户端授权"
-                : publicSite.title)) + " · " + publicSite.title;
+                : publicSite.title)) +
+      " · " +
+      publicSite.title;
   }, [location.pathname, publicSite.title]);
   useEffect(() => {
     if (!mobile) return;
     const previous = document.activeElement;
-    const selected = document.querySelector<HTMLElement>('.sidebar nav a[aria-current="page"]') || document.querySelector<HTMLElement>(".sidebar nav a");
+    const selected =
+      document.querySelector<HTMLElement>(
+        '.sidebar nav a[aria-current="page"]',
+      ) || document.querySelector<HTMLElement>(".sidebar nav a");
     selected?.focus({ preventScroll: true });
     const escape = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMobile(false);
@@ -1656,11 +1961,22 @@ function Workspace({
           <kbd className="nav-text">⌘ K</kbd>
         </button>
         <WorkspaceNavigation
-          items={mobileNavigation(session.user.role === "admin" ? navigation : navigation.filter((item) => memberPaths.includes(item.path)),publicSite.mobileNavigationOrder,mobileViewport)}
+          items={mobileNavigation(
+            session.user.role === "admin"
+              ? navigation
+              : navigation.filter((item) => memberPaths.includes(item.path)),
+            publicSite.mobileNavigationOrder,
+            mobileViewport,
+          )}
           collapsed={collapsed}
           mobileOpen={mobile}
-          preferInputOrder={mobileViewport && publicSite.mobileNavigationOrder.length > 0}
-          onNavigate={(path) => { beginNavigation(path); setMobile(false); }}
+          preferInputOrder={
+            mobileViewport && publicSite.mobileNavigationOrder.length > 0
+          }
+          onNavigate={(path) => {
+            beginNavigation(path);
+            setMobile(false);
+          }}
         />
         <div className="sidebar-bottom">
           <NavLink
@@ -1703,7 +2019,9 @@ function Workspace({
             <PanelLeft size={20} />
           </button>
           <div className="topbar-end">
-            {["/portfolio","/cards","/fire","/activity"].includes(location.pathname)&&<AmountVisibilityControl/>}
+            {["/portfolio", "/cards", "/fire", "/activity"].includes(
+              location.pathname,
+            ) && <AmountVisibilityControl />}
             <SiteTicker />
             <button
               className="icon-button header-search"
@@ -1733,8 +2051,9 @@ function Workspace({
             />
           ) : (
             <>
-              {(session.user.role === "admin" ? modulePaths : memberPaths).filter(visited).map(
-                (path) => (
+              {(session.user.role === "admin" ? modulePaths : memberPaths)
+                .filter(visited)
+                .map((path) => (
                   <ViewActivity
                     key={path}
                     mode={location.pathname === path ? "visible" : "hidden"}
@@ -1743,138 +2062,305 @@ function Workspace({
                       path={path}
                       active={location.pathname === path}
                     >
-                      <Routes location={path}>
-                        <Route
-                          path="/connections/postgresql/explorer"
-                          element={<PostgresExplorer session={session} />}
-                        />
-                        <Route
-                          path="/backups"
-                          element={<BackupsPage session={session} />}
-                        />
-                        <Route
-                          path="/reference"
-                          element={
-                            <Suspense
-                              fallback={<div role="status">正在读取…</div>}
-                            >
-                              <ReferencePage
-                                session={session}
-                                active={location.pathname === "/reference"}
-                              />
-                            </Suspense>
-                          }
-                        />
-                        <Route path="/celebs" element={<Suspense fallback={<div role="status">正在读取…</div>}><CelebsPage session={session} active={location.pathname === "/celebs"}/></Suspense>}/>
-                        <Route path="/feed" element={<Suspense fallback={<div role="status">正在读取…</div>}><FeedPage session={session} active={location.pathname === "/feed"}/></Suspense>}/>
-                        <Route path="/market" element={<Suspense fallback={<div role="status">正在读取…</div>}><MarketHistoryPage session={session} active={location.pathname === "/market"}/></Suspense>}/>
-                        <Route path="/fire" element={<Suspense fallback={<div role="status">正在读取…</div>}><FirePage session={session} active={location.pathname === "/fire"}/></Suspense>}/>
-                        <Route path="/shared-assets" element={<Suspense fallback={<div role="status">正在读取…</div>}><SharedAssetsPage session={session} active={location.pathname === "/shared-assets"}/></Suspense>}/>
-                        <Route path="/attachments" element={<Suspense fallback={<div role="status">正在读取…</div>}><AdminAttachmentsPage session={session} active={location.pathname === "/attachments"}/></Suspense>}/>
-                        <Route path="/watch-groups" element={<Suspense fallback={<div role="status">正在读取…</div>}><WatchGroupsPage session={session} active={location.pathname === "/watch-groups"}/></Suspense>}/>
-                        <Route path="/activity" element={<Suspense fallback={<div role="status">正在读取…</div>}><ActivityPage session={session}/></Suspense>}/>
-                        <Route path="/legacy-import" element={<Suspense fallback={<div role="status">正在读取…</div>}><LegacyImportPage session={session} active={location.pathname === "/legacy-import"}/></Suspense>}/>
-                        <Route
-                          path="/cards"
-                          element={<Suspense fallback={<div role="status">正在读取…</div>}><CardCatalogPage key={JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope, session.csrf, session.expires_at])} session={session} active={location.pathname === "/cards"}/></Suspense>}
-                        />
-                        <Route
-                          path="/financial-reports"
-                          element={<Suspense fallback={<div role="status">正在读取…</div>}><FinancialReportsPage session={session} active={location.pathname === "/financial-reports"}/></Suspense>}
-                        />
-                        <Route
-                          path="/resources"
-                          element={<Suspense fallback={<div role="status">正在读取…</div>}><ResourcesPage session={session} active={location.pathname === "/resources"}/></Suspense>}
-                        />
-                        <Route
-                          path="/fees"
-                          element={
-                            <Suspense
-                              fallback={<div role="status">正在读取…</div>}
-                            >
-                              <FeesPage
-                                session={session}
-                                active={location.pathname === "/fees"}
-                              />
-                            </Suspense>
-                          }
-                        />
-                        <Route
-                          path="/portfolio"
-                          element={<PortfolioPage session={session} />}
-                        />
-                        <Route
-                          path="/account"
-                          element={<AccountPage session={session} />}
-                        />
-                        <Route
-                          path="/users"
-                          element={<UsersPage session={session} />}
-                        />
-                        <Route
-                          path="/clients"
-                          element={<Navigate to="/" replace />}
-                        />
-                        <Route
-                          path="/authorizations"
-                          element={<Navigate to="/" replace />}
-                        />
-                        <Route
-                          path="/authorize"
-                          element={
-                            <AuthorizePage
-                              session={session}
-                              query={location.search}
-                            />
-                          }
-                        />
-                        <Route
-                          path="/app/authorize"
-                          element={
-                            <NativeAppAuthorize
-                              session={session}
-                              query={location.search}
-                            />
-                          }
-                        />
-                        <Route
-                          path="/profile"
-                          element={<ProfilePage session={session} />}
-                        />
-                        <Route
-                          path="/"
-                          element={<OverviewPage session={session} />}
-                        />
-                        <Route
-                          path="/tasks"
-                          element={<TasksPage session={session} />}
-                        />
-                        {servicePages.map((service) => (
+                      <Suspense
+                        fallback={
+                          <div className="workspace-loading" role="status">
+                            <Loading />
+                          </div>
+                        }
+                      >
+                        <Routes location={path}>
                           <Route
-                            key={service.id}
-                            path={"/connections/" + service.id}
+                            path="/connections/postgresql/explorer"
+                            element={<PostgresExplorer session={session} />}
+                          />
+                          <Route
+                            path="/backups"
+                            element={<BackupsPage session={session} />}
+                          />
+                          <Route
+                            path="/reference"
                             element={
-                              <ConnectionPage
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <ReferencePage
+                                  session={session}
+                                  active={location.pathname === "/reference"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/celebs"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <CelebsPage
+                                  session={session}
+                                  active={location.pathname === "/celebs"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/feed"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <FeedPage
+                                  session={session}
+                                  active={location.pathname === "/feed"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/market"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <MarketHistoryPage
+                                  session={session}
+                                  active={location.pathname === "/market"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/fire"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <FirePage
+                                  session={session}
+                                  active={location.pathname === "/fire"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/shared-assets"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <SharedAssetsPage
+                                  session={session}
+                                  active={
+                                    location.pathname === "/shared-assets"
+                                  }
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/attachments"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <AdminAttachmentsPage
+                                  session={session}
+                                  active={location.pathname === "/attachments"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/watch-groups"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <WatchGroupsPage
+                                  session={session}
+                                  active={location.pathname === "/watch-groups"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/activity"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <ActivityPage session={session} />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/legacy-import"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <LegacyImportPage
+                                  session={session}
+                                  active={
+                                    location.pathname === "/legacy-import"
+                                  }
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/cards"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <CardCatalogPage
+                                  key={JSON.stringify([
+                                    session.instance_id,
+                                    session.user.id,
+                                    session.user.role,
+                                    session.receipt_scope,
+                                    session.csrf,
+                                    session.expires_at,
+                                  ])}
+                                  session={session}
+                                  active={location.pathname === "/cards"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/financial-reports"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <FinancialReportsPage
+                                  session={session}
+                                  active={
+                                    location.pathname === "/financial-reports"
+                                  }
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/resources"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <ResourcesPage
+                                  session={session}
+                                  active={location.pathname === "/resources"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/fees"
+                            element={
+                              <Suspense
+                                fallback={<div role="status">正在读取…</div>}
+                              >
+                                <FeesPage
+                                  session={session}
+                                  active={location.pathname === "/fees"}
+                                />
+                              </Suspense>
+                            }
+                          />
+                          <Route
+                            path="/portfolio"
+                            element={<PortfolioPage session={session} />}
+                          />
+                          <Route
+                            path="/account"
+                            element={<AccountPage session={session} />}
+                          />
+                          <Route
+                            path="/users"
+                            element={<UsersPage session={session} />}
+                          />
+                          <Route
+                            path="/clients"
+                            element={<Navigate to="/" replace />}
+                          />
+                          <Route
+                            path="/authorizations"
+                            element={<Navigate to="/" replace />}
+                          />
+                          <Route
+                            path="/authorize"
+                            element={
+                              <AuthorizePage
                                 session={session}
-                                serviceId={service.id}
+                                query={location.search}
                               />
                             }
                           />
-                        ))}
-                        <Route path="/migration" element={<MigrationPage />} />
-                        <Route
-                          path="/appearance"
-                          element={<AppearancePage appearance={appearance} session={session} active={location.pathname===path} />}
-                        />
-                        <Route
-                          path="/settings"
-                          element={<SettingsPage session={session} active={location.pathname === "/settings"} />}
-                        />
-                      </Routes>
+                          <Route
+                            path="/app/authorize"
+                            element={
+                              <NativeAppAuthorize
+                                session={session}
+                                query={location.search}
+                              />
+                            }
+                          />
+                          <Route
+                            path="/profile"
+                            element={<ProfilePage session={session} />}
+                          />
+                          <Route
+                            path="/"
+                            element={<OverviewPage session={session} />}
+                          />
+                          <Route
+                            path="/tasks"
+                            element={<TasksPage session={session} />}
+                          />
+                          {servicePages.map((service) => (
+                            <Route
+                              key={service.id}
+                              path={"/connections/" + service.id}
+                              element={
+                                <ConnectionPage
+                                  session={session}
+                                  serviceId={service.id}
+                                />
+                              }
+                            />
+                          ))}
+                          <Route
+                            path="/migration"
+                            element={<MigrationPage />}
+                          />
+                          <Route
+                            path="/appearance"
+                            element={
+                              <AppearancePage
+                                appearance={appearance}
+                                session={session}
+                                active={location.pathname === path}
+                              />
+                            }
+                          />
+                          <Route
+                            path="/settings"
+                            element={
+                              <SettingsPage
+                                session={session}
+                                active={location.pathname === "/settings"}
+                              />
+                            }
+                          />
+                        </Routes>
+                      </Suspense>
                     </ModulePanel>
                   </ViewActivity>
-                ),
-              )}
+                ))}
               {!modulePaths.includes(location.pathname) && (
                 <Empty title="页面不存在" />
               )}
@@ -1914,10 +2400,7 @@ function Workspace({
                     }}
                   >
                     <Icon size={19} />
-                    <span>
-                      {name}
-
-                    </span>
+                    <span>{name}</span>
                   </button>
                 ))}
               {![...navigation, appearanceNavigation]
@@ -1951,35 +2434,99 @@ function AuthenticatedViews({
   const deploy = location.pathname === "/deploy-status";
   const visited = useVisitedViews(deploy ? "deployment" : "workspace");
   const site = usePublicSite();
-  useEffect(() => { if (!modulePaths.includes(location.pathname) && !deploy) document.title = site.title; }, [location.pathname, deploy, site.title]);
-  if (["/login", "/register", "/setup"].includes(location.pathname)) return <Navigate to={loginDestination(location.pathname, location.search, location.hash)} replace />;
+  useEffect(() => {
+    if (!modulePaths.includes(location.pathname) && !deploy)
+      document.title = site.title;
+  }, [location.pathname, deploy, site.title]);
+  if (["/login", "/register", "/setup"].includes(location.pathname))
+    return (
+      <Navigate
+        to={loginDestination(location.pathname, location.search, location.hash)}
+        replace
+      />
+    );
   const legacy = legacySitePath(location.pathname);
-  if (legacy) return <Navigate to={legacy + location.search + location.hash} replace />;
-  const symbol = /^\/(?:watchlist|security)\/([A-Za-z]{2,5})\.([A-Za-z0-9._-]+)$/.exec(location.pathname);
-  if (symbol) return <main className="page-section"><Logo /><NavLink to="/portfolio">返回记录</NavLink><Suspense fallback={<Loading />}><MarketAssetDetails session={session} entity={{market:symbol[1].toUpperCase(),code:symbol[2].toUpperCase()}} /></Suspense></main>;
-  if (["/simple", "/simple-app"].includes(location.pathname)) return <main className="page-section"><Logo /><NavLink to="/legacy-import">返回数据与账本</NavLink><Suspense fallback={<Loading/>}><SimpleApp session={session} active/></Suspense></main>;
-  if (["/assistant", "/chat", "/3d", "/app-download", "/downloads"].includes(location.pathname)) return <main className="page-section"><Logo /><p role="status">此模块已移出当前迁移范围</p><NavLink to="/">返回</NavLink></main>;
-  if (!modulePaths.includes(location.pathname) && location.pathname !== "/deploy-status") return <main className="page-section"><Logo /><p role="status">此路径尚未登记到当前平台</p><NavLink to="/">返回</NavLink></main>;
+  if (legacy)
+    return <Navigate to={legacy + location.search + location.hash} replace />;
+  const symbol =
+    /^\/(?:watchlist|security)\/([A-Za-z]{2,5})\.([A-Za-z0-9._-]+)$/.exec(
+      location.pathname,
+    );
+  if (symbol)
+    return (
+      <main className="page-section">
+        <Logo />
+        <NavLink to="/portfolio">返回记录</NavLink>
+        <Suspense fallback={<Loading />}>
+          <MarketAssetDetails
+            session={session}
+            entity={{
+              market: symbol[1].toUpperCase(),
+              code: symbol[2].toUpperCase(),
+            }}
+          />
+        </Suspense>
+      </main>
+    );
+  if (["/simple", "/simple-app"].includes(location.pathname))
+    return (
+      <main className="page-section simple-shell">
+        <header className="simple-shell-heading">
+          <Logo />
+          <NavLink to="/legacy-import">返回数据与账本</NavLink>
+        </header>
+        <Suspense fallback={<Loading />}>
+          <SimpleApp session={session} active />
+        </Suspense>
+      </main>
+    );
+  if (
+    ["/assistant", "/chat", "/3d", "/app-download", "/downloads"].includes(
+      location.pathname,
+    )
+  )
+    return (
+      <main className="page-section">
+        <Logo />
+        <p role="status">此模块已移出当前迁移范围</p>
+        <NavLink to="/">返回</NavLink>
+      </main>
+    );
+  if (
+    !modulePaths.includes(location.pathname) &&
+    location.pathname !== "/deploy-status"
+  )
+    return (
+      <main className="page-section">
+        <Logo />
+        <p role="status">此路径尚未登记到当前平台</p>
+        <NavLink to="/">返回</NavLink>
+      </main>
+    );
   return (
     <>
-      {visited("deployment") && <ViewActivity mode={deploy ? "visible" : "hidden"}>
-        {session.user.role === "admin" ? (
-          <DeploymentSettings session={session} appearance={appearance} />
-        ) : (
-          <main className="boot">
-            <p>需要管理员权限</p>
-            <NavLink to="/settings">返回系统设置</NavLink>
-          </main>
-        )}
-      </ViewActivity>}
-      {visited("workspace") && <ViewActivity mode={deploy ? "hidden" : "visible"}>
-        <Workspace
-          key={session.user.id}
-          session={session}
-          appearance={appearance}
-          onLogout={onLogout}
-        />
-      </ViewActivity>}
+      {visited("deployment") && (
+        <ViewActivity mode={deploy ? "visible" : "hidden"}>
+          {session.user.role === "admin" ? (
+            <DeploymentSettings session={session} appearance={appearance} />
+          ) : (
+            <main className="boot">
+              <p>需要管理员权限</p>
+              <NavLink to="/settings">返回系统设置</NavLink>
+            </main>
+          )}
+        </ViewActivity>
+      )}
+      {visited("workspace") && (
+        <ViewActivity mode={deploy ? "hidden" : "visible"}>
+          <Workspace
+            key={session.user.id}
+            session={session}
+            appearance={appearance}
+            onLogout={onLogout}
+          />
+        </ViewActivity>
+      )}
     </>
   );
 }
@@ -1992,16 +2539,91 @@ function App() {
   useLayoutEffect(() => {
     if (!session) return;
     try {
-      clearAttachmentRequests(sessionStorage, session.user.role === "admin" ? JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]) : undefined);
-      clearAttachmentImportRequests(sessionStorage, session.user.role === "admin" ? JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]) : undefined);
-      clearSharedAssetRequests(sessionStorage, session.user.role === "admin" ? JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]) : undefined);
-      clearFireRequests(sessionStorage, JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]));
-      clearGroupRequests(sessionStorage, JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]));
-      clearSourceRequests(sessionStorage, JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]));
-      clearIconRequests(sessionStorage, JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]));
-      clearFontRequests(sessionStorage, JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]));
+      clearAttachmentRequests(
+        sessionStorage,
+        session.user.role === "admin"
+          ? JSON.stringify([
+              session.instance_id,
+              session.user.id,
+              session.user.role,
+              session.receipt_scope,
+            ])
+          : undefined,
+      );
+      clearAttachmentImportRequests(
+        sessionStorage,
+        session.user.role === "admin"
+          ? JSON.stringify([
+              session.instance_id,
+              session.user.id,
+              session.user.role,
+              session.receipt_scope,
+            ])
+          : undefined,
+      );
+      clearSharedAssetRequests(
+        sessionStorage,
+        session.user.role === "admin"
+          ? JSON.stringify([
+              session.instance_id,
+              session.user.id,
+              session.user.role,
+              session.receipt_scope,
+            ])
+          : undefined,
+      );
+      clearFireRequests(
+        sessionStorage,
+        JSON.stringify([
+          session.instance_id,
+          session.user.id,
+          session.user.role,
+          session.receipt_scope,
+        ]),
+      );
+      clearGroupRequests(
+        sessionStorage,
+        JSON.stringify([
+          session.instance_id,
+          session.user.id,
+          session.user.role,
+          session.receipt_scope,
+        ]),
+      );
+      clearSourceRequests(
+        sessionStorage,
+        JSON.stringify([
+          session.instance_id,
+          session.user.id,
+          session.user.role,
+          session.receipt_scope,
+        ]),
+      );
+      clearIconRequests(
+        sessionStorage,
+        JSON.stringify([
+          session.instance_id,
+          session.user.id,
+          session.user.role,
+          session.receipt_scope,
+        ]),
+      );
+      clearFontRequests(
+        sessionStorage,
+        JSON.stringify([
+          session.instance_id,
+          session.user.id,
+          session.user.role,
+          session.receipt_scope,
+        ]),
+      );
     } catch {}
-  }, [session?.instance_id, session?.user.id, session?.user.role, session?.receipt_scope]);
+  }, [
+    session?.instance_id,
+    session?.user.id,
+    session?.user.role,
+    session?.receipt_scope,
+  ]);
   useEffect(() => {
     let active = true;
     let controller: AbortController | null = null;
@@ -2011,16 +2633,16 @@ function App() {
         clearReferenceRequests(sessionStorage);
         clearPersonalProfileRequests(sessionStorage);
         clearResourceRequests(sessionStorage);
-                          clearSharedAssetRequests(sessionStorage);
-                          clearFireRequests(sessionStorage);
-                          clearGroupRequests(sessionStorage);
-                          clearSourceRequests(sessionStorage);
-                          clearIconRequests(sessionStorage);
-                          clearFontRequests(sessionStorage);
-                          clearAttachmentRequests(sessionStorage);
-                          clearAttachmentImportRequests(sessionStorage);
-                          clearLegacyImportRequests(sessionStorage);
-                          clearResourceImportRequests(sessionStorage);
+        clearSharedAssetRequests(sessionStorage);
+        clearFireRequests(sessionStorage);
+        clearGroupRequests(sessionStorage);
+        clearSourceRequests(sessionStorage);
+        clearIconRequests(sessionStorage);
+        clearFontRequests(sessionStorage);
+        clearAttachmentRequests(sessionStorage);
+        clearAttachmentImportRequests(sessionStorage);
+        clearLegacyImportRequests(sessionStorage);
+        clearResourceImportRequests(sessionStorage);
         clearPreferenceDrafts(sessionStorage);
       } catch {}
     };
@@ -2103,75 +2725,78 @@ function App() {
   return (
     <BrowserRouter>
       <EmailRegistrationBoundary>
-      <AccountClosureBoundary>
-      <EmailVerificationBoundary>
-        <PasswordRecoveryBoundary>
-          {session ? (
-            <ResourceProvider
-              key={JSON.stringify([
-                window.location.origin,
-                session.instance_id,
-                session.user.id,
-                session.user.role,
-                session.expires_at,
-                session.receipt_scope,
-              ])}
-            >
-              <AccountPreferencesProvider
-                session={session}
-                appearance={appearance}
-              >
-                <AvatarStatusProvider session={session}>
-                  <PostgresExplorerProvider>
-                    <PersonalFontsProvider session={session} appearance={appearance}>
-                    <FinancialDisplayProvider>
-                    <AuthenticatedViews
-                      session={session}
-                      appearance={appearance}
-                      onLogout={() => {
-                        try {
-                          clearOperationJournal(sessionStorage);
-                          clearReferenceRequests(sessionStorage);
-                          clearPersonalProfileRequests(sessionStorage);
-                          clearResourceRequests(sessionStorage);
-                          clearSharedAssetRequests(sessionStorage);
-                          clearFireRequests(sessionStorage);
-                          clearGroupRequests(sessionStorage);
-                          clearSourceRequests(sessionStorage);
-                          clearIconRequests(sessionStorage);
-                          clearFontRequests(sessionStorage);
-                          clearAttachmentRequests(sessionStorage);
-                          clearAttachmentImportRequests(sessionStorage);
-                          clearLegacyImportRequests(sessionStorage);
-                          clearResourceImportRequests(sessionStorage);
-                          clearPreferenceDrafts(sessionStorage);
-                        } catch {}
-                        bindApiSession(null);
-                        setSession(null);
-                        setError("");
-                      }}
-                    />
-                    </FinancialDisplayProvider>
-                    </PersonalFontsProvider>
-                  </PostgresExplorerProvider>
-                </AvatarStatusProvider>
-              </AccountPreferencesProvider>
-            </ResourceProvider>
-          ) : (
-            <>
-              <ErrorNotice message={error} />
-              <Login
-                onLogin={(s) => {
-                  bindApiSession(s.csrf);
-                  setSession(s);
-                  setError("");
-                }}
-              />
-            </>
-          )}
-        </PasswordRecoveryBoundary>
-      </EmailVerificationBoundary>
-      </AccountClosureBoundary>
+        <AccountClosureBoundary>
+          <EmailVerificationBoundary>
+            <PasswordRecoveryBoundary>
+              {session ? (
+                <ResourceProvider
+                  key={JSON.stringify([
+                    window.location.origin,
+                    session.instance_id,
+                    session.user.id,
+                    session.user.role,
+                    session.expires_at,
+                    session.receipt_scope,
+                  ])}
+                >
+                  <AccountPreferencesProvider
+                    session={session}
+                    appearance={appearance}
+                  >
+                    <AvatarStatusProvider session={session}>
+                      <PostgresExplorerProvider>
+                        <PersonalFontsProvider
+                          session={session}
+                          appearance={appearance}
+                        >
+                          <FinancialDisplayProvider>
+                            <AuthenticatedViews
+                              session={session}
+                              appearance={appearance}
+                              onLogout={() => {
+                                try {
+                                  clearOperationJournal(sessionStorage);
+                                  clearReferenceRequests(sessionStorage);
+                                  clearPersonalProfileRequests(sessionStorage);
+                                  clearResourceRequests(sessionStorage);
+                                  clearSharedAssetRequests(sessionStorage);
+                                  clearFireRequests(sessionStorage);
+                                  clearGroupRequests(sessionStorage);
+                                  clearSourceRequests(sessionStorage);
+                                  clearIconRequests(sessionStorage);
+                                  clearFontRequests(sessionStorage);
+                                  clearAttachmentRequests(sessionStorage);
+                                  clearAttachmentImportRequests(sessionStorage);
+                                  clearLegacyImportRequests(sessionStorage);
+                                  clearResourceImportRequests(sessionStorage);
+                                  clearPreferenceDrafts(sessionStorage);
+                                } catch {}
+                                bindApiSession(null);
+                                setSession(null);
+                                setError("");
+                              }}
+                            />
+                          </FinancialDisplayProvider>
+                        </PersonalFontsProvider>
+                      </PostgresExplorerProvider>
+                    </AvatarStatusProvider>
+                  </AccountPreferencesProvider>
+                </ResourceProvider>
+              ) : (
+                <>
+                  <ErrorNotice message={error} />
+                  <Login
+                    onLogin={(s) => {
+                      bindApiSession(s.csrf);
+                      setSession(s);
+                      setError("");
+                    }}
+                  />
+                </>
+              )}
+            </PasswordRecoveryBoundary>
+          </EmailVerificationBoundary>
+        </AccountClosureBoundary>
       </EmailRegistrationBoundary>
     </BrowserRouter>
   );
@@ -2201,7 +2826,9 @@ registerSiteWorker();
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Boundary>
-      <PublicSiteProvider><App /></PublicSiteProvider>
+      <PublicSiteProvider>
+        <App />
+      </PublicSiteProvider>
     </Boundary>
   </React.StrictMode>,
 );

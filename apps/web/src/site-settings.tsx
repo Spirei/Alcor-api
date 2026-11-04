@@ -55,9 +55,11 @@ const assetFields = [
 export function SiteSettings({
   session,
   active = true,
+  expanded = false,
 }: {
   session: Session;
   active?: boolean;
+  expanded?: boolean;
 }) {
   if (session.user.role !== "admin") return null;
   return (
@@ -72,17 +74,20 @@ export function SiteSettings({
       ])}
       session={session}
       active={active}
+      expanded={expanded}
     />
   );
 }
 function SiteSettingsContent({
   session,
   active,
+  expanded,
 }: {
   session: Session;
   active: boolean;
+  expanded: boolean;
 }) {
-  const [opened, setOpened] = useState(false),
+  const [opened, setOpened] = useState(expanded),
     [head, setHead] = useState<Head | null>(null),
     [draft, setDraft] = useState<Config | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]),
@@ -339,7 +344,10 @@ function SiteSettingsContent({
   }
   const blocked = busy || locked || !active || !visible || !!pending;
   return (
-    <details onToggle={(event) => setOpened(event.currentTarget.open)}>
+    <details
+      open={opened}
+      onToggle={(event) => setOpened(event.currentTarget.open)}
+    >
       <summary>站点设置</summary>
       {message && <p role="status">{message}</p>}
       {pending && (
@@ -506,8 +514,24 @@ function SiteSettingsContent({
               />
             </label>
           </details>
-          <MarketBadgeSettings value={badges} disabled={blocked} onChange={value=>{setBadges(value);dirty.current=true;setMessage("");}}/>
-          <SiteNavigationSettings value={draft.mobileNavigationOrder??[]} disabled={blocked} onChange={value=>{setDraft({...draft,mobileNavigationOrder:value});dirty.current=true;setMessage("");}}/>
+          <MarketBadgeSettings
+            value={badges}
+            disabled={blocked}
+            onChange={(value) => {
+              setBadges(value);
+              dirty.current = true;
+              setMessage("");
+            }}
+          />
+          <SiteNavigationSettings
+            value={draft.mobileNavigationOrder ?? []}
+            disabled={blocked}
+            onChange={(value) => {
+              setDraft({ ...draft, mobileNavigationOrder: value });
+              dirty.current = true;
+              setMessage("");
+            }}
+          />
           <label>
             当前密码
             <PasswordField
@@ -544,7 +568,12 @@ function SiteSettingsContent({
           </button>
         </form>
       )}
-      {!locked && <PrivateServiceSettings session={session} active={active && opened && visible} />}
+      {!locked && (
+        <PrivateServiceSettings
+          session={session}
+          active={active && opened && visible}
+        />
+      )}
       {!locked && (
         <SiteServiceStatus
           session={session}

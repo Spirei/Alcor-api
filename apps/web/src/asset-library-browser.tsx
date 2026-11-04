@@ -55,15 +55,8 @@ type Listing = {
   page: number;
   pageSize: number;
 };
-export function assetImageUrl(value?: string): string {
-  // Images stay on the registered local media authority; never load arbitrary remote URLs.
-  return value &&
-    /^\/(?:api\/asset-image\/|uploads\/)[^\\\s#]*$/.test(value) &&
-    !/%(?:2f|5c|00|2e)/i.test(value) &&
-    !value.split("?")[0].split("/").includes("..")
-    ? value
-    : "";
-}
+export { assetImageUrl } from "./local-media";
+import { assetImageUrl } from "./local-media";
 function Thumbnail({ url, name }: { url?: string; name: string }) {
   const [failed, setFailed] = useState(false);
   const src = assetImageUrl(url);

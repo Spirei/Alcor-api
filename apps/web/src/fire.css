@@ -3,6 +3,67 @@
   gap: 8px;
   min-width: 0;
 }
+.fire-progress-hero {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding-block: 8px 26px;
+}
+.fire-progress-orb {
+  position: relative;
+  width: min(280px, 75vw);
+  color: var(--ink);
+}
+.fire-progress-orb svg {
+  display: block;
+  width: 100%;
+  filter: drop-shadow(0 12px 25px #1694b01a);
+}
+.fire-progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  pointer-events: none;
+}
+.fire-progress-label strong {
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+.fire-progress-label small,
+.fire-progress-label > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.fire-progress-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(100%, 500px);
+  margin: 0;
+  gap: 24px;
+  text-align: center;
+}
+.fire-progress-metrics dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.fire-progress-metrics dd {
+  margin: 8px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.fire-progress-metrics dd small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 6px;
+}
 .fire-planning-page input {
   min-width: 0;
   width: 100%;
@@ -120,4 +181,11 @@
   .fire-lookup label {
     flex-basis: 100%;
   }
+}
+
+.fire-heading-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }

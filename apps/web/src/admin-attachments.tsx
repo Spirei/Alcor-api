@@ -502,7 +502,7 @@ function AttachmentSession({
           />
         </label>
       </div>
-      <form
+      <details className="workspace-tools"><summary>上传附件与新建目录</summary><form
         className="attachment-create"
         onSubmit={(event) => {
           event.preventDefault();
@@ -565,7 +565,7 @@ function AttachmentSession({
         <button className="button" disabled={blocked || !file}>
           {conflict === "replace" ? "上传并替换" : "上传"}
         </button>
-      </form>
+      </form></details>
       <div
         className="attachment-list"
         aria-label="共享附件列表"
@@ -745,7 +745,7 @@ function AttachmentSession({
           </div>
         </form>
       )}
-      <form
+      <details className="workspace-tools"><summary>查询操作回执</summary><form
         className="attachment-lookup"
         onSubmit={(event) => {
           event.preventDefault();
@@ -766,15 +766,15 @@ function AttachmentSession({
         >
           查询回执
         </button>
-      </form>
-      <AttachmentImportPanel
+      </form></details>
+      <details className="workspace-tools"><summary>导入旧附件登记</summary><AttachmentImportPanel
         session={session}
         active={active && visible && !locked}
         blocked={busy || !!pending || locked || !journalReady}
         onBlocked={changeSourceBlocked}
         onChanged={load}
         onDenied={fail}
-      />
+      /></details>
     </section>
   );
 }

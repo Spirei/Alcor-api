@@ -142,9 +142,7 @@ function Metrics({
 }) {
   return (
     <>
-      <p className="simple-value-basis">
-        本人登记值或按本人汇率折算的估算值（非终止除法18位有效数字舍入），不是券商已核余额/到账值。
-      </p>
+      <p className="simple-value-basis">本人登记与估算 · 非券商已核余额</p>
       <dl className="simple-metrics">
         {Object.entries(values).map(([key, value]) => (
           <div key={key}>
@@ -287,9 +285,12 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
       <>
         <h3>独立账本总览</h3>
         <Metrics values={t} currency={currency} hidden={ledger.hide === true} />
-        <p>
-          按本人登记汇率折算的估算值，非终止除法按18位有效数字四舍五入，可能舍入；原金额及汇率不改。缺币种、金额或正汇率时未知，不是券商已核到账值。
-        </p>
+        <details>
+          <summary>估算范围与精度</summary>
+          <p>
+            按本人登记汇率折算的估算值，非终止除法按18位有效数字四舍五入，可能舍入；原金额及汇率不改。缺币种、金额或正汇率时未知，不是券商已核到账值。
+          </p>
+        </details>
         <button
           onClick={() => patch({ ...ledger, hide: ledger.hide !== true })}
         >
@@ -1162,36 +1163,38 @@ function History({
           })}
         </svg>
       )}
-      <table>
-        <thead>
-          <tr>
-            <th>原日期</th>
-            <th>原登记值</th>
-            <th>图表值</th>
-            <th>投入</th>
-            <th>转出</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((r, i) => (
-            <tr key={i}>
-              <td>
-                {text(r[dateField]) || "未登记"}
-                {text(r[dateField]).slice(0, 10) > today()
-                  ? "（未来登记/规划）"
-                  : ""}
-              </td>
-              <td>{text(r[valueField]) || "未知"}</td>
-              <td>
-                {show(rawFor(r, i))}
-                {mode === "mwr" ? " %" : ""}
-              </td>
-              <td>{text(r.inn) || "未知"}</td>
-              <td>{text(r.out) || "未知"}</td>
+      <div className="workspace-table">
+        <table>
+          <thead>
+            <tr>
+              <th>原日期</th>
+              <th>原登记值</th>
+              <th>图表值</th>
+              <th>投入</th>
+              <th>转出</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filtered.map((r, i) => (
+              <tr key={i}>
+                <td>
+                  {text(r[dateField]) || "未登记"}
+                  {text(r[dateField]).slice(0, 10) > today()
+                    ? "（未来登记/规划）"
+                    : ""}
+                </td>
+                <td>{text(r[valueField]) || "未知"}</td>
+                <td>
+                  {show(rawFor(r, i))}
+                  {mode === "mwr" ? " %" : ""}
+                </td>
+                <td>{text(r.inn) || "未知"}</td>
+                <td>{text(r.out) || "未知"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {!filtered.length && <p>此范围没有已登记观察。</p>}
     </section>
   );

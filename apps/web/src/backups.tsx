@@ -1,3 +1,4 @@
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { BackupScheduleControls } from "./backup-schedule-controls";
 import { useLocation } from "react-router-dom";
 import { requestId as newRequestId } from "./request-id";
@@ -140,6 +141,8 @@ function JobReceipt({
 }
 
 export function BackupsPage({ session }: { session: Session }) {
+  const [workspaceSection, setWorkspaceSection] = useState("archives");
+
   const location = useLocation();
   const resource = useResource<{
     items: Backup[];
@@ -277,7 +280,28 @@ export function BackupsPage({ session }: { session: Session }) {
           {dispatching ? "提交中…" : "创建备份"}
         </button>
       </div>
-      <BackupScheduleControls session={session} active={location.pathname === "/backups"} />
+      <WorkspaceTabs
+        label="备份视图"
+        value={workspaceSection}
+        onChange={setWorkspaceSection}
+        items={[
+          { value: "archives", label: "备份归档" },
+          { value: "schedule", label: "定时与保留策略" },
+        ]}
+      />
+
+      <WorkspaceView
+        active={workspaceSection === "schedule"}
+        label="定时与保留策略"
+      >
+        <BackupScheduleControls
+          expanded
+          session={session}
+          active={
+            location.pathname === "/backups" && workspaceSection === "schedule"
+          }
+        />
+      </WorkspaceView>
       {(resource.error || error) && (
         <div className="notice error" role="alert">
           {error || resource.error}
@@ -303,73 +327,83 @@ export function BackupsPage({ session }: { session: Session }) {
           }
         />
       )}
-      {resource.data && (
-        <div className="access-list">
-          {resource.data.items.length ? (
-            resource.data.items.map((backup) => (
-              <section className="backup-row" key={backup.id}>
-                <div className="backup-row-heading">
-                  <h2>{new Date(backup.created_at).toLocaleString("zh-CN")}</h2>
-                  <span className="muted">
-                    {(backup.bytes / 1024).toFixed(1)} KB · v
-                    {backup.software_version}
-                  </span>
-                </div>
-                {backup.retention_state && <p role="status">{backup.retention_state === "deleted" ? "已按保留策略移除文件；历史与回执保留" : "保留策略执行结果待核对，暂不可下载或恢复"}</p>}
-                <div className="backup-row-actions">
-                  <button
-                    className="text-button"
-                    disabled={busy || backup.download_available === false}
-                    onClick={() =>
-                      submit("backup.verify", { backup_id: backup.id })
-                    }
-                  >
-                    校验
-                  </button>
-                  <button
-                    className="text-button"
-                    disabled={backup.download_available === false}
-                    onClick={() => void download(backup)}
-                  >
-                    下载
-                  </button>
-                  <button
-                    className="text-button"
-                    disabled={busy || backup.download_available === false}
-                    onClick={() => {
-                      setRestore(backup);
-                      setTargetId(resource.data?.targets[0]?.id || "");
-                      setPreview(null);
-                      setError("");
-                    }}
-                  >
-                    恢复到隔离目标
-                  </button>
-                </div>
-                <details>
-                  <summary>详情</summary>
-                  <dl>
-                    <dt>备份编号</dt>
-                    <dd>{backup.id}</dd>
-                    <dt>SHA-256</dt>
-                    <dd>{backup.sha256}</dd>
-                    <dt>最后校验</dt>
-                    <dd>
-                      {backup.verified_at
-                        ? new Date(backup.verified_at).toLocaleString("zh-CN")
-                        : "尚未校验"}
-                    </dd>
-                  </dl>
-                </details>
-              </section>
-            ))
-          ) : (
-            <div className="empty">
-              <h3>暂无备份</h3>
-            </div>
-          )}
-        </div>
-      )}
+      <WorkspaceView active={workspaceSection === "archives"} label="备份归档">
+        {resource.data && (
+          <div className="access-list">
+            {resource.data.items.length ? (
+              resource.data.items.map((backup) => (
+                <section className="backup-row" key={backup.id}>
+                  <div className="backup-row-heading">
+                    <h2>
+                      {new Date(backup.created_at).toLocaleString("zh-CN")}
+                    </h2>
+                    <span className="muted">
+                      {(backup.bytes / 1024).toFixed(1)} KB · v
+                      {backup.software_version}
+                    </span>
+                  </div>
+                  {backup.retention_state && (
+                    <p role="status">
+                      {backup.retention_state === "deleted"
+                        ? "已按保留策略移除文件；历史与回执保留"
+                        : "保留策略执行结果待核对，暂不可下载或恢复"}
+                    </p>
+                  )}
+                  <div className="backup-row-actions">
+                    <button
+                      className="text-button"
+                      disabled={busy || backup.download_available === false}
+                      onClick={() =>
+                        submit("backup.verify", { backup_id: backup.id })
+                      }
+                    >
+                      校验
+                    </button>
+                    <button
+                      className="text-button"
+                      disabled={backup.download_available === false}
+                      onClick={() => void download(backup)}
+                    >
+                      下载
+                    </button>
+                    <button
+                      className="text-button"
+                      disabled={busy || backup.download_available === false}
+                      onClick={() => {
+                        setRestore(backup);
+                        setTargetId(resource.data?.targets[0]?.id || "");
+                        setPreview(null);
+                        setError("");
+                      }}
+                    >
+                      恢复到隔离目标
+                    </button>
+                  </div>
+                  <details>
+                    <summary>详情</summary>
+                    <dl>
+                      <dt>备份编号</dt>
+                      <dd>{backup.id}</dd>
+                      <dt>SHA-256</dt>
+                      <dd>{backup.sha256}</dd>
+                      <dt>最后校验</dt>
+                      <dd>
+                        {backup.verified_at
+                          ? new Date(backup.verified_at).toLocaleString("zh-CN")
+                          : "尚未校验"}
+                      </dd>
+                    </dl>
+                  </details>
+                </section>
+              ))
+            ) : (
+              <div className="empty">
+                <h3>暂无备份</h3>
+              </div>
+            )}
+          </div>
+        )}
+      </WorkspaceView>
       {restore && (
         <Dialog
           title="恢复到隔离目标"

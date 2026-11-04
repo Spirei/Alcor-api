@@ -7,10 +7,10 @@ type Head={revision:number;config:Config;state:string;prerequisites:{storageRead
 type Receipt={requestId:string;state:string;revision?:number};
 const root='/backups/schedule';
 const state=(value:boolean|null|undefined)=>value===true?'已核对':value===false?'未满足':'未知';
-export function BackupScheduleControls({session,active}:{session:Session;active:boolean}){return <Panel key={JSON.stringify([session.instance_id,session.user.id,session.user.role,session.receipt_scope,session.csrf,session.expires_at])} session={session} active={active}/>;}
-function Panel({session,active}:{session:Session;active:boolean}){
+export function BackupScheduleControls({session,active,expanded=false}:{session:Session;active:boolean;expanded?:boolean}){return <Panel key={JSON.stringify([session.instance_id,session.user.id,session.user.role,session.receipt_scope,session.csrf,session.expires_at])} session={session} active={active} expanded={expanded}/>;}
+function Panel({session,active,expanded}:{session:Session;active:boolean;expanded:boolean}){
  const storage=JSON.stringify(['backup-schedule',session.instance_id,session.user.id,session.user.role,session.receipt_scope]);
- const [open,setOpen]=useState(false),[head,setHead]=useState<Head|null>(null),[draft,setDraft]=useState<Config|null>(null);
+ const [open,setOpen]=useState(expanded),[head,setHead]=useState<Head|null>(null),[draft,setDraft]=useState<Config|null>(null);
  const [password,setPassword]=useState(''),[code,setCode]=useState(''),[pending,setPending]=useState<string|null>(null),[busy,setBusy]=useState(false),[locked,setLocked]=useState(false),[message,setMessage]=useState('');
  const epoch=useRef(0),live=useRef(false);live.current=active&&open&&!locked;
  function clear(){epoch.current++;setPassword('');setCode('');setHead(null);setDraft(null);setBusy(false);setMessage('');}
@@ -34,7 +34,7 @@ function Panel({session,active}:{session:Session;active:boolean}){
   finally{if(current(generation))setBusy(false);}
  }
  const blocked=busy||!!pending||locked||!active;
- return <details onToggle={event=>setOpen(event.currentTarget.open)}><summary>平台加密备份计划</summary>{open&&<>
+ return <details open={open} onToggle={event=>setOpen(event.currentTarget.open)}><summary>平台加密备份计划</summary>{open&&<>
   <button type="button" disabled={busy||locked||!active} onClick={()=>void run('read')}>读取计划状态</button>
   {pending&&<button type="button" disabled={busy||locked} onClick={()=>void run('query')}>核对原请求 {pending}</button>}
   {message&&<p role="status">{message}</p>}

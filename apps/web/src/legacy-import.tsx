@@ -1,6 +1,12 @@
+import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { SimpleLedger } from "./simple-ledger";
 import { PersonalDataTransfer } from "./personal-data-transfer";
-import { sourceWindowActive, sourceWindowLabel, sourceReadFailure, type SourceWindow } from "./source-window-view";
+import {
+  sourceWindowActive,
+  sourceWindowLabel,
+  sourceReadFailure,
+  type SourceWindow,
+} from "./source-window-view";
 import { Activity as SourceActivity } from "react";
 import { ResourceImportPanel } from "./resource-import";
 import {
@@ -95,20 +101,136 @@ type ManifestPage = Page<Manifest> & {
 };
 const base = "/legacy-financial";
 
-export function LegacyImportPage({ session, active = true }: { session: Session; active?: boolean }) {
-      const scope = JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope]);
-      return <ImportKinds key={scope} {...{session,active,scope}}/>;
-    }
-    function ImportKinds({session,active,scope}: {session:Session;active:boolean;scope:string}) {
-      const [kind,setKind] = useState("financial");
-      return <section className="legacy-import-page"><header className="page-heading"><h1>旧数据导入</h1></header>
-        <div role="tablist" aria-label="导入类型" className="import-actions" onKeyDown={event=>{const keys=['financial','resources','personal','simple'];if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const index=keys.indexOf(kind),next=event.key==='Home'?keys[0]:event.key==='End'?keys[3]:keys[(index+(event.key==='ArrowRight'?1:3))%4];setKind(next);document.getElementById('import-'+next+'-tab')?.focus();}}}>{[['financial','金融来源'],['resources','资源来源'],['personal','个人 JSON'],['simple','独立轻量账本']].map(([key,label])=><button key={key} id={'import-'+key+'-tab'} role="tab" aria-controls={'import-'+key+'-panel'} aria-selected={kind===key} tabIndex={kind===key?0:-1} className={kind===key?'button':'button secondary'} onClick={()=>setKind(key)}>{label}</button>)}</div>
-        <SourceActivity mode={kind==="financial"&&active?"visible":"hidden"}><div id="import-financial-panel" role="tabpanel" aria-labelledby="import-financial-tab"><ImportSession session={session} active={active&&kind==="financial"} scope={scope}/></div></SourceActivity>
-        <SourceActivity mode={kind==="resources"&&active?"visible":"hidden"}><div id="import-resource-panel" role="tabpanel" aria-labelledby="import-resource-tab"><ResourceImportPanel session={session} active={active&&kind==="resources"} scope={scope}/></div></SourceActivity>
-        <SourceActivity mode={kind==="personal"&&active?"visible":"hidden"}><div id="import-personal-panel" role="tabpanel" aria-labelledby="import-personal-tab"><PersonalDataTransfer session={session} active={active&&kind==="personal"}/></div></SourceActivity>
-        <SourceActivity mode={kind==="simple"&&active?"visible":"hidden"}><div id="import-simple-panel" role="tabpanel" aria-labelledby="import-simple-tab"><SimpleLedger session={session} active={active&&kind==="simple"}/></div></SourceActivity>
-      </section>;
-    }
+export function LegacyImportPage({
+  session,
+  active = true,
+}: {
+  session: Session;
+  active?: boolean;
+}) {
+  const scope = JSON.stringify([
+    session.instance_id,
+    session.user.id,
+    session.user.role,
+    session.receipt_scope,
+  ]);
+  return <ImportKinds key={scope} {...{ session, active, scope }} />;
+}
+function ImportKinds({
+  session,
+  active,
+  scope,
+}: {
+  session: Session;
+  active: boolean;
+  scope: string;
+}) {
+  const [kind, setKind] = useState("financial");
+  return (
+    <section className="legacy-import-page">
+      <header className="page-heading">
+        <h1>旧数据导入</h1>
+      </header>
+      <div
+        role="tablist"
+        aria-label="导入类型"
+        className="import-actions workspace-tabs"
+        onKeyDown={(event) => {
+          const keys = ["financial", "resources", "personal", "simple"];
+          if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+            event.preventDefault();
+            const index = keys.indexOf(kind),
+              next =
+                event.key === "Home"
+                  ? keys[0]
+                  : event.key === "End"
+                    ? keys[3]
+                    : keys[(index + (event.key === "ArrowRight" ? 1 : 3)) % 4];
+            setKind(next);
+            document.getElementById("import-" + next + "-tab")?.focus();
+          }
+        }}
+      >
+        {[
+          ["financial", "金融来源"],
+          ["resources", "资源来源"],
+          ["personal", "个人 JSON"],
+          ["simple", "独立轻量账本"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            id={"import-" + key + "-tab"}
+            role="tab"
+            aria-controls={"import-" + key + "-panel"}
+            aria-selected={kind === key}
+            aria-current={kind === key ? "page" : undefined}
+            tabIndex={kind === key ? 0 : -1}
+            className={kind === key ? "button" : "button secondary"}
+            onClick={() => setKind(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <SourceActivity
+        mode={kind === "financial" && active ? "visible" : "hidden"}
+      >
+        <div
+          id="import-financial-panel"
+          role="tabpanel"
+          aria-labelledby="import-financial-tab"
+        >
+          <ImportSession
+            session={session}
+            active={active && kind === "financial"}
+            scope={scope}
+          />
+        </div>
+      </SourceActivity>
+      <SourceActivity
+        mode={kind === "resources" && active ? "visible" : "hidden"}
+      >
+        <div
+          id="import-resources-panel"
+          role="tabpanel"
+          aria-labelledby="import-resources-tab"
+        >
+          <ResourceImportPanel
+            session={session}
+            active={active && kind === "resources"}
+            scope={scope}
+          />
+        </div>
+      </SourceActivity>
+      <SourceActivity
+        mode={kind === "personal" && active ? "visible" : "hidden"}
+      >
+        <div
+          id="import-personal-panel"
+          role="tabpanel"
+          aria-labelledby="import-personal-tab"
+        >
+          <PersonalDataTransfer
+            session={session}
+            active={active && kind === "personal"}
+          />
+        </div>
+      </SourceActivity>
+      <SourceActivity mode={kind === "simple" && active ? "visible" : "hidden"}>
+        <div
+          id="import-simple-panel"
+          role="tabpanel"
+          aria-labelledby="import-simple-tab"
+        >
+          <SimpleLedger
+            session={session}
+            active={active && kind === "simple"}
+          />
+        </div>
+      </SourceActivity>
+    </section>
+  );
+}
 
 function ImportSession({
   session,
@@ -119,6 +241,7 @@ function ImportSession({
   active: boolean;
   scope: string;
 }) {
+  const [stage, setStage] = useState("consent");
   const [visible, setVisible] = useState(!document.hidden),
     [locked, setLocked] = useState(false),
     [reload, setReload] = useState(0);
@@ -522,7 +645,6 @@ function ImportSession({
   return (
     <section className="legacy-import-page">
       <header className="page-heading">
-
         <button
           className="button"
           disabled={busy}
@@ -553,302 +675,349 @@ function ImportSession({
         <p role="status">{locked ? "当前内容已撤下" : "正在读取…"}</p>
       ) : (
         <>
-          {session.user.role === "admin" && (
-            <section className="import-block">
-              <h2>登记来源</h2>
-              {source && <p>{sourceWindowLabel(source.migrationWindow)}</p>}
-              {sources.length === 0 ? (
-                <p className="import-empty">暂无已登记的旧来源</p>
-              ) : (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void submit(base + "/authorizations", {
-                      sourceAlias: alias,
-                      sourceOwner,
-                      targetUserId: target,
-                    });
-                  }}
-                >
-                  <div className="import-fields">
-                    <label>
-                      旧来源
-                      <SelectMenu
-                        label="旧来源"
-                        variant="field"
-                        value={alias}
-                        options={[
-                          { value: "", label: "选择来源" },
-                          ...sources.map((s) => ({
-                            value: s.alias,
-                            label: `${s.alias} · ${s.sourceInstance}`,
-                          })),
-                          ...(!source && alias
-                            ? [{ value: alias, label: "来源待核对 · " + alias }]
-                            : []),
-                        ]}
-                        onChange={(value) => {
-                          setAlias(value);
-                          setSourceOwner("");
-                        }}
-                        disabled={blocked}
-                      />
-                    </label>
-                    <label>
-                      来源账号
-                      <SelectMenu
-                        label="来源账号"
-                        variant="field"
-                        value={sourceOwner}
-                        options={[
-                          { value: "", label: "选择来源账号" },
-                          ...(source?.owners || []).map((value) => ({
-                            value,
-                            label: value,
-                          })),
-                          ...(sourceOwner &&
-                          !source?.owners.includes(sourceOwner)
-                            ? [
-                                {
-                                  value: sourceOwner,
-                                  label: "来源账号待核对 · " + sourceOwner,
-                                },
-                              ]
-                            : []),
-                        ]}
-                        onChange={setSourceOwner}
-                        disabled={blocked || !source}
-                      />
-                    </label>
-                    <label>
-                      查找目标账号
-                      <input
-                        value={targetQuery}
-                        onChange={(event) => setTargetQuery(event.target.value)}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label>
-                      目标账号
-                      <SelectMenu
-                        label="目标账号"
-                        variant="field"
-                        value={target}
-                        options={targetOptions}
-                        onChange={setTarget}
-                        disabled={blocked}
-                      />
-                    </label>
-                  </div>
-                  <div className="import-actions">
-                    <button
-                      className="button"
-                      disabled={
-                        blocked || !source?.owners.includes(sourceOwner)
-                      }
-                    >
-                      登记
-                    </button>
-                  </div>
-                </form>
-              )}
-            </section>
-          )}
-          <section className="import-block">
-            <h2>本人授权</h2>
-            {!grants.length ? (
-              <p className="import-empty">暂无本人来源授权</p>
-            ) : (
-              <>
-                <SelectMenu
-                  label="本人来源授权"
-                  value={selectedGrant}
-                  options={grants.map((g) => ({
-                    value: g.id,
-                    label: `${g.source_alias} · ${g.source_owner}`,
-                  }))}
-                  onChange={(value) => {
-                    setSelectedGrant(value);
-                    clearSensitive();
-                  }}
-                  disabled={busy}
-                />
-                {selected && (
-                  <>
-                    <p>{sourcePermissionLabel(selected.state)} · {sourceWindowLabel(selected.migrationWindow)}</p>
-                    {selected.effectiveState === "instance_reenrollment_required" && <p>{sourcePermissionLabel(selected.effectiveState)}</p>}
-                    <p className="import-id">
-                      {selected.source_instance} · 修订 {selected.revision}
-                    </p>
-                    {["pending_owner", "active"].includes(selected.state) && (
-                      <SourceConsentForm
-                        key={secretVersion + selected.id}
-                        formRef={secretForm}
-                        disabled={blocked || selected.state === "pending_owner" && !sourceWindowActive(selected.migrationWindow)}
-                        approve={selected.state === "pending_owner"}
-                        onSubmit={(approve, password, code) =>
-                          void submit(
-                            `${base}/authorizations/${selected.id}/consent`,
-                            {
-                              revision: selected.revision,
-                              approve,
-                              password,
-                              code,
-                            },
-                          )
-                        }
-                      />
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </section>
-          <section className="import-block">
-            <h2>来源快照</h2>
-            <div className="import-actions">
-              <button
-                className="button"
-                disabled={
-                  blocked || !selected || selected.effectiveState !== "active" || !sourceWindowActive(selected.migrationWindow)
-                }
-                onClick={() =>
-                  selected &&
-                  void submit(
-                    `${base}/authorizations/${selected.id}/snapshots`,
-                    {
-                      grantRevision: selected.revision,
-                      predecessorHash:
-                        manifestPage?.head?.manifestSha256 ?? null,
-                    },
-                  )
-                }
-              >
-                导出快照
-              </button>
-            </div>
-            {!manifestPage?.items.length ? (
-              <p className="import-empty">暂无来源快照</p>
-            ) : (
-              <div className="import-list">
-                {manifestPage.items.map((item) => (
-                  <article className="import-row" key={item.id}>
-                    <div>
-                      <p>
-                        {item.source.instance} · {item.source.owner}
-                      </p>
-                      <p>{new Date(item.createdAt).toLocaleString()}</p>
-                      <p>来源快照已保存{item.isHead ? " · 当前前驱" : ""}</p>
-                      <p>
-                        {sourceFinancialReceiptLabel(
-                          item.confirmedFinancialReceipts,
-                        )}
-                      </p>
-                      {item.blockerCount > 0 && (
-                        <div role="status">
-                          <p>来源阻断 {item.blockerCount} 项</p>
-                          <ul>
-                            {item.blockers.slice(0, 5).map((blocker, index) => (
-                              <li key={index}>{sourceBlockerLabel(blocker)}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      <p className="import-id">{item.id}</p>
-                      {detail?.id === item.id && (
-                        <details open>
-                          <summary>来源核对</summary>
-                          <pre>{JSON.stringify(detail.value, null, 2)}</pre>
-                        </details>
-                      )}
+          <WorkspaceTabs
+            label="金融来源流程"
+            value={stage}
+            disabled={busy || !!pending}
+            onChange={(value) => {
+              clearSensitive();
+              setStage(value);
+            }}
+            items={[
+              { value: "consent", label: "1 · 来源与授权" },
+              { value: "snapshots", label: "2 · 快照与核对" },
+              { value: "operations", label: "3 · 操作回执" },
+            ]}
+          />
+          <WorkspaceView active={stage === "consent"} label="来源与授权">
+            {session.user.role === "admin" && (
+              <section className="import-block">
+                <h2>登记来源</h2>
+                {source && <p>{sourceWindowLabel(source.migrationWindow)}</p>}
+                {sources.length === 0 ? (
+                  <p className="import-empty">暂无已登记的旧来源</p>
+                ) : (
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void submit(base + "/authorizations", {
+                        sourceAlias: alias,
+                        sourceOwner,
+                        targetUserId: target,
+                      });
+                    }}
+                  >
+                    <div className="import-fields">
+                      <label>
+                        旧来源
+                        <SelectMenu
+                          label="旧来源"
+                          variant="field"
+                          value={alias}
+                          options={[
+                            { value: "", label: "选择来源" },
+                            ...sources.map((s) => ({
+                              value: s.alias,
+                              label: `${s.alias} · ${s.sourceInstance}`,
+                            })),
+                            ...(!source && alias
+                              ? [
+                                  {
+                                    value: alias,
+                                    label: "来源待核对 · " + alias,
+                                  },
+                                ]
+                              : []),
+                          ]}
+                          onChange={(value) => {
+                            setAlias(value);
+                            setSourceOwner("");
+                          }}
+                          disabled={blocked}
+                        />
+                      </label>
+                      <label>
+                        来源账号
+                        <SelectMenu
+                          label="来源账号"
+                          variant="field"
+                          value={sourceOwner}
+                          options={[
+                            { value: "", label: "选择来源账号" },
+                            ...(source?.owners || []).map((value) => ({
+                              value,
+                              label: value,
+                            })),
+                            ...(sourceOwner &&
+                            !source?.owners.includes(sourceOwner)
+                              ? [
+                                  {
+                                    value: sourceOwner,
+                                    label: "来源账号待核对 · " + sourceOwner,
+                                  },
+                                ]
+                              : []),
+                          ]}
+                          onChange={setSourceOwner}
+                          disabled={blocked || !source}
+                        />
+                      </label>
+                      <label>
+                        查找目标账号
+                        <input
+                          value={targetQuery}
+                          onChange={(event) =>
+                            setTargetQuery(event.target.value)
+                          }
+                          disabled={busy}
+                        />
+                      </label>
+                      <label>
+                        目标账号
+                        <SelectMenu
+                          label="目标账号"
+                          variant="field"
+                          value={target}
+                          options={targetOptions}
+                          onChange={setTarget}
+                          disabled={blocked}
+                        />
+                      </label>
                     </div>
                     <div className="import-actions">
                       <button
-                        className="button secondary"
-                        disabled={busy}
-                        onClick={() => void show(item)}
+                        className="button"
+                        disabled={
+                          blocked || !source?.owners.includes(sourceOwner)
+                        }
                       >
-                        核对来源
-                      </button>
-                      <button
-                        className="button secondary"
-                        disabled={busy}
-                        onClick={() => void downloadRaw(item)}
-                      >
-                        下载原快照
+                        登记
                       </button>
                     </div>
-                  </article>
-                ))}
-              </div>
+                  </form>
+                )}
+              </section>
             )}
-            <div className="import-actions">
-              <button
-                className="button secondary"
-                disabled={!manifestCursors.length || busy}
-                onClick={() => setManifestCursors((p) => p.slice(0, -1))}
-              >
-                上一页
-              </button>
-              <button
-                className="button secondary"
-                disabled={!manifestPage?.nextCursor || busy}
-                onClick={() =>
-                  manifestPage?.nextCursor &&
-                  setManifestCursors((p) => [...p, manifestPage.nextCursor!])
-                }
-              >
-                下一页
-              </button>
-            </div>
-          </section>
-          <section className="import-block">
-            <h2>操作记录</h2>
-            {!operationPage?.items.length ? (
-              <p className="import-empty">暂无来源操作</p>
-            ) : (
-              operationPage.items.map((item) => (
-                <article className="import-row" key={item.requestId}>
-                  <div>
-                    <p>{sourceOperationLabel(item.state)}</p>
-                    <p className="import-id">{item.requestId}</p>
-                    <p>{new Date(item.createdAt).toLocaleString()}</p>
-                    {item.result.failure && (
-                      <p role="status">
-                        {item.result.reason || item.result.failure}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    className="button secondary"
+            <section className="import-block">
+              <h2>本人授权</h2>
+              {!grants.length ? (
+                <p className="import-empty">暂无本人来源授权</p>
+              ) : (
+                <>
+                  <SelectMenu
+                    label="本人来源授权"
+                    value={selectedGrant}
+                    options={grants.map((g) => ({
+                      value: g.id,
+                      label: `${g.source_alias} · ${g.source_owner}`,
+                    }))}
+                    onChange={(value) => {
+                      setSelectedGrant(value);
+                      clearSensitive();
+                    }}
                     disabled={busy}
-                    onClick={() => void check(item.requestId)}
-                  >
-                    查询原操作
-                  </button>
-                </article>
-              ))
-            )}
-            <div className="import-actions">
-              <button
-                className="button secondary"
-                disabled={!operationCursors.length || busy}
-                onClick={() => setOperationCursors((p) => p.slice(0, -1))}
-              >
-                上一页
-              </button>
-              <button
-                className="button secondary"
-                disabled={!operationPage?.nextCursor || busy}
-                onClick={() =>
-                  operationPage?.nextCursor &&
-                  setOperationCursors((p) => [...p, operationPage.nextCursor!])
-                }
-              >
-                下一页
-              </button>
-            </div>
-          </section>
+                  />
+                  {selected && (
+                    <>
+                      <p>
+                        {sourcePermissionLabel(selected.state)} ·{" "}
+                        {sourceWindowLabel(selected.migrationWindow)}
+                      </p>
+                      {selected.effectiveState ===
+                        "instance_reenrollment_required" && (
+                        <p>{sourcePermissionLabel(selected.effectiveState)}</p>
+                      )}
+                      <p className="import-id">
+                        {selected.source_instance} · 修订 {selected.revision}
+                      </p>
+                      {["pending_owner", "active"].includes(selected.state) && (
+                        <SourceConsentForm
+                          key={secretVersion + selected.id}
+                          formRef={secretForm}
+                          disabled={
+                            blocked ||
+                            (selected.state === "pending_owner" &&
+                              !sourceWindowActive(selected.migrationWindow))
+                          }
+                          approve={selected.state === "pending_owner"}
+                          onSubmit={(approve, password, code) =>
+                            void submit(
+                              `${base}/authorizations/${selected.id}/consent`,
+                              {
+                                revision: selected.revision,
+                                approve,
+                                password,
+                                code,
+                              },
+                            )
+                          }
+                        />
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </section>
+          </WorkspaceView>
+          <WorkspaceView active={stage === "snapshots"} label="快照与核对">
+            <section className="import-block">
+              <h2>来源快照</h2>
+              <div className="import-actions">
+                <button
+                  className="button"
+                  disabled={
+                    blocked ||
+                    !selected ||
+                    selected.effectiveState !== "active" ||
+                    !sourceWindowActive(selected.migrationWindow)
+                  }
+                  onClick={() =>
+                    selected &&
+                    void submit(
+                      `${base}/authorizations/${selected.id}/snapshots`,
+                      {
+                        grantRevision: selected.revision,
+                        predecessorHash:
+                          manifestPage?.head?.manifestSha256 ?? null,
+                      },
+                    )
+                  }
+                >
+                  导出快照
+                </button>
+              </div>
+              {!manifestPage?.items.length ? (
+                <p className="import-empty">暂无来源快照</p>
+              ) : (
+                <div className="import-list">
+                  {manifestPage.items.map((item) => (
+                    <article className="import-row" key={item.id}>
+                      <div>
+                        <p>
+                          {item.source.instance} · {item.source.owner}
+                        </p>
+                        <p>{new Date(item.createdAt).toLocaleString()}</p>
+                        <p>来源快照已保存{item.isHead ? " · 当前前驱" : ""}</p>
+                        <p>
+                          {sourceFinancialReceiptLabel(
+                            item.confirmedFinancialReceipts,
+                          )}
+                        </p>
+                        {item.blockerCount > 0 && (
+                          <div role="status">
+                            <p>来源阻断 {item.blockerCount} 项</p>
+                            <ul>
+                              {item.blockers
+                                .slice(0, 5)
+                                .map((blocker, index) => (
+                                  <li key={index}>
+                                    {sourceBlockerLabel(blocker)}
+                                  </li>
+                                ))}
+                            </ul>
+                          </div>
+                        )}
+                        <p className="import-id">{item.id}</p>
+                        {detail?.id === item.id && (
+                          <details open>
+                            <summary>来源核对</summary>
+                            <pre>{JSON.stringify(detail.value, null, 2)}</pre>
+                          </details>
+                        )}
+                      </div>
+                      <div className="import-actions">
+                        <button
+                          className="button secondary"
+                          disabled={busy}
+                          onClick={() => void show(item)}
+                        >
+                          核对来源
+                        </button>
+                        <button
+                          className="button secondary"
+                          disabled={busy}
+                          onClick={() => void downloadRaw(item)}
+                        >
+                          下载原快照
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <div className="import-actions">
+                <button
+                  className="button secondary"
+                  disabled={!manifestCursors.length || busy}
+                  onClick={() => setManifestCursors((p) => p.slice(0, -1))}
+                >
+                  上一页
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={!manifestPage?.nextCursor || busy}
+                  onClick={() =>
+                    manifestPage?.nextCursor &&
+                    setManifestCursors((p) => [...p, manifestPage.nextCursor!])
+                  }
+                >
+                  下一页
+                </button>
+              </div>
+            </section>
+          </WorkspaceView>
+          <WorkspaceView active={stage === "operations"} label="操作回执">
+            <section className="import-block">
+              <h2>操作记录</h2>
+              {!operationPage?.items.length ? (
+                <p className="import-empty">暂无来源操作</p>
+              ) : (
+                operationPage.items.map((item) => (
+                  <article className="import-row" key={item.requestId}>
+                    <div>
+                      <p>{sourceOperationLabel(item.state)}</p>
+                      <p className="import-id">{item.requestId}</p>
+                      <p>{new Date(item.createdAt).toLocaleString()}</p>
+                      {item.result.failure && (
+                        <p role="status">
+                          {item.result.reason || item.result.failure}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => void check(item.requestId)}
+                    >
+                      查询原操作
+                    </button>
+                  </article>
+                ))
+              )}
+              <div className="import-actions">
+                <button
+                  className="button secondary"
+                  disabled={!operationCursors.length || busy}
+                  onClick={() => setOperationCursors((p) => p.slice(0, -1))}
+                >
+                  上一页
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={!operationPage?.nextCursor || busy}
+                  onClick={() =>
+                    operationPage?.nextCursor &&
+                    setOperationCursors((p) => [
+                      ...p,
+                      operationPage.nextCursor!,
+                    ])
+                  }
+                >
+                  下一页
+                </button>
+              </div>
+            </section>
+          </WorkspaceView>
         </>
       )}
     </section>

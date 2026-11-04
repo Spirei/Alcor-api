@@ -90,3 +90,121 @@
 .fx-provider-editor .button {
   justify-self: start;
 }
+.fx-converter-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 16px;
+}
+.fx-converter-input label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.fx-converter-input input {
+  font-size: 24px;
+  font-weight: 550;
+  width: 100%;
+  min-width: 0;
+}
+.fx-converter-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+.fx-converter-results > div {
+  min-width: 0;
+  background: var(--soft);
+  border-radius: 12px;
+  padding: 16px;
+}
+.fx-converter-results strong {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.fx-converter-results output {
+  display: block;
+  margin-top: 9px;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .fx-converter-input {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.trading-month {
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  overflow: hidden;
+  margin: 24px 0;
+}
+.trading-month-weekdays,
+.trading-month-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.trading-month-weekdays {
+  background: var(--soft);
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  padding: 14px 0;
+}
+.trading-month-day,
+.trading-month-blank {
+  min-height: 104px;
+  border-top: 1px solid var(--edge);
+  border-inline-end: 1px solid var(--edge);
+  padding: 12px;
+  min-width: 0;
+}
+.trading-month-days > :nth-child(7n) {
+  border-inline-end: 0;
+}
+.trading-month-day time {
+  display: block;
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.trading-month-day small {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 10px;
+}
+.trading-month-day[data-status="trading"] small {
+  color: #258b73;
+}
+.trading-month-day:is([data-status="holiday"], [data-status="weekend"]) small {
+  color: #bc6773;
+}
+.trading-month-day[data-status="half_day"] small {
+  color: #b9842b;
+}
+.trading-month-day > span {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 6px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+@media (max-width: 640px) {
+  .trading-month-day,
+  .trading-month-blank {
+    min-height: 76px;
+    padding: 8px 5px;
+  }
+  .trading-month-day time {
+    font-size: 14px;
+  }
+  .trading-month-day small {
+    font-size: 9px;
+    margin-top: 8px;
+  }
+}

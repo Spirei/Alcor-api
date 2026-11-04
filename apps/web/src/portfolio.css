@@ -130,4 +130,44 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+.portfolio-brokers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+  gap: 16px;
+}
+.portfolio-brokers li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--bg);
+}
+.portfolio-brokers li > span:first-child {
+  font-size: 18px;
+  font-weight: 600;
+}
+.portfolio-brokers li small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.portfolio-brokers li > span:nth-child(2) {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.portfolio-brokers .broker-row-actions {
+  margin-top: auto;
+}
+.portfolio-brokers .broker-row-actions .button {
+  padding: 6px 10px;
+  font-size: 12px;
+  min-height: 32px;
 }
