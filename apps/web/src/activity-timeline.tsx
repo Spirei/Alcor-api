@@ -1,3 +1,4 @@
+import { usePageReveal } from "./workspace-ui";
 import { Fragment } from "react";
 type Entry = {
   id: string;
@@ -28,9 +29,20 @@ export function ActivityTimeline({
 }) {
   const size = 20,
     current = Math.min(page, Math.max(0, Math.ceil(rows.length / size) - 1));
+  const reveal = usePageReveal(current);
+  const goTo = (page: number) => {
+    reveal.request();
+    onPage(page);
+  };
   let previous = "";
   return (
-    <div className="activity-timeline">
+    <div
+      className="activity-timeline"
+      role="group"
+      aria-label={`活动时间线 · 第 ${current + 1} 页`}
+      tabIndex={-1}
+      ref={reveal.ref}
+    >
       <ol>
         {rows.slice(current * size, (current + 1) * size).map((row) => {
           const date = new Date(row.createdAt),
@@ -77,12 +89,12 @@ export function ActivityTimeline({
             第 {current + 1} / {Math.ceil(rows.length / size)} 页 · 当前已读{" "}
             {rows.length} 条
           </span>
-          <button disabled={!current} onClick={() => onPage(current - 1)}>
+          <button disabled={!current} onClick={() => goTo(current - 1)}>
             上一页
           </button>
           <button
             disabled={(current + 1) * size >= rows.length}
-            onClick={() => onPage(current + 1)}
+            onClick={() => goTo(current + 1)}
           >
             下一页
           </button>

@@ -159,6 +159,22 @@ import {
   Settings2,
   ShieldCheck,
   Zap,
+  WalletCards,
+  Flame,
+  ListFilter,
+  Images,
+  Newspaper,
+  UserRoundSearch,
+  ReceiptText,
+  BookOpen,
+  FolderOpen,
+  CreditCard,
+  ChartNoAxesCombined,
+  Paperclip,
+  FileText,
+  Import,
+  ArchiveRestore,
+  UsersRound,
 } from "lucide-react";
 import { api, ApiError } from "./api";
 import type {
@@ -285,25 +301,25 @@ const navigation = [
   {
     path: "/celebs",
     name: "名人持仓",
-    icon: Layers3,
+    icon: UserRoundSearch,
     hint: "公开人物披露与来源观察",
   },
   {
     path: "/feed",
     name: "动态",
-    icon: Activity,
+    icon: Newspaper,
     hint: "本人订阅、文章与帖子讨论",
   },
   {
     path: "/watch-groups",
     name: "自选分组",
-    icon: Layers3,
+    icon: ListFilter,
     hint: "本人分组与记录归属",
   },
   {
     path: "/shared-assets",
     name: "共享素材",
-    icon: Layers3,
+    icon: Images,
     hint: "管理员共享图片与原件",
   },
   {
@@ -315,40 +331,55 @@ const navigation = [
   {
     path: "/fire",
     name: "FIRE 规划",
-    icon: Layers3,
+    icon: Flame,
     hint: "本人手填规划与资产观察",
   },
   {
     path: "/attachments",
     name: "共享附件",
-    icon: FileCheck2,
+    icon: Paperclip,
     hint: "管理员共享文件与目录",
   },
   {
     path: "/financial-reports",
     name: "财报文件",
-    icon: FileCheck2,
+    icon: FileText,
     hint: "管理员财报原件与上传回执",
   },
   {
     path: "/legacy-import",
     name: "旧数据导入",
-    icon: FileCheck2,
+    icon: Import,
     hint: "本人来源授权与原始快照",
   },
   {
     path: "/simple",
     name: "独立记账",
-    icon: Layers3,
+    icon: BookOpen,
     hint: "家庭资产、现金流与投资登记",
   },
-  { path: "/resources", name: "资源库", icon: Layers3, hint: "本人文件与目录" },
-  { path: "/cards", name: "卡面", icon: Layers3, hint: "卡面目录与本人偏好" },
-  { path: "/market", name: "行情", icon: Activity, hint: "行情来源与历史数据" },
+  {
+    path: "/resources",
+    name: "资源库",
+    icon: FolderOpen,
+    hint: "本人文件与目录",
+  },
+  {
+    path: "/cards",
+    name: "卡面",
+    icon: CreditCard,
+    hint: "卡面目录与本人偏好",
+  },
+  {
+    path: "/market",
+    name: "行情",
+    icon: ChartNoAxesCombined,
+    hint: "行情来源与历史数据",
+  },
   {
     path: "/fees",
     name: "费用",
-    icon: Layers3,
+    icon: ReceiptText,
     hint: "个人费率与历史费用核对",
   },
   {
@@ -360,7 +391,7 @@ const navigation = [
   {
     path: "/portfolio",
     name: "资产记录",
-    icon: Layers3,
+    icon: WalletCards,
     hint: "持仓、自选与券商账户",
   },
   {
@@ -384,13 +415,13 @@ const navigation = [
   {
     path: "/backups",
     name: "备份恢复",
-    icon: FileCheck2,
+    icon: ArchiveRestore,
     hint: "创建、校验与隔离恢复",
   },
   {
     path: "/users",
     name: "账号管理",
-    icon: ShieldCheck,
+    icon: UsersRound,
     hint: "账号状态与角色",
   },
   {

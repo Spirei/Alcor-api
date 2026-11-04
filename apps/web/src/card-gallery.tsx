@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { CreditCard, ImageOff } from "lucide-react";
+import { usePageReveal } from "./workspace-ui";
 import { assetImageUrl } from "./local-media";
 import type { PreferenceCard } from "./card-preference-state";
 
@@ -26,14 +27,16 @@ export function CardGallery({
   selected,
   onSelect,
   disabled,
+  filterKey = "",
 }: {
   cards: readonly PreferenceCard[];
   images: readonly { path: string }[];
   selected: string;
   onSelect: (key: string) => void;
   disabled: boolean;
+  filterKey?: string;
 }) {
-  const [offset, setOffset] = useState(0),
+  const [paging, setPaging] = useState({ filterKey, offset: 0 }),
     size = 24;
   const registered = useMemo(
     () =>
@@ -46,12 +49,23 @@ export function CardGallery({
     [images],
   );
   const page = Math.min(
-    offset,
+    paging.filterKey === filterKey ? paging.offset : 0,
     Math.max(0, Math.ceil(cards.length / size) - 1),
   );
+  const reveal = usePageReveal(page);
+  const goTo = (offset: number) => {
+    reveal.request();
+    setPaging({ filterKey, offset });
+  };
   return (
     <div className="card-gallery-shell">
-      <div className="card-gallery" aria-label="卡面图库">
+      <div
+        className="card-gallery"
+        role="group"
+        aria-label={`卡面图库 · 第 ${page + 1} 页`}
+        tabIndex={-1}
+        ref={reveal.ref}
+      >
         {cards.slice(page * size, (page + 1) * size).map((card) => (
           <button
             className="card-gallery-item"
@@ -80,17 +94,13 @@ export function CardGallery({
             第 {page + 1} / {Math.ceil(cards.length / size)} 页 · {cards.length}{" "}
             张
           </span>
-          <button
-            type="button"
-            disabled={!page}
-            onClick={() => setOffset(page - 1)}
-          >
+          <button type="button" disabled={!page} onClick={() => goTo(page - 1)}>
             上一页
           </button>
           <button
             type="button"
             disabled={(page + 1) * size >= cards.length}
-            onClick={() => setOffset(page + 1)}
+            onClick={() => goTo(page + 1)}
           >
             下一页
           </button>

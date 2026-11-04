@@ -1,4 +1,5 @@
 import { Dialog } from "./dialog";
+import { WorkspaceEmpty } from "./workspace-ui";
 import { CardGallery } from "./card-gallery";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
@@ -327,24 +328,41 @@ function CardPreferenceContent({
       )}
       {!!cards.length && (
         <label>
-          筛选卡面
+          <span className="card-filter-label">
+            筛选卡面 <small>{filtered.length} 张</small>
+          </span>
           <input
+            type="search"
+            aria-label="筛选卡面"
+            placeholder="搜索银行或卡片名称"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
       )}
-      <CardGallery
-        cards={filtered}
-        images={images}
-        selected={selected}
-        onSelect={(key) => {
-          setSelected(key);
-          setEditing(true);
-        }}
-        disabled={busy || !!pending}
-      />
-      {filtered.length > 200 && <p>当前仅显示前200项</p>}
+      {cards.length > 0 && filtered.length === 0 ? (
+        <WorkspaceEmpty
+          title="没有匹配的卡面"
+          description="调整关键词，或清空筛选查看全部卡面。"
+          actions={
+            <button type="button" onClick={() => setQuery("")}>
+              清空筛选
+            </button>
+          }
+        />
+      ) : (
+        <CardGallery
+          filterKey={query.trim().toLocaleLowerCase()}
+          cards={filtered}
+          images={images}
+          selected={selected}
+          onSelect={(key) => {
+            setSelected(key);
+            setEditing(true);
+          }}
+          disabled={busy || !!pending}
+        />
+      )}
       {editing && options.length ? (
         <Dialog
           title={selectedCard?.label || "卡包偏好"}
