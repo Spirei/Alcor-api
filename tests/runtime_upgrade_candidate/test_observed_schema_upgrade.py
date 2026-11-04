@@ -59,7 +59,11 @@ async def test_observed_16_to_current_complete_reentry_preserves_identity_origin
         await migrate(current,name)
         async with await raw(current)as conn:
             after_ledger=await(await conn.execute('SELECT * FROM schema_migrations ORDER BY name')).fetchall()
-            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))==147
+            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))==148
+            assert {r['name']:r['sha256'] for r in after_ledger}=={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'migrations').glob('[0-9]*.sql')}
+            assert await(await conn.execute('SELECT singleton,revision,registered,guest FROM asset_library_access')).fetchall()==[
+                {'singleton':True,'revision':0,'registered':True,'guest':True}]
+            assert (await(await conn.execute('SELECT count(*) AS n FROM asset_library_access_operations')).fetchone())['n']==0
             assert [r for r in after_ledger if r['name']in OBSERVED]==before_ledger
             user=await(await conn.execute("SELECT * FROM users WHERE id='synthetic-old-owner'")).fetchone()
             profile=await(await conn.execute("SELECT * FROM user_profiles WHERE user_id='synthetic-old-owner'")).fetchone()

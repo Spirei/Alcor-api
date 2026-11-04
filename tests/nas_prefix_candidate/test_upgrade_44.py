@@ -62,7 +62,10 @@ async def test_release44_eleven_to_current_preserves_originals_and_reentry(pg,tm
         await migrate(current,name)
         async with await raw(current)as conn:
             after_ledger=await(await conn.execute('SELECT * FROM schema_migrations ORDER BY name')).fetchall()
-            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))==147
+            assert len(after_ledger)==len(list((ROOT/'migrations').glob('[0-9]*.sql')))==148
+            assert await(await conn.execute('SELECT singleton,revision,registered,guest FROM asset_library_access')).fetchall()==[
+                {'singleton':True,'revision':0,'registered':True,'guest':True}]
+            assert (await(await conn.execute('SELECT count(*) AS n FROM asset_library_access_operations')).fetchone())['n']==0
             assert [r for r in after_ledger if r['name']in OBSERVED]==before_ledger
             user=await(await conn.execute("SELECT * FROM users WHERE id='synthetic-old-owner'")).fetchone()
             profile=await(await conn.execute("SELECT * FROM user_profiles WHERE user_id='synthetic-old-owner'")).fetchone()
@@ -74,11 +77,14 @@ async def test_release44_eleven_to_current_preserves_originals_and_reentry(pg,tm
             for table in ('portfolio_records','trade_ledger','cash_ledger_entries','internal_orders'):
                 assert (await(await conn.execute(sql.SQL('SELECT count(*) AS n FROM {}').format(sql.Identifier(table)))).fetchone())['n']==0
             assert {r['name']:r['sha256'] for r in after_ledger}=={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'migrations').glob('[0-9]*.sql')}
+            await conn.execute('UPDATE asset_library_access SET revision=7,guest=false WHERE singleton')
         await migrate(current,name)
         db=Database(current);await db.open()
         try:
             async with db.connection()as conn:
                 assert await(await conn.execute('SELECT * FROM schema_migrations ORDER BY name')).fetchall()==after_ledger
+                assert await(await conn.execute('SELECT revision,registered,guest FROM asset_library_access')).fetchone()=={
+                    'revision':7,'registered':True,'guest':False}
         finally:await db.close()
 
 
