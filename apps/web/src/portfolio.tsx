@@ -16,7 +16,7 @@ import {
 } from "./watch-display-settings";
 import { RecordFiles } from "./record-files";
 import { RecordBatchDelete } from "./record-batch-delete";
-import { Activity, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, RefreshCw, Trash2, Pencil } from "lucide-react";
 import { api, ApiError } from "./api";
 import type { Session } from "./api";
@@ -1163,16 +1163,22 @@ function PortfolioSession({ session }: { session: Session }) {
             </ul>
           )}
           {session.user.role === "admin" && (
-            <details
-              onToggle={(event) =>
-                setSharedBrokersOpen(event.currentTarget.open)
-              }
-            >
-              <summary>共享券商目录</summary>
-              <Activity mode={sharedBrokersOpen ? "visible" : "hidden"}>
-                <SharedBrokerSettings session={session} />
-              </Activity>
-            </details>
+            <>
+              <button
+                className="text-button"
+                onClick={() => setSharedBrokersOpen(true)}
+              >
+                管理券商
+              </button>
+              {sharedBrokersOpen && (
+                <Dialog
+                  title="管理券商"
+                  onClose={() => setSharedBrokersOpen(false)}
+                >
+                  <SharedBrokerSettings session={session} />
+                </Dialog>
+              )}
+            </>
           )}
         </>
       ) : null}

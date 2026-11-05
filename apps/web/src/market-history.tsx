@@ -1,3 +1,4 @@
+import { MarketDisplaySettings } from "./market-display-settings";
 import {
   useCallback,
   useEffect,
@@ -175,7 +176,7 @@ function HistorySession({
   scope: string;
 }) {
   const [view, setView] = useState<
-    "browse" | "quotes" | "alerts" | "history" | "sources"
+    "browse" | "quotes" | "alerts" | "history" | "sources" | "settings"
   >("browse");
   const [visible, setVisible] = useState(
     typeof document === "undefined" || !document.hidden,
@@ -632,15 +633,24 @@ function HistorySession({
       <WorkspaceTabs
         label="行情功能"
         value={view}
-        onChange={setView}
+        onChange={(value) => setView(value as typeof view)}
         items={[
           { value: "browse", label: "全球市场" },
           { value: "quotes", label: "行情与股票池" },
           { value: "alerts", label: "价格提醒" },
           { value: "history", label: "历史行情" },
           { value: "sources", label: "来源设置" },
+          ...(session.user.role === "admin"
+            ? [{ value: "settings", label: "行情设置" }]
+            : []),
         ]}
       />
+      <WorkspaceView active={view === "settings"} label="行情设置">
+        <MarketDisplaySettings
+          session={session}
+          active={active && visible && view === "settings"}
+        />
+      </WorkspaceView>
       <WorkspaceView active={view === "browse"} label="全球市场">
         <MarketReferencePanel
           session={session}

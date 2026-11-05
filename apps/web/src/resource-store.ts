@@ -15,6 +15,7 @@ type Entry = {
   flight: Promise<void> | null;
   timer: ReturnType<typeof setTimeout> | null;
   dirty: boolean;
+  denied: boolean;
   used: number;
 };
 export type StoreClock = {
@@ -79,6 +80,7 @@ export class ResourceStore {
         flight: null,
         timer: null,
         dirty: true,
+        denied: false,
         used: this.clock.now(),
       };
       this.entries.set(key, entry);
@@ -126,6 +128,7 @@ export class ResourceStore {
     if (
       this.disposed ||
       this.blocked ||
+      entry.denied ||
       this.manual(entry.key) ||
       ![...entry.listeners.values()].some(Boolean)
     )
@@ -154,6 +157,7 @@ export class ResourceStore {
     if (
       this.disposed ||
       this.blocked ||
+      entry.denied ||
       !this.visible() ||
       !entry.listeners.size ||
       this.entries.get(entry.key) !== entry
@@ -190,8 +194,24 @@ export class ResourceStore {
         )
           return;
         const status = (error as { status?: number })?.status;
-        if (status === 401 || status === 403) {
+        if (
+          status === 401 ||
+          (error as { code?: string })?.code === "session_changed"
+        ) {
           this.rejectAuthorization("访问权限已变化，请重新核对");
+          return;
+        }
+        if (status === 403) {
+          entry.denied = true;
+          entry.dirty = false;
+          this.clearTimer(entry);
+          this.publish(entry, {
+            data: null,
+            updatedAt: null,
+            error:
+              error instanceof Error ? error.message : "此内容未获访问权限",
+            refreshing: false,
+          });
           return;
         }
         this.publish(entry, {
@@ -212,6 +232,7 @@ export class ResourceStore {
   reload(key: string) {
     this.blocked = false;
     const entry = this.entry(key);
+    entry.denied = false;
     entry.generation++;
     entry.dirty = true;
     entry.controller?.abort();

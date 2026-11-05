@@ -1,8 +1,10 @@
+import { syncRows } from "./sync-status-model";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type Session } from "./api";
 import { RefreshCw } from "lucide-react";
 type Domain = {
+  commitSignalComplete: boolean;
   state: "observed" | "partial" | "unavailable" | "forbidden";
   revision: number | null;
   lastChangedAt: string | null;
@@ -32,6 +34,7 @@ type Signals = {
   financialAuthority: false;
   legacyComplete: false;
   domains: Record<string, Domain>;
+  unrepresentedSources?: string[];
 };
 type Device = {
   id: string;
@@ -359,80 +362,103 @@ function Panel({
       {epochChanged && <p role="status">来源代次已变化，旧版本不再用于比较</p>}
       {signals && (
         <>
-          <p>
-            读取时间 {signals.observedAt} · 平台启用以来的变更范围
-            {signals.legacyComplete === false ? " · 旧来源尚未完整验收" : ""}
-          </p>
-          <div className="workspace-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>类别</th>
-                  <th>状态</th>
-                  <th>当前账号修订</th>
-                  <th>最近变更</th>
-                  <th>来源</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(signals.domains).map(([name, value]) => (
-                  <tr key={name}>
-                    <td>{domainLabels[name] || name}</td>
-                    <td>{states[value.state] || value.state}</td>
-                    <td>{value.revision === null ? "未知" : value.revision}</td>
-                    <td>{value.lastChangedAt || "未知"}</td>
-                    <td>
-                      <details>
-                        <summary>
-                          已登记 {value.sources.length} · 缺失{" "}
-                          {value.missingSources.length}
-                        </summary>
-                        {value.coveredSince && (
-                          <p>覆盖起点 {value.coveredSince}</p>
-                        )}
-                        <p>已登记来源 {value.sources.join("、") || "无"}</p>
-                        <p>
-                          缺失来源{" "}
-                          {value.missingSources.join("、") || "无已登记缺项"}
-                        </p>
-                        {value.expectedSources && (
-                          <p>
-                            预期来源{" "}
-                            {value.expectedSources.join("、") || "未登记"}
-                          </p>
-                        )}
-                      </details>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="sync-status-list">
+            {syncRows({
+              ...signals,
+              unrepresentedSources: signals.unrepresentedSources || [],
+            }).map((row) => (
+              <div className="sync-status-row" key={row.key}>
+                <div>
+                  <strong>{row.label}</strong>
+                  <small>
+                    {row.changedAt
+                      ? `最近变更 ${new Date(row.changedAt).toLocaleString()}`
+                      : "尚无变更时间"}
+                  </small>
+                </div>
+                <span>{row.status}</span>
+              </div>
+            ))}
           </div>
           <details>
-            <summary>来源与账号标识</summary>
-            <dl>
-              <dt>账号</dt>
-              <dd>{signals.userId}</dd>
-              <dt>实例</dt>
-              <dd>{signals.instanceId}</dd>
-              <dt>来源代次</dt>
-              <dd>{signals.epoch}</dd>
-              <dt>平台启用</dt>
-              <dd>{signals.installedAt}</dd>
-              <dt>当前会话授权范围</dt>
-              <dd>{signals.binding.scopes.join("、")}</dd>
-              <dt>会话代次</dt>
-              <dd>{signals.binding.sessionVersion}</dd>
-              <dt>变更标识</dt>
-              <dd>{signals.context}</dd>
-            </dl>
-            <p>变更修订不作为金融写入确认或余额证明</p>
+            <summary>来源与覆盖范围</summary>
+            <p>
+              读取时间 {signals.observedAt} · 平台启用以来的变更范围
+              {signals.legacyComplete === false ? " · 旧来源尚未完整验收" : ""}
+            </p>
+            <div className="workspace-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>类别</th>
+                    <th>状态</th>
+                    <th>当前账号修订</th>
+                    <th>最近变更</th>
+                    <th>来源</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(signals.domains).map(([name, value]) => (
+                    <tr key={name}>
+                      <td>{domainLabels[name] || name}</td>
+                      <td>{states[value.state] || value.state}</td>
+                      <td>
+                        {value.revision === null ? "未知" : value.revision}
+                      </td>
+                      <td>{value.lastChangedAt || "未知"}</td>
+                      <td>
+                        <details>
+                          <summary>
+                            已登记 {value.sources.length} · 缺失{" "}
+                            {value.missingSources.length}
+                          </summary>
+                          {value.coveredSince && (
+                            <p>覆盖起点 {value.coveredSince}</p>
+                          )}
+                          <p>已登记来源 {value.sources.join("、") || "无"}</p>
+                          <p>
+                            缺失来源{" "}
+                            {value.missingSources.join("、") || "无已登记缺项"}
+                          </p>
+                          {value.expectedSources && (
+                            <p>
+                              预期来源{" "}
+                              {value.expectedSources.join("、") || "未登记"}
+                            </p>
+                          )}
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <details>
+              <summary>来源与账号标识</summary>
+              <dl>
+                <dt>账号</dt>
+                <dd>{signals.userId}</dd>
+                <dt>实例</dt>
+                <dd>{signals.instanceId}</dd>
+                <dt>来源代次</dt>
+                <dd>{signals.epoch}</dd>
+                <dt>平台启用</dt>
+                <dd>{signals.installedAt}</dd>
+                <dt>当前会话授权范围</dt>
+                <dd>{signals.binding.scopes.join("、")}</dd>
+                <dt>会话代次</dt>
+                <dd>{signals.binding.sessionVersion}</dd>
+                <dt>变更标识</dt>
+                <dd>{signals.context}</dd>
+              </dl>
+              <p>变更修订不作为金融写入确认或余额证明</p>
+            </details>
           </details>
         </>
       )}
       {device && (
-        <div>
-          <h3>当前设备凭据</h3>
+        <details>
+          <summary>当前设备与授权</summary>
           <p>
             {device.device.name} ·{" "}
             {device.device.kind === "web" ? "Web" : "App"} ·{" "}
@@ -475,7 +501,7 @@ function Panel({
           >
             管理登录设备
           </button>
-        </div>
+        </details>
       )}
       {watch && <FieldList summary={watch} />}
       <Link className="button secondary" to="/watch-groups">

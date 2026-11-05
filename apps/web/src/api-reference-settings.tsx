@@ -145,7 +145,7 @@ function ReferenceEditor({
     }
   }
   return (
-    <div className="connection-fields">
+    <div className="api-reference-editor">
       {current?.revision === null && <p role="status">文档尚未配置</p>}
       <textarea
         aria-label="Markdown 文档"

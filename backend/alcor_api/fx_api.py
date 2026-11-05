@@ -87,8 +87,20 @@ def mount_rates(app, settings, db, *, worker=None, wait_timeout=15):
                     who, data["enabled"], data["dailyBudget"], data["revision"], data.get("custom")
                 )
             }
-        except (ValueError, KeyError, TypeError, TimeoutError, OSError):
-            raise HTTPException(400, "供应商目标、时间或定时配置无效") from None
+        except (ValueError, KeyError, TypeError, TimeoutError, OSError) as exc:
+            messages = {
+                "approval_addresses_invalid": "请填写并确认自定义接口的服务器 IP",
+                "approval_invalid": "请确认自定义接口地址和服务器 IP",
+                "url_invalid": "请输入完整有效的汇率接口地址",
+                "base_invalid": "基准币种须为三个大写字母，如 USD",
+                "time_field_invalid": "来源时间字段格式无效，请核对响应格式设置",
+                "time_precision_invalid": "请选择有效的来源时间精度",
+                "source_time_policy_invalid": "设置时间字段后须选择对应的时间精度",
+                "schedule_invalid": "定时更新时间格式无效",
+                "timezone_invalid": "定时更新的时区无效",
+                "timezone_required": "定时更新需要填写时区",
+            }
+            raise HTTPException(400, messages.get(str(exc), "接口设置未通过校验，请核对自定义接口及高级设置")) from None
 
     from .admin_verification import VerificationInput, verify_admin_access
 

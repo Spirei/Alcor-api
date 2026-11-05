@@ -21,6 +21,7 @@ export type LibraryAsset = {
   type?: string;
   code?: string;
   market?: string;
+  brokerMarkets?: string[];
   imageUrl?: string;
   imageUrlDark?: string;
   readOnly?: boolean;

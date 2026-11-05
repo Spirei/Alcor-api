@@ -8,11 +8,9 @@ import {
   capabilityClientProgress,
   capabilityEntryEvidence,
   capabilityMatches,
-  continuationCapsule,
   dispositionLabels,
   implementationPlan,
   nonApiImplementationStage,
-  migrationProgress,
   migrationSourceProgress,
   migrationDomainState,
 } from "./migration-view";
@@ -87,16 +85,29 @@ function CapabilityDetail({
         )}
         <dl>
           <div>
-            <dt>
-              {entry.label}
-            </dt>
+            <dt>{entry.label}</dt>
             <dd>
               <code>
                 {cap.method} {cap.proposed_path}
               </code>
             </dd>
           </div>
-          {entry.routes.length > 0 && <div><dt>{entry.legacyOnly ? "已验证旧协议实际入口" : "已验证实际入口"}</dt><dd>{entry.routes.map(route => <div key={route.method + route.path}><code>{route.method} {route.path}</code></div>)}</dd></div>}
+          {entry.routes.length > 0 && (
+            <div>
+              <dt>
+                {entry.legacyOnly ? "已验证旧协议实际入口" : "已验证实际入口"}
+              </dt>
+              <dd>
+                {entry.routes.map((route) => (
+                  <div key={route.method + route.path}>
+                    <code>
+                      {route.method} {route.path}
+                    </code>
+                  </div>
+                ))}
+              </dd>
+            </div>
+          )}
           <div>
             <dt>处理方式</dt>
             <dd>{dispositionLabels[cap.disposition] || "待核对"}</dd>
@@ -188,9 +199,9 @@ export function MigrationPage() {
   const resource = useResource<MigrationRegister>("/system/migration");
   const { data, error, reload, refreshing } = resource;
   const invalidateOverview = useMigrationInvalidation();
-  const [workRefresh,setWorkRefresh] = useState(0);
+  const [workRefresh, setWorkRefresh] = useState(0);
   const refresh = () => {
-    setWorkRefresh(value => value+1);
+    setWorkRefresh((value) => value + 1);
     reload();
     invalidateOverview();
   };
@@ -204,12 +215,6 @@ export function MigrationPage() {
     [data],
   );
   const sourceProgress = migrationSourceProgress(plan);
-  const progress = plan
-    ? migrationProgress(
-        plan.summary.implementation_local_verified,
-        plan.summary.capabilities,
-      )
-    : null;
   const grouped = useMemo(() => {
     const result = new Map<string, Capability[]>();
     for (const cap of plan?.capabilities || []) {
@@ -254,7 +259,7 @@ export function MigrationPage() {
           {refreshing ? "刷新中…" : "刷新"}
         </button>
       </div>
-      <MigrationWorkStatusPanel refreshKey={workRefresh}/>
+      <MigrationWorkStatusPanel refreshKey={workRefresh} />
       {error && (
         <div className="notice error" role="alert">
           {error}
@@ -326,54 +331,53 @@ export function MigrationPage() {
               </span>
             </div>
             {sourceProgress && (
-              <div className="migration-progress" data-complete={sourceProgress.ratio === 1} data-stale={Boolean(error)}>
-                <div className="migration-progress-caption"><span>源码候选覆盖</span><strong>{sourceProgress.verified} / {sourceProgress.total} · {sourceProgress.percent.toFixed(1)}<small>%</small></strong></div>
-                <div className="migration-progress-track" role="progressbar" aria-label="源码候选覆盖进度" aria-valuemin={0} aria-valuemax={sourceProgress.total} aria-valuenow={sourceProgress.verified} aria-valuetext={`${sourceProgress.verified} / ${sourceProgress.total} 项已有源码候选，${sourceProgress.percent.toFixed(1)}%`} style={{"--migration-progress":sourceProgress.ratio} as CSSProperties}><span className="migration-progress-fill"><span /></span></div>
-                <small>候选覆盖不代表迁移完成。待验证 {sourceProgress.pendingValidation}{sourceProgress.nonApi.total > 0 && <> · 非接口专项源码 {sourceProgress.nonApi.complete} / {sourceProgress.nonApi.total}</>}</small>
-              </div>
-            )}
-            {progress && (
               <div
                 className="migration-progress"
-                data-complete={progress.ratio === 1}
+                data-complete={sourceProgress.ratio === 1}
                 data-stale={Boolean(error)}
               >
                 <div className="migration-progress-caption">
-                  <span>能力本地验证</span>
+                  <span>源码候选覆盖</span>
                   <strong>
-                    {progress.percent.toFixed(1)}
+                    {sourceProgress.verified} / {sourceProgress.total} ·{" "}
+                    {sourceProgress.percent.toFixed(1)}
                     <small>%</small>
                   </strong>
                 </div>
                 <div
                   className="migration-progress-track"
                   role="progressbar"
-                  aria-label="能力本地验证进度"
+                  aria-label="源码候选覆盖进度"
                   aria-valuemin={0}
-                  aria-valuemax={progress.total}
-                  aria-valuenow={progress.verified}
-                  aria-valuetext={`${progress.verified} / ${progress.total} 项能力已本地验证，${progress.percent.toFixed(1)}%${error ? "，更新失败，显示上次结果" : ""}`}
+                  aria-valuemax={sourceProgress.total}
+                  aria-valuenow={sourceProgress.verified}
+                  aria-valuetext={`${sourceProgress.verified} / ${sourceProgress.total} 项已有源码候选，${sourceProgress.percent.toFixed(1)}%`}
                   style={
-                    { "--migration-progress": progress.ratio } as CSSProperties
+                    {
+                      "--migration-progress": sourceProgress.ratio,
+                    } as CSSProperties
                   }
                 >
                   <span className="migration-progress-fill">
                     <span />
                   </span>
                 </div>
+                <small>
+                  候选覆盖不代表迁移完成。待验证{" "}
+                  {sourceProgress.pendingValidation}
+                  {sourceProgress.nonApi.total > 0 && (
+                    <>
+                      {" "}
+                      · 非接口专项源码 {sourceProgress.nonApi.complete} /{" "}
+                      {sourceProgress.nonApi.total}
+                    </>
+                  )}
+                </small>
               </div>
             )}
           </div>
           {plan ? (
             <div className="migration-tracks" aria-label="迁移分项进度">
-              <div>
-                <span>本地验证</span>
-                <strong>
-                  {plan.summary.implementation_local_verified} /{" "}
-                  {plan.summary.capabilities}
-                </strong>
-                <small>本地验证 / 能力候选</small>
-              </div>
               <div>
                 <span>旧协议本地核验</span>
                 <strong>
@@ -440,11 +444,6 @@ export function MigrationPage() {
               const caps = domainMatches
                 ? allCaps
                 : allCaps.filter((cap) => capabilityMatches(cap, query));
-              const marks = (data.operations || []).filter(
-                (op) =>
-                  op.feature_ids.includes(domain.id) &&
-                  continuationCapsule(op.verification?.version),
-              );
               const allOps = (data.operations || []).filter((op) =>
                 op.feature_ids.includes(domain.id),
               );
@@ -453,17 +452,25 @@ export function MigrationPage() {
                 name: label,
                 ...capabilityClientProgress(allCaps, client),
               }));
-              const nonApi = !allCaps.length && !allOps.length
-                ? plan?.non_api_work.find(work => work.feature_id === domain.id)
-                : undefined;
-              const nonApiStage = nonApiImplementationStage(data.implementation_staging, domain.id);
+              const nonApi =
+                !allCaps.length && !allOps.length
+                  ? plan?.non_api_work.find(
+                      (work) => work.feature_id === domain.id,
+                    )
+                  : undefined;
+              const nonApiStage = nonApiImplementationStage(
+                data.implementation_staging,
+                domain.id,
+              );
               const domainState = migrationDomainState(
                 domain.status,
-                nonApi ? [] : view === "capabilities"
-                  ? allCaps.map((cap) => cap.implementation.status)
-                  : view === "legacy"
-                    ? allOps.map((op) => op.status)
-                    : clients.map((client) => client.status),
+                nonApi
+                  ? []
+                  : view === "capabilities"
+                    ? allCaps.map((cap) => cap.implementation.status)
+                    : view === "legacy"
+                      ? allOps.map((op) => op.status)
+                      : clients.map((client) => client.status),
                 nonApi?.status,
               );
               const ops = allOps.filter(
@@ -496,29 +503,16 @@ export function MigrationPage() {
                       {domain.name}
                       <span className="domain-stage-line">
                         <small>{domain.stage}</small>
-                        {marks.length > 0 && (
-                          <span className="migration-marks">
-                            {marks.map((op) => (
-                              <span
-                                key={op.id}
-                                className="migration-capsule"
-                                title={`${op.method} ${op.path}`}
-                              >
-                                {op.verification?.version}
-                              </span>
-                            ))}
-                          </span>
-                        )}
                       </span>
                     </span>
                     <span className="domain-count">
                       {nonApi
                         ? "非 API 工作"
                         : view === "legacy"
-                        ? `${domain.operation_count} 个方法`
-                        : domainState === "retired"
-                          ? `${allCaps.length} 项已移除`
-                          : `${allCaps.length} 个能力候选`}
+                          ? `${domain.operation_count} 个方法`
+                          : domainState === "retired"
+                            ? `${allCaps.length} 项已移除`
+                            : `${allCaps.length} 个能力候选`}
                     </span>
                     <span className="domain-state">
                       <MigrationStatus
@@ -540,17 +534,68 @@ export function MigrationPage() {
                   </button>
                   {selected === domain.id && (
                     <div className="migration-domain-detail">
-                      {nonApi && <div className="capability-body">
-                        <p>{nonApi.name} · <MigrationStatus status={domainState}/></p>
-                        {nonApiStage && <>
-                          <p>{nonApiStage.version}</p>
-                          <div><strong>实现文件</strong><ul>{nonApiStage.implementation_files.map(file => <li key={file}><code>{file}</code></li>)}</ul></div>
-                          <div><strong>实际入口</strong><ul>{nonApiStage.routes.map(route => <li key={route.method + route.path}><code>{route.method} {route.path}</code></li>)}</ul></div>
-                          <div><strong>待验证内容</strong><ul>{nonApiStage.pending_validation.map(note => <li key={note}>{note}</li>)}</ul></div>
-                          {!!nonApiStage.remaining_implementation?.length && <div><strong>尚未实现内容</strong><ul>{nonApiStage.remaining_implementation.map(note => <li key={note}>{note}</li>)}</ul></div>}
-                        </>}
-                      </div>}
-                      {!nonApi && view === "capabilities" &&
+                      {nonApi && (
+                        <div className="capability-body">
+                          <p>
+                            {nonApi.name} ·{" "}
+                            <MigrationStatus status={domainState} />
+                          </p>
+                          {nonApiStage && (
+                            <>
+                              <p>{nonApiStage.version}</p>
+                              <div>
+                                <strong>实现文件</strong>
+                                <ul>
+                                  {nonApiStage.implementation_files.map(
+                                    (file) => (
+                                      <li key={file}>
+                                        <code>{file}</code>
+                                      </li>
+                                    ),
+                                  )}
+                                </ul>
+                              </div>
+                              <div>
+                                <strong>实际入口</strong>
+                                <ul>
+                                  {nonApiStage.routes.map((route) => (
+                                    <li key={route.method + route.path}>
+                                      <code>
+                                        {route.method} {route.path}
+                                      </code>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div>
+                                <strong>待验证内容</strong>
+                                <ul>
+                                  {nonApiStage.pending_validation.map(
+                                    (note) => (
+                                      <li key={note}>{note}</li>
+                                    ),
+                                  )}
+                                </ul>
+                              </div>
+                              {!!nonApiStage.remaining_implementation
+                                ?.length && (
+                                <div>
+                                  <strong>尚未实现内容</strong>
+                                  <ul>
+                                    {nonApiStage.remaining_implementation.map(
+                                      (note) => (
+                                        <li key={note}>{note}</li>
+                                      ),
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {!nonApi &&
+                        view === "capabilities" &&
                         (caps.length ? (
                           caps.map((cap) => (
                             <CapabilityDetail
@@ -589,13 +634,6 @@ export function MigrationPage() {
                                     <code>
                                       {op.method} {op.path}
                                     </code>
-                                    {continuationCapsule(
-                                      op.verification?.version,
-                                    ) && (
-                                      <span className="migration-capsule">
-                                        {op.verification?.version}
-                                      </span>
-                                    )}
                                   </span>
                                   <span className="operation-state">
                                     <MigrationStatus status={op.status} />

@@ -554,34 +554,37 @@ function FontSession({
       >
         Aa 字体预览 0123456789
       </div>
-      <div className="personal-fonts-lookup">
-        <label>
-          字体操作编号
-          <input
-            value={pending ?? lookup}
-            readOnly={!!pending}
-            disabled={locked}
-            onChange={(event) => setLookup(event.target.value)}
-            spellCheck={false}
-          />
-        </label>
-        <button
-          type="button"
-          disabled={recovering || !fontOperationId(pending ?? lookup.trim())}
-          onClick={() => void query()}
-        >
-          查询字体回执
-        </button>
-        {pending && (
+      <details className="personal-fonts-operation-details" open={!!pending}>
+        <summary>查询操作记录</summary>
+        <div className="personal-fonts-lookup">
+          <label>
+            字体操作编号
+            <input
+              value={pending ?? lookup}
+              readOnly={!!pending}
+              disabled={locked}
+              onChange={(event) => setLookup(event.target.value)}
+              spellCheck={false}
+            />
+          </label>
           <button
             type="button"
-            disabled={recovering}
-            onClick={() => void close()}
+            disabled={recovering || !fontOperationId(pending ?? lookup.trim())}
+            onClick={() => void query()}
           >
-            关闭原操作
+            查询字体回执
           </button>
-        )}
-      </div>
+          {pending && (
+            <button
+              type="button"
+              disabled={recovering}
+              onClick={() => void close()}
+            >
+              关闭原操作
+            </button>
+          )}
+        </div>
+      </details>
       {pending && <p role="status">原操作待核对 · {pending}</p>}
       {receipt && (
         <p role={receipt.state === "failed" ? "alert" : "status"}>

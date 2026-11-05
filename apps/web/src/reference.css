@@ -67,3 +67,86 @@
   gap: 12px;
   margin-top: 18px;
 }
+
+.fx-settings-dialog {
+  width: min(680px, calc(100vw - 32px));
+}
+.fx-settings-dialog .dialog-content {
+  min-width: 0;
+  overflow-x: hidden;
+}
+.fx-advanced-settings {
+  margin: 18px 0;
+  border-top: 1px solid var(--edge);
+  padding-top: 16px;
+}
+.fx-advanced-settings > summary,
+.fx-format-settings > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.fx-advanced-settings[open] > summary,
+.fx-format-settings[open] > summary {
+  margin-bottom: 20px;
+}
+.fx-source-name {
+  margin: 0;
+}
+.fx-source-summary {
+  margin: 20px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.fx-source-summary > p {
+  margin: 6px 0;
+}
+.fx-observation-list {
+  display: grid;
+  gap: 16px;
+}
+.fx-observation-item {
+  min-width: 0;
+  padding: 18px 0;
+  border-top: 1px solid var(--edge);
+  overflow-wrap: anywhere;
+}
+.fx-observation-item header {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.fx-observation-item header span,
+.fx-observation-item dt {
+  color: var(--muted);
+}
+.fx-observation-item dl {
+  display: grid;
+  gap: 8px;
+}
+.fx-observation-item dl > div {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.fx-observation-item dd {
+  margin: 0;
+}
+.fx-observation-actions {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.fx-observation-item details {
+  color: var(--muted);
+  font-size: 12px;
+}
+.fx-observation-item details p {
+  overflow-wrap: anywhere;
+}
+.fx-observations-empty {
+  margin: 24px 0;
+  color: var(--muted);
+}

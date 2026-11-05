@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
 from .models import LoginInput
 from .passwords import DUMMY_HASH, verify_password
-from .security import COOKIE, Identity, digest, trusted_origin, identity
+from .security import COOKIE, Identity, digest, trusted_origin, identity, csrf_token
 from .identity_service import FACTOR_COOKIE
 from .native_app_auth import CLIENT, REDIRECT, BASE_SCOPE, SCOPES, authenticate, issue_grant, active_grant, rotate, identity_from_grant, parse_scopes, security_stamp, opaque, remember_consent, consent_descriptor
 
@@ -53,7 +53,11 @@ def native_version(request):
 
 def assert_native_origin(request,settings):
     actual=f'{request.url.scheme}://{request.url.netloc}'
-    if actual!=settings.public_origin or request.headers.get('origin') not in (None,settings.public_origin) or request.headers.get('sec-fetch-site')=='cross-site':
+    token = request.cookies.get(COOKIE, '')
+    bound_web = bool(token and len(token) <= 128 and 'authorization' not in request.headers and secrets.compare_digest(request.headers.get('x-csrf-token', ''), csrf_token(token)))
+    # A bound Web session is checked again by the route's identity service.
+    # TLS termination must not turn its read into a native-client origin check.
+    if request.headers.get('origin') not in (None,settings.public_origin) or request.headers.get('sec-fetch-site')=='cross-site' or (actual!=settings.public_origin and not bound_web):
         raise LegacyError(403,40301,'请求来源不受信任')
 
 

@@ -38,6 +38,7 @@ async def create_user(
 def main():
     p = argparse.ArgumentParser(prog="alcor")
     sub = p.add_subparsers(dest="command", required=True)
+    sub.add_parser("check-schema")
     m = sub.add_parser("migrate")
     m.add_argument("--database", required=True, help="Exact confirmed target database name")
     m.add_argument("--initialize-empty", action="store_true")
@@ -155,6 +156,13 @@ def main():
 
             asyncio.run(enroll())
             print("Isolated empty target enrolled; no data restored.")
+        elif args.command == "check-schema":
+            import json
+            from .schema_preflight import check
+            result = asyncio.run(check(Settings()))
+            print(json.dumps(result, ensure_ascii=False))
+            if not result["compatible"]:
+                raise SystemExit(2)
         elif args.command == "migrate":
             asyncio.run(migrate(Settings(), args.database, args.initialize_empty))
             print("Migration complete; target identity verified.")

@@ -88,14 +88,11 @@ test("actual appearance/font controls and binary FontFace loader guard current o
           "无衬线",
           "衬线",
           "等宽",
-          "本人字体",
-          "上传字体",
-          "预览字体",
-          "下载原件",
-          "查询字体回执",
+          "管理字体",
         ])
           assert.ok(html.includes(text), text);
-        assert.equal((html.match(/type="file"/g) || []).length, 1);
+        assert.equal((html.match(/type="file"/g) || []).length, 0);
+        assert.ok(!html.includes("字体操作编号"));
         assert.ok(!html.includes('type="url"'));
         assert.ok(!html.includes('type="password"'));
         assert.ok(!html.includes("全部迁移完成"));

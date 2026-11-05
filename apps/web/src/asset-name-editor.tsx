@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
+import { Dialog } from "./dialog";
 import { api, ApiError, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
 import { requestId } from "./request-id";
@@ -9,6 +10,7 @@ type Job = {
   requestId: string;
   assetId: string;
   name: string;
+  brokerMarkets?: string[];
   revision: number;
 };
 export function useAssetNameEditor({
@@ -39,6 +41,7 @@ export function useAssetNameEditor({
     (domain === "watch-group" ? ":groups" : "");
   const [job, setJob] = useState<Job | null>(null),
     [name, setName] = useState(""),
+    [brokerMarkets, setBrokerMarkets] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [locked, setLocked] = useState(false);
@@ -97,13 +100,16 @@ export function useAssetNameEditor({
     const value = raw as {
       requestId?: string;
       revision?: number;
-      asset?: { id?: string; name?: string };
+      asset?: { id?: string; name?: string; brokerMarkets?: string[] };
       group?: { id?: string; name?: string };
     };
     if (
       !value ||
       value.requestId !== expected.requestId ||
       value.revision !== expected.revision + 1 ||
+      (expected.brokerMarkets !== undefined &&
+        JSON.stringify(value.asset?.brokerMarkets) !==
+          JSON.stringify(expected.brokerMarkets)) ||
       (domain === "watch-group" ? value.group?.id : value.asset?.id) !==
         expected.assetId ||
       (domain === "watch-group" ? value.group?.name : value.asset?.name) !==
@@ -123,6 +129,7 @@ export function useAssetNameEditor({
       assetId: target!.id,
       revision: target!.revision,
       name: name.trim(),
+      ...(target?.type === "broker" ? { brokerMarkets } : {}),
     };
     if (!expected.name || expected.name.length > 120) {
       setError("请输入 1–120 字的素材名称");
@@ -169,7 +176,13 @@ export function useAssetNameEditor({
                         requestId: expected.requestId,
                         expectedRevision: expected.revision,
                         publicMetadataConfirmed: true,
-                        asset: { id: expected.assetId, name: expected.name },
+                        asset: {
+                          id: expected.assetId,
+                          name: expected.name,
+                          ...(expected.brokerMarkets !== undefined
+                            ? { brokerMarkets: expected.brokerMarkets }
+                            : {}),
+                        },
                         restore: false,
                       },
                 ),
@@ -233,6 +246,8 @@ export function useAssetNameEditor({
     input,
     name,
     setName,
+    brokerMarkets,
+    setBrokerMarkets,
     busy,
     pending: !!job,
     error,
@@ -242,6 +257,12 @@ export function useAssetNameEditor({
       returnFocus.current = element;
       setTarget({ ...asset, revision });
       setName(asset.name);
+      setBrokerMarkets(
+        asset.brokerMarkets ??
+          (["US", "HK", "CN"].includes(asset.market || "")
+            ? [asset.market!]
+            : []),
+      );
       setError("");
     },
     cancel: () => {
@@ -268,7 +289,7 @@ export function MaterialName({
   const editing = editor.editingId === asset.id;
   return (
     <span className="asset-library-name">
-      <strong hidden={editing}>
+      <strong hidden={editing && asset.type !== "broker"}>
         {asset.name || asset.code || "未命名素材"}
       </strong>
       <button
@@ -282,7 +303,62 @@ export function MaterialName({
       >
         <Pencil size={15} />
       </button>
-      {editing && (
+      {editing && asset.type === "broker" && (
+        <Dialog title="编辑券商" onClose={editor.cancel}>
+          <form
+            className="broker-edit-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void editor.save();
+            }}
+          >
+            <label>
+              名称
+              <input
+                ref={editor.input}
+                value={editor.name}
+                maxLength={120}
+                disabled={editor.busy || editor.pending}
+                onChange={(event) => editor.setName(event.target.value)}
+              />
+            </label>
+            <fieldset>
+              <legend>市场分类</legend>
+              {[
+                ["US", "美股"],
+                ["HK", "港股"],
+                ["CN", "A股"],
+              ].map(([code, label]) => (
+                <label key={code}>
+                  <input
+                    type="checkbox"
+                    checked={editor.brokerMarkets.includes(code)}
+                    disabled={editor.busy || editor.pending}
+                    onChange={(event) =>
+                      editor.setBrokerMarkets(
+                        event.target.checked
+                          ? [...editor.brokerMarkets, code]
+                          : editor.brokerMarkets.filter(
+                              (value) => value !== code,
+                            ),
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+            {editor.error && <p role="alert">{editor.error}</p>}
+            <button
+              className="button"
+              disabled={editor.busy || editor.locked || !editor.name.trim()}
+            >
+              {editor.pending ? "核对原操作" : "保存"}
+            </button>
+          </form>
+        </Dialog>
+      )}
+      {editing && asset.type !== "broker" && (
         <form
           className="asset-inline-name"
           onSubmit={(event) => {

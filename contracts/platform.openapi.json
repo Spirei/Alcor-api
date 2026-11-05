@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Alcor Platform",
-    "version": "0.1.177"
+    "version": "0.1.178"
   },
   "paths": {
     "/api/profile/requests": {
@@ -23420,45 +23420,6 @@
         }
       }
     },
-    "/api/connections/postgresql/inspect": {
-      "post": {
-        "tags": [
-          "database-inspection"
-        ],
-        "summary": "Inspect Postgres",
-        "operationId": "inspect_postgres_api_connections_postgresql_inspect_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InspectionInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/backups": {
       "get": {
         "tags": [
@@ -33765,17 +33726,6 @@
             ],
             "title": "Revision"
           },
-          "inspection_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Inspection Token"
-          },
           "postgres_version": {
             "anyOf": [
               {
@@ -34356,64 +34306,6 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
-      },
-      "InspectionInput": {
-        "properties": {
-          "ticket": {
-            "type": "string",
-            "maxLength": 16384,
-            "minLength": 32,
-            "title": "Ticket"
-          },
-          "view": {
-            "type": "string",
-            "enum": [
-              "databases",
-              "schemas",
-              "tables",
-              "rows"
-            ],
-            "title": "View"
-          },
-          "database": {
-            "type": "string",
-            "maxLength": 128,
-            "title": "Database",
-            "default": ""
-          },
-          "schema_name": {
-            "type": "string",
-            "maxLength": 128,
-            "title": "Schema Name",
-            "default": ""
-          },
-          "table": {
-            "type": "string",
-            "maxLength": 128,
-            "title": "Table",
-            "default": ""
-          },
-          "after": {
-            "type": "string",
-            "maxLength": 128,
-            "title": "After",
-            "default": ""
-          },
-          "offset": {
-            "type": "integer",
-            "maximum": 10000.0,
-            "minimum": 0.0,
-            "title": "Offset",
-            "default": 0
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "ticket",
-          "view"
-        ],
-        "title": "InspectionInput"
       },
       "LoginInput": {
         "properties": {

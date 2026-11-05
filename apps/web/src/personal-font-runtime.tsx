@@ -32,6 +32,7 @@ export function announceFontDenied(epoch: number) {
 }
 type Runtime = {
   ready: boolean;
+  error: string;
   ensure: (
     font: PersonalFont,
     current: () => boolean,
@@ -147,7 +148,7 @@ function RuntimeSession({
         return;
       clear();
       setDenied(true);
-      setError("本人字体读取权限已变化");
+      setError("字体读取被拒绝，请重新读取核对");
     };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener(fontDeniedEvent, retire);
@@ -324,17 +325,14 @@ function RuntimeSession({
   };
   return (
     <Context.Provider
-      value={{ ready: !!account?.ready && visible && !denied, ensure, refresh }}
+      value={{
+        ready: !!account?.ready && visible && !denied,
+        ensure,
+        refresh,
+        error,
+      }}
     >
       {children}
-      {error && (
-        <div className="personal-font-runtime-error notice error" role="alert">
-          {error}
-          <button type="button" className="text-button" onClick={refresh}>
-            重新读取字体
-          </button>
-        </div>
-      )}
     </Context.Provider>
   );
 }

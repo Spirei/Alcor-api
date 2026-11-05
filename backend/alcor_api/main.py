@@ -772,8 +772,6 @@ def create_app(settings: Settings | None = None):
     app.include_router(client_router)
     from .connection_access import router as connection_access_router
     app.include_router(connection_access_router)
-    from .postgres_inspector import router as postgres_inspector_router
-    app.include_router(postgres_inspector_router)
     from .backups import router as backup_router
     app.include_router(backup_router)
     from .backup_schedule_api import mount_backup_schedule

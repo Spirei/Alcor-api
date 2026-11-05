@@ -119,5 +119,4 @@ class ConnectionReceiptOut(BaseModel):
     message: str
     observed_at: datetime
     revision: UUID | None = None
-    inspection_token: str | None = None
     postgres_version: str | None = None

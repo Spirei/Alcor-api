@@ -51,7 +51,7 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className={className}
+      className={["app-dialog", className].filter(Boolean).join(" ")}
       onCancel={(event) => {
         event.preventDefault();
         event.stopPropagation();

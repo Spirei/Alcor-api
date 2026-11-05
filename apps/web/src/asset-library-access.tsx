@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ShieldCheck } from "lucide-react";
+import { Check } from "lucide-react";
 import { api, ApiError, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
 import { requestId } from "./request-id";
@@ -189,17 +189,10 @@ export function MaterialAccessSettings({
   const disabled = busy || !!job || locked || !value;
   return (
     <section className="asset-access-settings" aria-label="权限开放">
-      <div className="asset-access-intro">
-        <ShieldCheck size={20} />
-        <div>
-          <h3>权限开放</h3>
-          <p>设置哪些身份可以浏览和使用公共素材。</p>
-        </div>
-      </div>
       <div className="asset-access-table">
         <div className="asset-access-row heading">
           <span>身份</span>
-          <span>浏览与使用</span>
+          <span>公共素材浏览</span>
           <span>修改与管理</span>
         </div>
         <div className="asset-access-row">
@@ -244,9 +237,6 @@ export function MaterialAccessSettings({
           </div>
         ))}
       </div>
-      <p className="asset-access-note">
-        头像、背景、本人分组和私有附件继续遵循各自的账号权限。
-      </p>
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
       <div className="asset-access-actions">

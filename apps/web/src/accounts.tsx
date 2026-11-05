@@ -1,5 +1,4 @@
 import "./account-settings.css";
-import { AccountSyncStatus } from "./account-sync-status";
 import { PageHeader } from "./workspace-ui";
 import { AccountActionRecords } from "./account-action-history";
 import { closedAccountReceipt } from "./account-action-state";
@@ -77,7 +76,7 @@ export function AccountPage({ session }: { session: Session }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [accountPanel, setAccountPanel] = useState<
-    "email" | "password" | "verification" | "devices" | "sync" | null
+    "email" | "password" | "verification" | "devices" | null
   >(() => (location.hash === "#account-owned-devices" ? "devices" : null));
   const [factorCode, setFactorCode] = useState("");
   const [current, setCurrent] = useState(""),
@@ -215,11 +214,14 @@ export function AccountPage({ session }: { session: Session }) {
     password: "修改密码",
     verification: "登录验证",
     devices: "登录设备",
-    sync: "同步状态",
   };
-  const openPanel = (panel: typeof accountPanel) => {
+  const openPanel = (panel: typeof accountPanel | "sync") => {
     if (busy || unknown) return;
     interrupt();
+    if (panel === "sync") {
+      navigate("/sync");
+      return;
+    }
     setAccountPanel(panel);
   };
   return (
@@ -336,13 +338,6 @@ export function AccountPage({ session }: { session: Session }) {
                   <div id="account-owned-devices">
                     <AccountDevices session={session} />
                   </div>
-                )}
-                {accountPanel === "sync" && (
-                  <AccountSyncStatus
-                    session={session}
-                    active={location.pathname === "/account"}
-                    onOpenDevices={() => openPanel("devices")}
-                  />
                 )}
                 {accountPanel === "password" && (
                   <section className="card padded settings-section">
@@ -777,7 +772,7 @@ function UsersSession({ session }: { session: Session }) {
   return (
     <>
       <div className="page-heading">
-        <h1>账号管理</h1>
+        <h1>用户管理</h1>
         <AccountActionRecords
           disabled={busy || !!uncertain}
           onSelect={(id) => void recover(false, id)}

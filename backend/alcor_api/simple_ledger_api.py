@@ -25,7 +25,11 @@ def mount_simple_ledger(app,db):
     service=SimpleLedger(db); app.state.simple_ledger=service
 
     async def actor(request,version=0,write=False):
-        assert_native_origin(request,db.settings)
+        platform = not version and not request.url.path.startswith('/api/simple-app/tool/') and COOKIE in request.cookies and 'authorization' not in request.headers
+        if not platform:
+            assert_native_origin(request,db.settings)
+        elif request.headers.get('origin') not in (None, db.settings.public_origin) or request.headers.get('sec-fetch-site') == 'cross-site':
+            raise HTTPException(403, '请求来源不受信任')
         from .legacy_identity import OLD_COOKIE, WEB_COOKIE, native_identity, web_identity
         from .legacy_optional_credentials import credentials_present
         from .native_app_auth import CLIENT

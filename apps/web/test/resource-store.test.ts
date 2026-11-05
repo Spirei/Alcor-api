@@ -189,7 +189,7 @@ test("temporary errors preserve the exact observation and cache timestamp", asyn
   stop();
   store.dispose();
 });
-test("403 withdraws all private snapshots, including hidden modules", async () => {
+test("403 withdraws the denied resource without locking unrelated modules", async () => {
   let forbidden = false;
   const store = new ResourceStore(async (key) => {
     if (forbidden && key === "/a")
@@ -204,8 +204,9 @@ test("403 withdraws all private snapshots, including hidden modules", async () =
   store.reload("/a");
   await flush();
   assert.equal(store.snapshot("/a").data, null);
-  assert.equal(store.snapshot("/b").data, null);
-  assert.match(store.snapshot("/b").error, /权限/);
+  assert.deepEqual(store.snapshot("/b").data, { key: "/b" });
+  assert.equal(store.snapshot("/b").error, "");
+  assert.match(store.snapshot("/a").error, /forbidden/);
   a();
   store.dispose();
 });

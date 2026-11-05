@@ -11428,23 +11428,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/connections/postgresql/inspect": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Inspect Postgres */
-        post: operations["inspect_postgres_api_connections_postgresql_inspect_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/backups": {
         parameters: {
             query?: never;
@@ -16570,8 +16553,6 @@ export interface components {
             observed_at: string;
             /** Revision */
             revision?: string | null;
-            /** Inspection Token */
-            inspection_token?: string | null;
             /** Postgres Version */
             postgres_version?: string | null;
         };
@@ -16786,41 +16767,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /** InspectionInput */
-        InspectionInput: {
-            /** Ticket */
-            ticket: string;
-            /**
-             * View
-             * @enum {string}
-             */
-            view: "databases" | "schemas" | "tables" | "rows";
-            /**
-             * Database
-             * @default
-             */
-            database: string;
-            /**
-             * Schema Name
-             * @default
-             */
-            schema_name: string;
-            /**
-             * Table
-             * @default
-             */
-            table: string;
-            /**
-             * After
-             * @default
-             */
-            after: string;
-            /**
-             * Offset
-             * @default 0
-             */
-            offset: number;
         };
         /** LoginInput */
         LoginInput: {
@@ -38617,39 +38563,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    inspect_postgres_api_connections_postgresql_inspect_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InspectionInput"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
             };
             /** @description Validation Error */
             422: {

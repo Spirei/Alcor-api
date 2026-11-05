@@ -1,7 +1,6 @@
 import { requestId as newRequestId } from "./request-id";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, Save, Zap, Table2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { RefreshCw, Save, Zap } from "lucide-react";
 import { api, ApiError } from "./api";
 import type {
   ConnectionConfig,
@@ -14,7 +13,6 @@ import { useConnectionInvalidation, useResource } from "./hooks";
 import { connectionResultView, emptyConnectionConfig } from "./connection-view";
 import { SelectMenu } from "./select-menu";
 import { ConnectionVerification } from "./connection-verification";
-import { usePostgresExplorer } from "./postgres-explorer-context";
 
 export function ConnectionSettingsForm({
   kind,
@@ -24,8 +22,6 @@ export function ConnectionSettingsForm({
   session: Session;
 }) {
   const path = "/connections/" + kind;
-  const explorer = usePostgresExplorer();
-  const navigate = useNavigate();
   const resource = useResource<ConnectionSettings>(path, true);
   const invalidateOverview = useConnectionInvalidation();
   const [config, setConfig] = useState<ConnectionConfig | null>(null),
@@ -84,7 +80,6 @@ export function ConnectionSettingsForm({
   }, [resource.data, resource.error]);
   useEffect(() => {
     if (!resource.data && resource.error) {
-      if (kind === "postgresql") explorer.clear();
       setConfig(null);
       setPassword("");
       setPasswordMode("keep");
@@ -111,7 +106,6 @@ export function ConnectionSettingsForm({
     }
   }, [resource.data, resource.refreshing, resource.error, dirty, denied, kind]);
   function edit(key: string, value: string | number | boolean) {
-    if (kind === "postgresql") explorer.clear();
     setConfig((old) =>
       old ? ({ ...old, [key]: value } as ConnectionConfig) : old,
     );
@@ -151,7 +145,7 @@ export function ConnectionSettingsForm({
     ) {
       setDenied(true);
       setDirty(false);
-      if (kind === "postgresql") explorer.clear();
+
       setConfig(null);
       setPassword("");
       setPasswordMode("keep");
@@ -162,29 +156,11 @@ export function ConnectionSettingsForm({
       resource.reload();
     }
   }
-  function captureInspection(
-    receipt: ConnectionReceipt,
-    currentDraft: boolean,
-  ) {
-    if (
-      kind === "postgresql" &&
-      currentDraft &&
-      receipt.inspection_token &&
-      config?.kind === "postgresql"
-    )
-      explorer.open({
-        ticket: receipt.inspection_token,
-        database: config.database,
-        account: config.username,
-        endpoint: `${config.host}:${config.port}`,
-      });
-  }
   function acceptReceipt(
     receipt: ConnectionReceipt,
     requestGeneration?: number,
   ) {
     const currentDraft = requestGeneration === generation.current;
-    captureInspection(receipt, currentDraft);
     setResult({ ...receipt, currentDraft });
     forget();
     if (
@@ -237,7 +213,7 @@ export function ConnectionSettingsForm({
       }
     }
     if (!form.current.reportValidity()) return;
-    if (kind === "postgresql" && operation === "test") explorer.clear();
+
     const version = generation.current,
       requestId = newRequestId();
     const data = {
@@ -259,7 +235,6 @@ export function ConnectionSettingsForm({
           session.csrf,
         );
         if (alive.current && version === generation.current) {
-          captureInspection(receipt, true);
           setResult({ ...receipt, currentDraft: true });
         }
       } catch (e) {
@@ -431,7 +406,6 @@ export function ConnectionSettingsForm({
                     : ""
               }
               onChange={(e) => {
-                if (kind === "postgresql") explorer.clear();
                 setPassword(e.target.value);
                 setPasswordMode(e.target.value ? "replace" : "keep");
                 setDirty(true);
@@ -446,7 +420,6 @@ export function ConnectionSettingsForm({
                 className="password-clear text-button"
                 disabled={disabled}
                 onClick={() => {
-                  if (kind === "postgresql") explorer.clear();
                   setPassword("");
                   setPasswordMode(passwordMode === "clear" ? "keep" : "clear");
                   setDirty(true);
@@ -629,16 +602,6 @@ export function ConnectionSettingsForm({
             <Save size={18} />
             {busy === "save" ? "保存中…" : "保存设置"}
           </button>
-          {kind === "postgresql" && explorer.proof && (
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => navigate("/connections/postgresql/explorer")}
-            >
-              <Table2 size={18} />
-              浏览数据库
-            </button>
-          )}
         </div>
       </form>
       {verificationOpen && (

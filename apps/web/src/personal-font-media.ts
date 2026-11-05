@@ -41,13 +41,18 @@ export async function personalFontBytes(
     }
     if (response.status === 401 && typeof window !== "undefined")
       window.dispatchEvent(new Event("alcor:session-expired"));
-    if (!response.ok)
+    if (!response.ok) {
+      const failure = await response.json().catch(() => null);
       throw new ApiError(
         response.status,
-        [401, 403].includes(response.status)
-          ? "本人字体读取权限已变化"
-          : "本人字体原件不可用",
+        (typeof failure?.detail === "string"
+          ? failure.detail
+          : typeof failure?.error === "string"
+            ? failure.error
+            : failure?.error?.message) ||
+          `字体原件读取失败（HTTP ${response.status}）`,
       );
+    }
     if (
       response.headers.get("Content-Length") !== String(font.size) ||
       response.headers.get("ETag") !== '"' + font.sha256 + '"' ||

@@ -21,7 +21,13 @@ type Receipt = {
 };
 const path = "/account/personal-profile";
 
-export function PersonalProfile({ session }: { session: Session }) {
+export function PersonalProfile({
+  session,
+  onValue,
+}: {
+  session: Session;
+  onValue?: (value: Personal | null) => void;
+}) {
   const key = `alcor.personal-profile.${JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope])}`;
   const [value, setValue] = useState<Personal | null>(null);
   const baseline = useRef<Personal | null>(null);
@@ -39,6 +45,10 @@ export function PersonalProfile({ session }: { session: Session }) {
     latestRead = useRef(0),
     dirty = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (value) onValue?.(value);
+  }, [value, onValue]);
 
   function accept(next: Personal, replaceDraft = false) {
     if (next.userId !== session.user.id || !Number.isSafeInteger(next.revision))

@@ -86,3 +86,17 @@ python3 tools/audit-source.py
 页面关闭不影响已受理的请求。进程中断后只核对原 UUID 和容器，不自动再次替换；回执发送失败只重传同一回执。没有待执行请求时，更新器仅报告在线状态。既有 `deploy/update-runner.py` 和配置模板继续供旧宿主机执行器兼容使用，同一项目只启用一种执行方式。
 
 本机与 CI 隔离检查不等同群晖现场安装或更新验收。
+
+## 更新前检查
+
+手动重建项目前，先拉取目标镜像并用新镜像核对现有数据库。以下命令在部署项目目录执行，使用原 Compose 配置及连接身份：
+
+```sh
+docker compose pull &&
+  docker compose run --rm --no-deps --entrypoint alcor app check-schema &&
+  docker compose up -d
+```
+
+上述串联命令仅在检查退出码为 0 且 `compatible` 为 true 时执行重建。退出码 2 会列出 missing（缺少迁移）、changed（历史校验变化）、extra（数据库较新）；连接或身份核对失败退出码为 1。检查只读，不自动执行迁移。结构不兼容时保持原容器，先确认目标与可恢复备份，再单独安排迁移；不使用初始化参数。直接在界面重建项目会绕过此前置检查。
+
+也可将 `deploy/update-project.sh` 单独放入部署项目目录并执行 `sh update-project.sh`；该入口严格按拉取、只读检查、重建顺序执行，任一步失败立即停止。不会自动迁移数据库。

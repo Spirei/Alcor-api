@@ -1,10 +1,11 @@
+import { Dialog } from "./dialog";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Session } from "./api";
+import { api, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
 import { PersonalFontsPanel } from "./personal-fonts";
 import { usePersonalFontsRuntime } from "./personal-font-runtime";
 import { isPersonalFontId } from "./personal-font-id";
-import type { PersonalFont } from "./personal-font-state";
+import { fontListing, type PersonalFont } from "./personal-font-state";
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import {
@@ -277,8 +278,26 @@ export function AppearancePage({
   active?: boolean;
 }) {
   const { settings: s, palette: p } = a;
+  const [fontsOpen, setFontsOpen] = useState(false);
   const [personalRows, setPersonalRows] = useState<PersonalFont[]>([]),
     [fontError, setFontError] = useState("");
+  useEffect(() => {
+    if (!active || document.hidden) return;
+    const controller = new AbortController();
+    setPersonalRows([]);
+    api<unknown>("/personal-fonts", { signal: controller.signal })
+      .then((value) => {
+        if (!controller.signal.aborted)
+          setPersonalRows(fontListing(value).fonts);
+      })
+      .catch((reason) => {
+        if (!controller.signal.aborted)
+          setFontError(
+            reason instanceof Error ? reason.message : "字体列表读取失败",
+          );
+      });
+    return () => controller.abort();
+  }, [active, session.instance_id, session.user.id, session.csrf]);
   const runtime = usePersonalFontsRuntime(),
     fontWork = useRef(new Set<AbortController>()),
     fontEpoch = useRef(0),
@@ -508,12 +527,36 @@ export function AppearancePage({
           />
         </Row>
       </div>
-      {fontError && <p role="alert">{fontError}</p>}
-      <PersonalFontsPanel
-        session={session}
-        active={active}
-        onFonts={setPersonalRows}
-      />
+      {(fontError || runtime?.error) && (
+        <p role="alert">
+          {fontError || runtime?.error}
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              setFontError("");
+              runtime?.refresh();
+            }}
+          >
+            重新读取字体
+          </button>
+        </p>
+      )}
+      <div className="appearance-font-manager">
+        <span>自定义字体</span>
+        <button className="text-button" onClick={() => setFontsOpen(true)}>
+          管理字体
+        </button>
+      </div>
+      {fontsOpen && (
+        <Dialog title="字体管理" onClose={() => setFontsOpen(false)}>
+          <PersonalFontsPanel
+            session={session}
+            active={active && fontsOpen}
+            onFonts={setPersonalRows}
+          />
+        </Dialog>
+      )}
       <h2 className="appearance-section-title">页面布局</h2>
       <PageLayoutSettings appearance={a} />
       <div className="appearance-advanced-head">

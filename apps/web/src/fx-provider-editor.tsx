@@ -119,158 +119,168 @@ export function FxProviderEditor({
   }
   return (
     <div className="fx-provider-editor">
-      <div className="workspace-form-grid">
-        <label className="workspace-form-field fx-field-wide">
-          接口地址
-          <span className="workspace-secret-field">
+      <p className="fx-source-name">
+        {currentUrl ? "自定义接口" : "默认汇率接口"}
+      </p>
+      <details className="fx-advanced-settings">
+        <summary>自定义接口</summary>
+        <div className="workspace-form-grid">
+          <label className="workspace-form-field fx-field-wide">
+            接口地址
+            <span className="workspace-secret-field">
+              <input
+                type={show ? "text" : "password"}
+                autoComplete="off"
+                maxLength={2048}
+                disabled={disabled}
+                value={url}
+                placeholder={
+                  currentUrl ? "已配置接口地址" : "填写自定义接口地址"
+                }
+                onChange={(e) => {
+                  edit();
+                  setUrl(e.target.value);
+                  setApproved(false);
+                }}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={show ? "隐藏来源地址" : "显示来源地址"}
+                aria-pressed={show}
+                onClick={() => setShow(!show)}
+              >
+                {show ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </span>
+          </label>
+          <label className="workspace-form-field fx-field-wide">
+            接口凭据 <small>Bearer，可选</small>
+            <span className="workspace-secret-field">
+              <input
+                type={showBearer ? "text" : "password"}
+                autoComplete="off"
+                maxLength={4096}
+                disabled={disabled}
+                value={bearer}
+                placeholder="未填写新凭据"
+                onChange={(e) => {
+                  edit();
+                  setBearer(e.target.value);
+                }}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={
+                  showBearer ? "隐藏 Bearer 凭据" : "显示 Bearer 凭据"
+                }
+                aria-pressed={showBearer}
+                onClick={() => setShowBearer(!showBearer)}
+              >
+                {showBearer ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </span>
+          </label>
+          <label className="workspace-form-field fx-field-wide">
+            接口服务器 IP
             <input
-              type={show ? "text" : "password"}
-              autoComplete="off"
-              maxLength={2048}
               disabled={disabled}
-              value={url}
-              placeholder={currentUrl ? "已配置接口地址" : "填写自定义接口地址"}
+              value={addresses}
+              placeholder="多个地址用空格或逗号分隔"
               onChange={(e) => {
                 edit();
-                setUrl(e.target.value);
+                setAddresses(e.target.value);
                 setApproved(false);
               }}
             />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={show ? "隐藏来源地址" : "显示来源地址"}
-              aria-pressed={show}
-              onClick={() => setShow(!show)}
-            >
-              {show ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </span>
-        </label>
-        <label className="workspace-form-field fx-field-wide">
-          接口凭据 <small>Bearer，可选</small>
-          <span className="workspace-secret-field">
-            <input
-              type={showBearer ? "text" : "password"}
-              autoComplete="off"
-              maxLength={4096}
-              disabled={disabled}
-              value={bearer}
-              placeholder="未填写新凭据"
-              onChange={(e) => {
-                edit();
-                setBearer(e.target.value);
-              }}
-            />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={showBearer ? "隐藏 Bearer 凭据" : "显示 Bearer 凭据"}
-              aria-pressed={showBearer}
-              onClick={() => setShowBearer(!showBearer)}
-            >
-              {showBearer ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </span>
-        </label>
-        <label className="workspace-form-field fx-field-wide">
-          接口服务器 IP
-          <input
-            disabled={disabled}
-            value={addresses}
-            placeholder="多个地址用空格或逗号分隔"
-            onChange={(e) => {
-              edit();
-              setAddresses(e.target.value);
-              setApproved(false);
-            }}
-          />
-        </label>
-        {replace && !builtin && (
-          <label className="workspace-confirmation fx-field-wide">
-            <input
-              type="checkbox"
-              disabled={disabled}
-              checked={approved}
-              onChange={(e) => setApproved(e.target.checked)}
-            />
-            确认使用此接口地址、协议、端口及服务器 IP
           </label>
-        )}
-      </div>
-      <section className="fx-format-settings" aria-label="响应与定时设置">
-        <h3>响应与定时设置</h3>
-        <div className="workspace-form-grid">
-          <label className="workspace-form-field">
-            响应缺省基准币种
-            <input
-              disabled={disabled}
-              value={base}
-              maxLength={3}
-              placeholder="如 USD"
-              onChange={(e) => {
-                edit();
-                setBase(e.target.value.toUpperCase());
-              }}
-            />
-          </label>
-          <label className="workspace-form-field">
-            来源时间字段
-            <input
-              disabled={disabled}
-              value={field}
-              placeholder="如 date"
-              onChange={(e) => {
-                edit();
-                setField(e.target.value);
-              }}
-            />
-          </label>
-          <label className="workspace-form-field">
-            时间精度
-            <SelectMenu
-              label="时间精度"
-              variant="field"
-              value={precision}
-              onChange={(v) => {
-                edit();
-                setPrecision(v);
-              }}
-              disabled={disabled}
-              options={[
-                { value: "date", label: "日期" },
-                { value: "instant", label: "含时区时间" },
-                { value: "epoch_seconds", label: "Unix 秒" },
-                { value: "epoch_millis", label: "Unix 毫秒" },
-              ]}
-            />
-          </label>
-          <label className="workspace-form-field">
-            定时表达式
-            <input
-              disabled={disabled}
-              value={pattern}
-              placeholder="可选"
-              onChange={(e) => {
-                edit();
-                setPattern(e.target.value);
-              }}
-            />
-          </label>
-          <label className="workspace-form-field">
-            时区
-            <input
-              disabled={disabled}
-              value={timezone}
-              placeholder="如 Asia/Shanghai"
-              onChange={(e) => {
-                edit();
-                setTimezone(e.target.value);
-              }}
-            />
-          </label>
+          {replace && !builtin && (
+            <label className="workspace-confirmation fx-field-wide">
+              <input
+                type="checkbox"
+                disabled={disabled}
+                checked={approved}
+                onChange={(e) => setApproved(e.target.checked)}
+              />
+              确认使用此接口地址、协议、端口及服务器 IP
+            </label>
+          )}
         </div>
-      </section>
+        <details className="fx-format-settings">
+          <summary>响应格式与定时更新</summary>
+          <div className="workspace-form-grid">
+            <label className="workspace-form-field">
+              响应缺省基准币种
+              <input
+                disabled={disabled}
+                value={base}
+                maxLength={3}
+                placeholder="如 USD"
+                onChange={(e) => {
+                  edit();
+                  setBase(e.target.value.toUpperCase());
+                }}
+              />
+            </label>
+            <label className="workspace-form-field">
+              来源时间字段
+              <input
+                disabled={disabled}
+                value={field}
+                placeholder="如 date"
+                onChange={(e) => {
+                  edit();
+                  setField(e.target.value);
+                }}
+              />
+            </label>
+            <label className="workspace-form-field">
+              时间精度
+              <SelectMenu
+                label="时间精度"
+                variant="field"
+                value={precision}
+                onChange={(v) => {
+                  edit();
+                  setPrecision(v);
+                }}
+                disabled={disabled}
+                options={[
+                  { value: "date", label: "日期" },
+                  { value: "instant", label: "含时区时间" },
+                  { value: "epoch_seconds", label: "Unix 秒" },
+                  { value: "epoch_millis", label: "Unix 毫秒" },
+                ]}
+              />
+            </label>
+            <label className="workspace-form-field">
+              定时表达式
+              <input
+                disabled={disabled}
+                value={pattern}
+                placeholder="可选"
+                onChange={(e) => {
+                  edit();
+                  setPattern(e.target.value);
+                }}
+              />
+            </label>
+            <label className="workspace-form-field">
+              时区
+              <input
+                disabled={disabled}
+                value={timezone}
+                placeholder="如 Asia/Shanghai"
+                onChange={(e) => {
+                  edit();
+                  setTimezone(e.target.value);
+                }}
+              />
+            </label>
+          </div>
+        </details>
+      </details>
       <div className="fx-provider-footer">
         <span className="fx-default-state" role="status">
           {builtin

@@ -1,3 +1,8 @@
+const SyncStatusPage = lazy(() =>
+  import("./sync-status").then((module) => ({
+    default: module.SyncStatusPage,
+  })),
+);
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 const SystemOperationsPanel = lazy(() =>
   import("./system-operations").then((module) => ({
@@ -214,9 +219,7 @@ import { NativeAppAuthorize } from "./native-app-authorize";
 import { NativePasskeyLogin } from "./native-passkey-login";
 import { PasswordField, PasswordStrength } from "./password-fields";
 import { Dialog } from "./dialog";
-const ProfilePage = lazy(() =>
-  import("./profile").then((module) => ({ default: module.ProfilePage })),
-);
+import { ProfilePage } from "./profile";
 import { AccountMenu } from "./account-menu";
 import { SelectMenu } from "./select-menu";
 import { ServiceIllustration } from "./service-illustration";
@@ -243,17 +246,6 @@ const MailTemplateSettings = lazy(() =>
 const PrivateServiceSettings = lazy(() =>
   import("./private-service-settings").then((module) => ({
     default: module.PrivateServiceSettings,
-  })),
-);
-const SiteSettings = lazy(() =>
-  import("./site-settings").then((module) => ({
-    default: module.SiteSettings,
-  })),
-);
-import { PostgresExplorerProvider } from "./postgres-explorer-context";
-const PostgresExplorer = lazy(() =>
-  import("./postgres-explorer").then((module) => ({
-    default: module.PostgresExplorer,
   })),
 );
 import { servicePresentation } from "./connection-view";
@@ -306,6 +298,7 @@ const envLabels: Record<string, string> = {
   production: "生产环境",
 };
 const navigation = [
+  { path: "/sync", name: "同步", icon: RefreshCw, hint: "账户变更与数据核对" },
   {
     path: "/celebs",
     name: "名人持仓",
@@ -326,7 +319,7 @@ const navigation = [
   },
   {
     path: "/shared-assets",
-    name: "共享素材",
+    name: "素材库",
     icon: Images,
     hint: "管理员共享图片与原件",
   },
@@ -428,7 +421,7 @@ const navigation = [
   },
   {
     path: "/users",
-    name: "账号管理",
+    name: "用户管理",
     icon: UsersRound,
     hint: "账号状态与角色",
   },
@@ -481,11 +474,11 @@ const modulePaths = [
   "/appearance",
   "/clients",
   "/authorizations",
-  "/connections/postgresql/explorer",
   "/authorize",
   "/app/authorize",
 ];
 const memberPaths = [
+  "/sync",
   "/shared-assets",
   "/celebs",
   "/feed",
@@ -1758,7 +1751,6 @@ function SettingsPage({
           { value: "general", label: "常规" },
           ...(session.user.role === "admin"
             ? [
-                { value: "site", label: "站点外观" },
                 { value: "services", label: "接口与服务" },
                 { value: "mail", label: "邮件模板" },
                 { value: "reference", label: "API 参考" },
@@ -1813,13 +1805,6 @@ function SettingsPage({
       </WorkspaceView>
       {session.user.role === "admin" && (
         <>
-          <WorkspaceView active={view === "site"} label="站点外观">
-            <SiteSettings
-              expanded
-              session={session}
-              active={active && view === "site"}
-            />
-          </WorkspaceView>
           <WorkspaceView active={view === "services"} label="接口与服务">
             <PrivateServiceSettings
               session={session}
@@ -1913,9 +1898,6 @@ function Workspace({
       navigate("/profile", { replace: true });
     document.title =
       (navigation.find((n) => n.path === location.pathname)?.name ||
-        (location.pathname === "/connections/postgresql/explorer"
-          ? "数据库浏览"
-          : "") ||
         servicePages.find((s) => "/connections/" + s.id === location.pathname)
           ?.label ||
         (location.pathname === "/deploy-status"
@@ -2067,9 +2049,9 @@ function Workspace({
             <PanelLeft size={20} />
           </button>
           <div className="topbar-end">
-            {["/cards", "/fire", "/activity"].includes(
-              location.pathname,
-            ) && <AmountVisibilityControl />}
+            {["/cards", "/fire", "/activity"].includes(location.pathname) && (
+              <AmountVisibilityControl />
+            )}
             <button
               className="icon-button header-search"
               data-global-search-trigger
@@ -2117,10 +2099,6 @@ function Workspace({
                         }
                       >
                         <WorkspaceRoutes path={path}>
-                          <Route
-                            path="/connections/postgresql/explorer"
-                            element={<PostgresExplorer session={session} />}
-                          />
                           <Route
                             path="/backups"
                             element={<BackupsPage session={session} />}
@@ -2363,6 +2341,15 @@ function Workspace({
                           <Route
                             path="/"
                             element={<OverviewPage session={session} />}
+                          />
+                          <Route
+                            path="/sync"
+                            element={
+                              <SyncStatusPage
+                                session={session}
+                                active={location.pathname === "/sync"}
+                              />
+                            }
                           />
                           <Route
                             path="/tasks"
@@ -2791,7 +2778,7 @@ function App() {
                     appearance={appearance}
                   >
                     <AvatarStatusProvider session={session}>
-                      <PostgresExplorerProvider>
+                      <>
                         <PersonalFontsProvider
                           session={session}
                           appearance={appearance}
@@ -2825,7 +2812,7 @@ function App() {
                             />
                           </FinancialDisplayProvider>
                         </PersonalFontsProvider>
-                      </PostgresExplorerProvider>
+                      </>
                     </AvatarStatusProvider>
                   </AccountPreferencesProvider>
                 </ResourceProvider>

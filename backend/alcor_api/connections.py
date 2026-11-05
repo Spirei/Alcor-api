@@ -40,8 +40,9 @@ def canonical(value):
 
 
 class Vault:
-    def __init__(self, directory, namespace="connections"):
+    def __init__(self, directory, namespace="connections", *, read_only=False):
         self.directory = directory
+        self.read_only = read_only
         if namespace not in {"connections","backup"}:
             raise ValueError("Invalid key namespace")
         self.namespace = namespace
@@ -50,9 +51,12 @@ class Vault:
         if self.directory is None:
             raise HTTPException(503, "凭据存储尚未配置")
         directory = Path(self.directory)
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not self.read_only:
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         if directory.is_symlink() or directory.stat().st_mode & 0o077:
             raise HTTPException(503, "凭据目录权限不正确")
+        if self.read_only:
+            return self._read_key(directory / (self.namespace + ".key"))
         flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
         fd = os.open(directory / (self.namespace+".lock"), flags, 0o600)
         try:
@@ -64,18 +68,21 @@ class Vault:
                     file.write(Fernet.generate_key())
                     file.flush()
                     os.fsync(file.fileno())
-            keyfd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-            with os.fdopen(keyfd, "rb") as file:
-                info = os.fstat(file.fileno())
-                if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.getuid():
-                    raise HTTPException(503, "凭据文件权限不正确")
-                key = file.read(128)
-                Fernet(key)
-                return key
+            return self._read_key(path)
         except (OSError, ValueError):
             raise HTTPException(503, "凭据存储不可用") from None
         finally:
             os.close(fd)
+
+    def _read_key(self, path):
+        keyfd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(keyfd, "rb") as file:
+            info = os.fstat(file.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.getuid():
+                raise HTTPException(503, "凭据文件权限不正确")
+            key = file.read(128)
+            Fernet(key)
+            return key
 
     def encrypt(self, value, kind, instance):
         if not value:
@@ -98,6 +105,8 @@ class Vault:
         return Path(self.directory) / ("bootstrap-" + str(instance) + ".enc")
 
     def write_bootstrap(self, config, password, address, revision, instance):
+        if self.read_only:
+            raise HTTPException(503, "只读检查不能写入启动配置")
         payload = canonical(
             {
                 "config": config.model_dump(),
@@ -148,10 +157,10 @@ def postgres_settings(base, config, password, address):
     )
 
 
-def bootstrap_settings(base):
+def bootstrap_settings(base, *, read_only=False):
     if not base.connection_secret_dir:
         return base, None
-    vault = Vault(base.connection_secret_dir)
+    vault = Vault(base.connection_secret_dir, read_only=read_only)
     path = vault.bootstrap_path(base.instance_id)
     if not path.exists():
         return base, None
@@ -558,9 +567,6 @@ class Connections:
             "observed_at": datetime.now(timezone.utc).isoformat(),
         }
         if kind=="postgresql"and status in {"passed","pending"}:result["postgres_version"]=getattr(checked_address,"postgres_version",None)
-        if kind == "postgresql" and status in {"passed", "pending"} and checked_address:
-            from .postgres_inspector import issue_ticket
-            result["inspection_token"] = issue_ticket(self, who, data.config, password, checked_address)
         if admission_id is not None:
             admitted=await(await conn.execute("SELECT result FROM connection_receipts WHERE owner_id=%s AND request_id=%s AND result->>'admissionId'=%s",(who.id,data.request_id,str(admission_id)))).fetchone()
             if not admitted:raise HTTPException(409,'原连接入场证明不存在')

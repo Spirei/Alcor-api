@@ -3,7 +3,7 @@
   gap: 8px;
   min-width: 0;
 }
-.shared-assets-page input {
+.shared-assets-page input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   min-width: 0;
 }
@@ -76,22 +76,23 @@
 }
 .asset-settings-dialog {
   width: min(980px, calc(100% - 32px));
-}
-.asset-access-intro {
+  height: min(680px, calc(100dvh - 48px));
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin: 24px 0;
-  color: var(--muted);
+  flex-direction: column;
 }
-.asset-access-intro h3 {
-  margin: 0 0 6px;
-  color: var(--ink);
-  font-size: 15px;
+.asset-settings-dialog > .dialog-head {
+  flex-shrink: 0;
 }
-.asset-access-intro p {
-  margin: 0;
-  font-size: 13px;
+.asset-settings-dialog > .dialog-content {
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+.asset-settings-dialog > .dialog-content > .workspace-tabs-shell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
 }
 .asset-access-table {
   border: 1px solid var(--edge);
@@ -161,11 +162,6 @@
   cursor: default;
   opacity: 0.55;
 }
-.asset-access-note {
-  font-size: 12px;
-  color: var(--muted);
-  margin-block: 16px;
-}
 .asset-access-actions {
   display: flex;
   justify-content: flex-end;
@@ -212,4 +208,57 @@
   .asset-library-items.list
   .asset-library-item {
   grid-template-columns: 28px 40px minmax(0, 1fr);
+}
+
+.asset-catalog-tools {
+  display: grid;
+  gap: 20px;
+}
+.asset-import-flow {
+  display: grid;
+  gap: 16px;
+  max-width: 680px;
+}
+.asset-import-flow h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+.asset-catalog-tools .table-wrap {
+  overflow-x: auto;
+}
+
+.asset-catalog-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 16px 0;
+}
+.asset-catalog-toolbar > button {
+  width: auto;
+}
+.asset-catalog-empty {
+  display: grid;
+  place-content: center;
+  min-height: 140px;
+  color: var(--muted);
+}
+.asset-catalog-create {
+  display: grid;
+  gap: 20px;
+}
+.asset-catalog-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.asset-catalog-editor-actions > button {
+  width: auto;
+}
+.asset-catalog-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
 }

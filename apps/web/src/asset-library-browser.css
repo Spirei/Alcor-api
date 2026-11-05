@@ -637,7 +637,10 @@
   color: var(--ink);
 }
 .asset-market-chip-wrap[data-dragging="true"] {
-  box-shadow: 0 0 0 2px var(--edge);
+  z-index: 3;
+  box-shadow: 0 0 0 2px var(--asset-accent);
+  border-radius: 28px;
+  background: var(--surface);
 }
 .asset-market-picture {
   flex: 0 0 21px;
@@ -672,12 +675,17 @@
   flex-basis: 24px;
 }
 .asset-market-announcement {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  position: static;
+  display: block;
+  width: auto;
+  height: auto;
+  min-height: 18px;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
 }
 .asset-library-name {
   display: flex;
@@ -933,10 +941,14 @@
   color: var(--ink);
 }
 .asset-library-items.list:not(.cards) .asset-library-caption {
-  padding-right: 44px;
+  padding-right: 92px;
 }
 .asset-library-items.list .asset-library-market {
-  padding-right: 30px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-right: 85px;
+  padding-right: 0;
 }
 .asset-library-items.grid .asset-row-remove {
   top: 12px;
@@ -1076,4 +1088,64 @@
 }
 .asset-library-tabs::-webkit-scrollbar {
   display: none;
+}
+
+.asset-broker-category {
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+.asset-broker-category:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.broker-edit-form {
+  display: grid;
+  gap: 20px;
+}
+.broker-edit-form label {
+  display: grid;
+  gap: 10px;
+}
+.asset-library.is-broker .asset-library-items.grid .asset-library-caption {
+  min-height: 68px;
+}
+
+.asset-library-items.list .asset-market-edit {
+  position: absolute;
+  right: 56px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.asset-library-market img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.asset-library-item button:disabled {
+  opacity: 1;
+}
+.asset-batch-check {
+  position: absolute;
+  z-index: 3;
+  left: 8px;
+  top: 8px;
+  width: 18px !important;
+  height: 18px;
+  accent-color: var(--asset-accent);
+}
+.asset-library-meta {
+  min-height: 40px;
+}
+
+.asset-library-item[data-dragging="true"] {
+  z-index: 2;
+  border-color: var(--asset-accent);
+  box-shadow: 0 4px 16px #0002;
 }

@@ -116,6 +116,7 @@ class AssetManagement:
             "name",
             "imageVersion",
             "darkImageVersion",
+            "brokerMarkets",
             "url",
             "urlDark",
         }:
@@ -229,6 +230,9 @@ class AssetManagement:
                     "UPDATE asset_catalog_tombstones SET restored_at=clock_timestamp(),restored_by=%s,restored_request_id=%s WHERE asset_id=%s",
                     (who.id, request_id, aid),
                 )
+            broker_markets = raw.get("brokerMarkets")
+            if broker_markets is not None and (kind != "broker" or not isinstance(broker_markets, list) or len(broker_markets) > 3 or any(v not in ("US", "HK", "CN") for v in broker_markets) or len(set(broker_markets)) != len(broker_markets)):
+                raise HTTPException(400, "券商市场分类无效")
             entry = {
                 "id": aid,
                 "type": kind,
@@ -254,6 +258,7 @@ class AssetManagement:
                 "管理员素材登记",
                 managed=action,
                 operation_fingerprint=fp,
+                broker_markets=broker_markets,
             )
             await self.event(conn, who, request_id, aid, action, before, result["asset"], result)
             return result

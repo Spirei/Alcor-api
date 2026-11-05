@@ -22,6 +22,7 @@ import {
 } from "./reference-state";
 import "./reference.css";
 import { FxObservations } from "./fx-observations";
+import { providerInputError } from "./fx-provider-validation";
 import { FxProviderEditor, type CustomProvider } from "./fx-provider-editor";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import {
@@ -134,15 +135,23 @@ function ReferenceSession({
   session: Session;
   active: boolean;
 }) {
-  const [params,setParams] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const view = params.get("view") === "calendar" ? "calendar" : "rates";
   function setView(value: "rates" | "calendar") {
-    setParams(previous => { const next=new URLSearchParams(previous); next.set("view",value); return next; });
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("view", value);
+      return next;
+    });
   }
-  const currency=params.get("from") ?? "USD", amount=params.get("amount") ?? "100";
-  const fxInputValue={from:/^[A-Z]{3}$/.test(currency)?currency:"USD",amount:amount.length<=44?amount:""};
+  const currency = params.get("from") ?? "USD",
+    amount = params.get("amount") ?? "100";
+  const fxInputValue = {
+    from: /^[A-Z]{3}$/.test(currency) ? currency : "USD",
+    amount: amount.length <= 44 ? amount : "",
+  };
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSaved,setSettingsSaved] = useState("");
+  const [settingsSaved, setSettingsSaved] = useState("");
   const [settingsTab, setSettingsTab] = useState<"provider" | "observations">(
     "provider",
   );
@@ -413,10 +422,21 @@ function ReferenceSession({
     if (!config || busy || locked || !live.current) return;
     setSettingsSaved("");
     const budget = Number(draft.dailyBudget);
-    if (!/^\d{1,4}$/.test(draft.dailyBudget.trim()) || !Number.isInteger(budget) || budget < 1 || budget > 1000) {
+    if (
+      !/^\d{1,4}$/.test(draft.dailyBudget.trim()) ||
+      !Number.isInteger(budget) ||
+      budget < 1 ||
+      budget > 1000
+    ) {
       setError("每日额度须为 1–1000");
       return;
     }
+    const providerError = providerInputError(customProvider);
+    if (providerError) {
+      setError(providerError);
+      return;
+    }
+    setError("");
     const generation = epoch.current;
     setBusy(true);
     try {
@@ -552,7 +572,11 @@ function ReferenceSession({
   }
   function closeSettings() {
     if (busy || verificationOpen) return;
-    if (config) setDraft({enabled:config.enabled,dailyBudget:String(config.daily_budget)});
+    if (config)
+      setDraft({
+        enabled: config.enabled,
+        dailyBudget: String(config.daily_budget),
+      });
     dirty.current = false;
     setCustomProvider(undefined);
     setSettingsSaved("");
@@ -561,7 +585,9 @@ function ReferenceSession({
   }
   return (
     <section className="reference-page">
-      {view === "rates" && !settingsOpen && !historyOpen && error && <p role="alert">{error}</p>}
+      {view === "rates" && !settingsOpen && !historyOpen && error && (
+        <p role="alert">{error}</p>
+      )}
       <WorkspaceTabs
         label="汇率与日历功能"
         value={view}
@@ -576,8 +602,21 @@ function ReferenceSession({
           active={active && visible && view === "rates" && !locked}
           rates={rates}
           input={fxInputValue}
-          onInput={value => setParams(previous => { const next=new URLSearchParams(previous); next.set("from",value.from); next.set("amount",value.amount); return next; },{replace:true})}
-          onHistory={() => { setError(""); setHistoryOpen(true); }}
+          onInput={(value) =>
+            setParams(
+              (previous) => {
+                const next = new URLSearchParams(previous);
+                next.set("from", value.from);
+                next.set("amount", value.amount);
+                return next;
+              },
+              { replace: true },
+            )
+          }
+          onHistory={() => {
+            setError("");
+            setHistoryOpen(true);
+          }}
           onSettings={
             session.user.role === "admin"
               ? () => {
@@ -636,7 +675,10 @@ function ReferenceSession({
         )}
       </WorkspaceView>
       <WorkspaceView active={view === "calendar"} label="休市日历">
-        <MarketCalendar active={active && visible && !locked && view === "calendar"} onDenied={failure}/>
+        <MarketCalendar
+          active={active && visible && !locked && view === "calendar"}
+          onDenied={failure}
+        />
       </WorkspaceView>
       {historyOpen && (
         <Dialog
@@ -645,7 +687,11 @@ function ReferenceSession({
           className="fx-history-dialog"
         >
           <div className="dialog-content">
-            {error && <p className="notice error" role="alert">{error}</p>}
+            {error && (
+              <p className="notice error" role="alert">
+                {error}
+              </p>
+            )}
             <div className="reference-calendar">
               <table>
                 <thead>
@@ -709,7 +755,11 @@ function ReferenceSession({
           className="fx-settings-dialog"
         >
           <div className="dialog-content">
-            {error && <p className="notice error" role="alert">{error}</p>}
+            {error && (
+              <p className="notice error" role="alert">
+                {error}
+              </p>
+            )}
             {settingsSaved && <p role="status">{settingsSaved}</p>}
             <WorkspaceTabs
               label="汇率设置"
@@ -719,12 +769,18 @@ function ReferenceSession({
               }}
               items={[
                 { value: "provider", label: "接口配置" },
-                { value: "observations", label: "来源与原件" },
+                { value: "observations", label: "来源记录" },
               ]}
             />
             <WorkspaceView active={settingsTab === "provider"} label="接口配置">
               {session.user.role === "admin" && config && (
-                <form aria-label="汇率供应商" onSubmit={event => { event.preventDefault(); void save(); }}>
+                <form
+                  aria-label="汇率供应商"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void save();
+                  }}
+                >
                   <SettingGroup title="读取设置">
                     <SettingRow
                       title="允许读取"
@@ -741,26 +797,31 @@ function ReferenceSession({
                         }}
                       />
                     </SettingRow>
-                    <SettingRow
-                      title="每日请求额度"
-                      description="超过额度后保留已有报价"
-                    >
-                      <input
-                        aria-label="每日请求额度"
-                        inputMode="numeric"
-                        value={draft.dailyBudget}
-                        disabled={busy || locked}
-                        onChange={(event) => {
-                          dirty.current = true;
-                          setSettingsSaved("");
-                          setDraft({
-                            ...draft,
-                            dailyBudget: event.target.value,
-                          });
-                        }}
-                      />
-                    </SettingRow>
                   </SettingGroup>
+                  <details className="fx-advanced-settings">
+                    <summary>请求额度</summary>
+                    <SettingGroup>
+                      <SettingRow
+                        title="每日请求额度"
+                        description="超过额度后保留已有报价"
+                      >
+                        <input
+                          aria-label="每日请求额度"
+                          inputMode="numeric"
+                          value={draft.dailyBudget}
+                          disabled={busy || locked}
+                          onChange={(event) => {
+                            dirty.current = true;
+                            setSettingsSaved("");
+                            setDraft({
+                              ...draft,
+                              dailyBudget: event.target.value,
+                            });
+                          }}
+                        />
+                      </SettingRow>
+                    </SettingGroup>
+                  </details>
                   <FxProviderEditor
                     currentUrl={config.custom?.url ?? ""}
                     key={providerEditorEpoch}
@@ -796,10 +857,13 @@ function ReferenceSession({
             </WorkspaceView>
             <WorkspaceView
               active={settingsTab === "observations"}
-              label="来源与原件"
+              label="来源记录"
             >
-              {rates && (
-                <section aria-label="当前报价来源">
+              {rates && typeof rates.updatedAt === "number" && (
+                <section
+                  className="fx-source-summary"
+                  aria-label="当前报价来源"
+                >
                   <p>{rates.source}</p>
                   <p>
                     {rates.sourcePrecision === "date"
@@ -821,32 +885,38 @@ function ReferenceSession({
                       : new Date(rates.updatedAt).toLocaleString()}
                   </p>
                   {!!Object.keys(rates.exactRatios || {}).length && (
-                    <dl className="portfolio-proof">
-                      {Object.entries(rates.exactRatios || {}).map(
-                        ([code, ratio]) => (
-                          <div key={code}>
-                            <dt>{code} 原始比率</dt>
-                            <dd>
-                              {ratio.numerator} / {ratio.denominator}
-                            </dd>
-                          </div>
-                        ),
-                      )}
-                    </dl>
+                    <details>
+                      <summary>原始比率</summary>
+                      <dl className="portfolio-proof">
+                        {Object.entries(rates.exactRatios || {}).map(
+                          ([code, ratio]) => (
+                            <div key={code}>
+                              <dt>{code} 原始比率</dt>
+                              <dd>
+                                {ratio.numerator} / {ratio.denominator}
+                              </dd>
+                            </div>
+                          ),
+                        )}
+                      </dl>
+                    </details>
                   )}
                   {rates.budget && (
-                    <p>
-                      共享来源预算 · {rates.budget.dayUTC} UTC · 已用{" "}
-                      {rates.budget.used} / {rates.budget.limit} · 剩余{" "}
-                      {rates.budget.remaining}
-                    </p>
-                  )}
-                  {rates.quarantined === true && (
-                    <p role="status">
-                      恢复隔离中，仅可读取保留观察，不执行来源刷新
-                    </p>
+                    <details>
+                      <summary>请求额度</summary>
+                      <p>
+                        共享来源预算 · {rates.budget.dayUTC} UTC · 已用{" "}
+                        {rates.budget.used} / {rates.budget.limit} · 剩余{" "}
+                        {rates.budget.remaining}
+                      </p>
+                    </details>
                   )}
                 </section>
+              )}
+              {rates?.quarantined === true && (
+                <p role="status">
+                  恢复隔离中，仅可读取保留观察，不执行来源刷新
+                </p>
               )}
               <Activity
                 mode={

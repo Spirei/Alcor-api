@@ -56,9 +56,13 @@ export function localizedMaterials(
             .toLocaleLowerCase()
             .includes(text)) &&
         (!market ||
-          (a.market || "OTHER") === market ||
-          (market === "OTHER" &&
-            ["GROUP", "OTHER", ""].includes(a.market || ""))),
+          (kind === "broker" && a.brokerMarkets !== undefined
+            ? market === "OTHER"
+              ? a.brokerMarkets.length === 0
+              : a.brokerMarkets.includes(market)
+            : (a.market || "OTHER") === market ||
+              (market === "OTHER" &&
+                ["GROUP", "OTHER", ""].includes(a.market || "")))),
     )
     .sort((a, b) =>
       kind === "flag"

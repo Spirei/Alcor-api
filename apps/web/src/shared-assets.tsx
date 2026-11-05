@@ -74,9 +74,7 @@ function SharedAssetSession({
     [journalReady, setJournalReady] = useState(false);
   const [config, setConfig] = useState<AssetConfig | null>(null);
   const [assetPanel, setAssetPanel] = useState<"settings" | null>(null);
-  const [settingsTab, setSettingsTab] = useState<
-    "access" | "catalog" | "history"
-  >("access");
+  const [settingsTab, setSettingsTab] = useState("access");
   const [catalogRefresh, setCatalogRefresh] = useState(0);
   const [accessBlocked, setAccessBlocked] = useState(false);
   const catalogChanged = useCallback(
@@ -580,7 +578,10 @@ function SharedAssetSession({
               onChange={setSettingsTab}
               items={[
                 { value: "access", label: "权限开放" },
-                { value: "catalog", label: "目录与来源" },
+                { value: "catalog", label: "来源维护" },
+                { value: "import", label: "导入素材" },
+                { value: "create", label: "新增素材" },
+                { value: "deleted", label: "已删除素材" },
                 { value: "history", label: "操作记录" },
               ]}
             />
@@ -637,7 +638,7 @@ function SharedAssetSession({
                               src={receipt.url}
                               alt={
                                 assetKinds.find((v) => v.value === receipt.kind)
-                                  ?.label ?? "共享素材"
+                                  ?.label ?? "素材库"
                               }
                               onError={() => {
                                 if (live.current) setImageError(true);
@@ -697,16 +698,25 @@ function SharedAssetSession({
                 )}
               </section>
             )}
-            {settingsTab === "catalog" && (
-              <section aria-label="目录与来源">
+            {["catalog", "import", "create", "deleted"].includes(
+              settingsTab,
+            ) && (
+              <section aria-label="素材管理">
                 <AssetLookupCatalogPanel
                   session={session}
+                  tool={
+                    settingsTab === "catalog"
+                      ? "maintenance"
+                      : (settingsTab as "import" | "create" | "deleted")
+                  }
                   active={
                     active &&
                     visible &&
                     !locked &&
                     assetPanel === "settings" &&
-                    settingsTab === "catalog"
+                    ["catalog", "import", "create", "deleted"].includes(
+                      settingsTab,
+                    )
                   }
                   onChanged={catalogChanged}
                 />

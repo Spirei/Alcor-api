@@ -11,7 +11,7 @@ export const legacyNavigation: Record<string, { path: string; label: string }> =
     celebs: { path: "/celebs", label: "名人持仓" },
     users: { path: "/users", label: "用户管理" },
     attachments: { path: "/attachments", label: "共享附件" },
-    library: { path: "/shared-assets", label: "共享素材" },
+    library: { path: "/shared-assets", label: "素材库" },
     cards: { path: "/cards", label: "卡面" },
     activities: { path: "/activity", label: "活动" },
     settings: { path: "/settings", label: "设置" },
@@ -41,38 +41,42 @@ export function mobileNavigation<T extends { path: string }>(
 const workspaceSections = [
   {
     key: "assets",
-    label: "资产",
+    label: "投资",
     paths: [
       "/portfolio",
-      "/fire",
-      "/watch-groups",
       "/market",
+      "/watch-groups",
       "/reference",
-      "/feed",
       "/celebs",
+      "/fire",
       "/fees",
       "/simple",
     ],
   },
+  { key: "content", label: "动态", paths: ["/feed"] },
   {
-    key: "management",
-    label: "管理",
+    key: "resources",
+    label: "资源",
     paths: [
-      "/users",
-      "/attachments",
       "/shared-assets",
+      "/resources",
+      "/attachments",
       "/cards",
       "/financial-reports",
-      "/resources",
-      "/legacy-import",
-      "/activity",
     ],
   },
   {
+    key: "data",
+    label: "数据",
+    paths: ["/sync", "/legacy-import", "/backups"],
+  },
+  { key: "management", label: "管理", paths: ["/users", "/activity"] },
+  {
     key: "system",
     label: "系统",
-    paths: ["/", "/tasks", "/migration", "/backups", "/account", "/settings"],
+    paths: ["/", "/tasks", "/migration", "/settings"],
   },
+  { key: "personal", label: "个人", paths: ["/account"] },
 ] as const;
 
 /** Group only supplied, already-authorized entries. Unknown entries remain reachable. */
@@ -115,8 +119,11 @@ export function currentNavigationSection<T extends { path: string }>(
   sections: readonly { key: string; items: readonly T[] }[],
   pathname: string,
 ): string | undefined {
-  const parent = pathname.startsWith("/connections/") || pathname === "/deploy-status"
-    ? "/"
-    : pathname;
-  return sections.find(section => section.items.some(item => item.path === parent))?.key;
+  const parent =
+    pathname.startsWith("/connections/") || pathname === "/deploy-status"
+      ? "/"
+      : pathname;
+  return sections.find((section) =>
+    section.items.some((item) => item.path === parent),
+  )?.key;
 }

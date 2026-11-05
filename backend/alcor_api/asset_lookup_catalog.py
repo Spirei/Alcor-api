@@ -166,7 +166,7 @@ class AssetCatalog:
             return await self.import_locked(conn, who, identifier, expected, digest, text, label)
 
     async def import_locked(
-        self, conn, who, identifier, expected, digest, text, label, managed=False, operation_fingerprint=None
+        self, conn, who, identifier, expected, digest, text, label, managed=False, operation_fingerprint=None, broker_markets=None
     ):
         value = manifest(text, label)
         if value["sha256"] != digest:
@@ -222,6 +222,11 @@ class AssetCatalog:
             if row["error"]:
                 continue
             item = row["entry"]
+            if item["type"] == "broker":
+                prior_state = await (await conn.execute("SELECT material_state FROM asset_catalog_entries WHERE id=%s", (item["id"],))).fetchone()
+                categories = broker_markets if broker_markets is not None else (prior_state["material_state"].get("brokerMarkets") if prior_state else None)
+                if categories is not None:
+                    row["materialState"]["brokerMarkets"] = categories
             await conn.execute(
                 """INSERT INTO asset_catalog_entries(id,type,market,code,name,source_id,light_version,dark_version,material_state)
                 VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(id) DO UPDATE SET name=excluded.name,source_id=excluded.source_id,
@@ -417,6 +422,7 @@ class AssetCatalog:
             "id": row["id"],
             "type": row["type"],
             "market": row["market"],
+            **({"brokerMarkets": row["material_state"]["brokerMarkets"]} if row["type"] == "broker" and "brokerMarkets" in row["material_state"] else {}),
             "code": row["code"],
             "name": row["name"],
             "source": "manual",

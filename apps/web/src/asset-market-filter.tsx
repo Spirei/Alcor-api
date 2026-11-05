@@ -1,4 +1,6 @@
-import { useRef, useState } from "react";
+import { useSortPointer } from "./sort-pointer";
+import { useSortMotion } from "./sort-motion";
+import { useEffect, useRef, useState } from "react";
 import { Globe2, Grid2X2, GripVertical } from "lucide-react";
 import { SelectMenu } from "./select-menu";
 import { useAccountAppearance } from "./account-preference-context";
@@ -43,21 +45,24 @@ export function AssetMarketFilter({
   const preferences = useAccountAppearance();
   const stored = libraryMarketOrder(preferences?.settings.assetMarketOrder);
   const [draft, setDraft] = useState<string[] | null>(null),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [dragging, setDragging] = useState<string | null>(null);
   const order = draft || stored,
     current = useRef(order);
   current.current = order;
   const more = order.slice(5).filter((code) => available?.includes(code));
   const root = useRef<HTMLDivElement>(null);
-  const drag = useRef<{
-    code: string;
-    x: number;
-    y: number;
-    moved: boolean;
-  } | null>(null);
+  useSortMotion(root, "[data-market-code]", order.join(","));
+  useEffect(() => {
+    if (draft && JSON.stringify(draft) === JSON.stringify(stored)) {
+      setDraft(null);
+      setMessage("市场顺序已调整");
+    }
+  }, [stored.join(",")]);
+  const begin = useSortPointer();
   function commit(next: string[], code: string) {
     preferences?.update({ assetMarketOrder: next });
-    setDraft(null);
+    setDraft(next);
     setMessage(`${libraryMarkets[code]}已移至第 ${next.indexOf(code) + 1} 位`);
   }
   return (
@@ -85,7 +90,7 @@ export function AssetMarketFilter({
             className="asset-market-chip-wrap"
             key={code}
             data-market-code={code}
-            data-dragging={drag.current?.code === code || undefined}
+            data-dragging={dragging === code || undefined}
           >
             <button
               type="button"
@@ -102,67 +107,60 @@ export function AssetMarketFilter({
               aria-label={`调整${libraryMarkets[code]}排序`}
               title="按住拖动，或用左右方向键调整顺序"
               disabled={!preferences?.ready}
-              onPointerDown={(e) => {
-                if (e.button !== 0) return;
-                drag.current = {
-                  code,
-                  x: e.clientX,
-                  y: e.clientY,
-                  moved: false,
-                };
-                e.currentTarget.setPointerCapture(e.pointerId);
-              }}
-              onPointerMove={(e) => {
-                const moving = drag.current;
-                if (!moving) return;
-                if (
-                  Math.hypot(e.clientX - moving.x, e.clientY - moving.y) < 5 &&
-                  !moving.moved
-                )
-                  return;
-                moving.moved = true;
-                for (const chip of root.current?.querySelectorAll<HTMLElement>(
-                  "[data-market-code]",
-                ) || []) {
-                  const box = chip.getBoundingClientRect(),
-                    target = chip.dataset.marketCode!;
-                  if (
-                    target !== code &&
-                    e.clientX >= box.left &&
-                    e.clientX <= box.right &&
-                    e.clientY >= box.top &&
-                    e.clientY <= box.bottom
-                  ) {
-                    const from = current.current.indexOf(code),
-                      to = current.current.indexOf(target);
-                    if (
-                      (from < to && e.clientX > box.left + box.width * 0.55) ||
-                      (from > to && e.clientX < box.left + box.width * 0.45)
-                    ) {
-                      const next = moveLibraryMarket(
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                const slots = [
+                  ...(root.current?.querySelectorAll<HTMLElement>(
+                    "[data-market-code]",
+                  ) || []),
+                ].map((chip) => chip.getBoundingClientRect());
+                setDragging(code);
+                setMessage(
+                  `正在移动${libraryMarkets[code]}，松开完成，按 Escape 取消`,
+                );
+                begin(event, {
+                  move(next) {
+                    const index = slots.findIndex(
+                      (box) =>
+                        next.clientX >= box.left &&
+                        next.clientX < box.right &&
+                        next.clientY >= box.top &&
+                        next.clientY < box.bottom,
+                    );
+                    if (index < 0) return;
+                    const target = current.current[index];
+                    if (target !== code) {
+                      const order = moveLibraryMarket(
                         current.current,
                         code,
                         target,
                       );
-                      current.current = next;
-                      setDraft(next);
+                      current.current = order;
+                      setDraft(order);
                     }
-                    break;
-                  }
-                }
-              }}
-              onPointerUp={(e) => {
-                const moving = drag.current;
-                drag.current = null;
-                e.currentTarget.releasePointerCapture(e.pointerId);
-                if (moving?.moved) commit(current.current, code);
-                else setDraft(null);
-              }}
-              onPointerCancel={() => {
-                drag.current = null;
-                setDraft(null);
+                  },
+                  end(moved) {
+                    setDragging(null);
+                    if (moved) commit(current.current, code);
+                    else {
+                      setDraft(null);
+                      setMessage("");
+                    }
+                  },
+                  cancel() {
+                    setDragging(null);
+                    setDraft(null);
+                    setMessage("已取消排序");
+                  },
+                });
               }}
               onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setDragging(null);
+                  setDraft(null);
+                  setMessage("已取消排序");
+                  return;
+                }
                 if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
                 e.preventDefault();
                 const index = order.indexOf(code),

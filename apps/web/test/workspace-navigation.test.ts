@@ -19,14 +19,14 @@ test("workspace sections preserve every supplied route and never restore a filte
   const sections = workspaceNavigation(items);
   assert.deepEqual(
     sections.map((s) => s.label),
-    ["资产", "管理", "系统", "其他"],
+    ["投资", "动态", "资源", "系统", "个人", "其他"],
   );
   assert.deepEqual(
     sections[0].items.map((i) => i.path),
-    ["/portfolio", "/feed"],
+    ["/portfolio"],
   );
   assert.deepEqual(
-    sections[1].items.map((i) => i.path),
+    sections[2].items.map((i) => i.path),
     ["/shared-assets", "/resources"],
   );
   assert.deepEqual(
@@ -45,7 +45,7 @@ test("workspace sections preserve every supplied route and never restore a filte
   assert.deepEqual(workspaceNavigation([]), []);
   assert.deepEqual(
     workspaceNavigation([{ path: "/account" }]).map((s) => s.label),
-    ["系统"],
+    ["个人"],
   );
   assert.equal(items[0].path, "/settings");
 });
@@ -67,11 +67,11 @@ test("mobile preferences order whole sections and entries without interleaving o
   const groups = workspaceNavigation(ordered, true);
   assert.deepEqual(
     groups.map((s) => s.label),
-    ["管理", "资产", "系统"],
+    ["资源", "动态", "投资", "系统", "管理"],
   );
   assert.deepEqual(
-    groups[1].items.map((i) => i.path),
-    ["/feed", "/portfolio", "/market"],
+    groups[2].items.map((i) => i.path),
+    ["/portfolio", "/market"],
   );
   assert.equal(
     new Set(groups.flatMap((s) => s.items).map((i) => i.path)).size,
@@ -79,16 +79,33 @@ test("mobile preferences order whole sections and entries without interleaving o
   );
   assert.deepEqual(
     workspaceNavigation(ordered).map((s) => s.label),
-    ["资产", "管理", "系统"],
+    ["投资", "动态", "资源", "管理", "系统"],
   );
 });
 
 test("child pages reveal their authorized parent category without fabricating entries", () => {
-  const sections = workspaceNavigation(["/", "/portfolio", "/shared-assets"].map(path => ({ path })));
-  assert.equal(currentNavigationSection(sections, "/connections/postgresql/explorer"), "system");
+  const sections = workspaceNavigation(
+    ["/", "/portfolio", "/shared-assets"].map((path) => ({ path })),
+  );
+  assert.equal(
+    currentNavigationSection(sections, "/connections/postgresql/explorer"),
+    "system",
+  );
   assert.equal(currentNavigationSection(sections, "/deploy-status"), "system");
-  assert.equal(currentNavigationSection(sections, "/shared-assets"), "management");
+  assert.equal(
+    currentNavigationSection(sections, "/shared-assets"),
+    "resources",
+  );
   assert.equal(currentNavigationSection(sections, "/portfolio"), "assets");
-  assert.equal(currentNavigationSection(sections, "/not-registered"), undefined);
-  assert.equal(currentNavigationSection(workspaceNavigation([{ path: "/portfolio" }]), "/connections/redis"), undefined);
+  assert.equal(
+    currentNavigationSection(sections, "/not-registered"),
+    undefined,
+  );
+  assert.equal(
+    currentNavigationSection(
+      workspaceNavigation([{ path: "/portfolio" }]),
+      "/connections/redis",
+    ),
+    undefined,
+  );
 });

@@ -1,4 +1,4 @@
-import {AssetSourceControls} from "./asset-source-controls";
+import { AssetSourceControls } from "./asset-source-controls";
 import {
   useCallback,
   useEffect,
@@ -95,10 +95,12 @@ export function AssetLookupCatalogPanel({
   session,
   active = true,
   onChanged,
+  tool = "maintenance",
 }: {
   session: Session;
   active?: boolean;
   onChanged?: () => void;
+  tool?: "deleted" | "create" | "import" | "maintenance";
 }) {
   if (session.user.role !== "admin") return null;
   const scope = reportScope(session);
@@ -109,6 +111,7 @@ export function AssetLookupCatalogPanel({
       session={session}
       active={active}
       onChanged={onChanged}
+      tool={tool}
     />
   );
 }
@@ -117,13 +120,15 @@ function CatalogSession({
   session,
   active,
   onChanged,
+  tool,
 }: {
   scope: string;
   session: Session;
   active: boolean;
   onChanged?: () => void;
+  tool: "deleted" | "create" | "import" | "maintenance";
 }) {
-  const [opened, setOpened] = useState(false),
+  const [opened] = useState(true),
     [visible, setVisible] = useState(
       typeof document === "undefined" || !document.hidden,
     ),
@@ -141,8 +146,7 @@ function CatalogSession({
     [busy, setBusy] = useState(false);
   const storageKey = "alcor.asset-catalog.pending:" + scope;
   const [entries, setEntries] = useState<Entries | null>(null),
-    [page, setPage] = useState(1),
-    [showDeleted, setShowDeleted] = useState(false);
+    [page, setPage] = useState(1);
   const [editor, setEditor] = useState(emptyAsset),
     [editorRevision, setEditorRevision] = useState<number | null>(null),
     [editorConfirmed, setEditorConfirmed] = useState(false);
@@ -250,7 +254,7 @@ function CatalogSession({
       const [value, listing] = await Promise.all([
         api<Snapshot>("/admin/asset-catalog", { signal: ticket.signal }),
         api<Entries>(
-          `/admin/asset-catalog/entries?page=${page}&pageSize=10${showDeleted ? "&deleted=1" : ""}`,
+          `/admin/asset-catalog/entries?page=${page}&pageSize=10&deleted=1`,
           { signal: ticket.signal },
         ),
       ]);
@@ -268,7 +272,7 @@ function CatalogSession({
   }
   useEffect(() => {
     if (active && visible && opened && !locked) void load();
-  }, [active, visible, opened, locked, page, showDeleted]);
+  }, [active, visible, opened, locked, page]);
   const input = JSON.stringify([text, label, confirmed]);
   function changed() {
     ++sequence.current;
@@ -372,20 +376,6 @@ function CatalogSession({
     }
   }
   const rows = preview?.input === input ? preview.entries : receipt?.entries;
-  function edit(asset: AssetEntry) {
-    ++editorGeneration.current;
-    setEditor({
-      id: asset.id,
-      type: asset.type,
-      market: asset.market,
-      code: asset.code,
-      name: asset.name,
-      imageVersion: asset.imageVersion || "",
-      darkImageVersion: asset.darkImageVersion || "",
-    });
-    setEditorRevision(entries?.revision ?? null);
-    setEditorConfirmed(false);
-  }
   async function manage(
     action: "save" | "delete" | "restore",
     chosen = target,
@@ -518,54 +508,62 @@ function CatalogSession({
     }
   }
   return (
-    <details
-      className="card padded settings-section"
-      onToggle={(event) => setOpened(event.currentTarget.open)}
-    >
-      <summary>公共素材目录</summary>
+    <section className="asset-catalog-tools">
       {error && <p role="alert">{error}</p>}
       {opened && active && visible && !locked && (
         <>
-          <button onClick={() => void load()} disabled={busy}>
-            刷新
-          </button>
-          <AssetSourceControls session={session} active={opened&&active&&visible&&!locked} revision={entries?.revision??head?.revision??null} blocked={busy||!!pending} onChanged={()=>{setPreview(null);setEditorRevision(null);void load();onChanged?.();}} onDenied={failure}/>
-          {entries && (
+          {(tool === "deleted" || !!error) && (
+            <div className="asset-catalog-toolbar">
+              <button
+                className="button secondary"
+                onClick={() => void load()}
+                disabled={busy}
+              >
+                刷新
+              </button>
+            </div>
+          )}
+          {tool === "maintenance" && (
+            <AssetSourceControls
+              session={session}
+              active={opened && active && visible && !locked}
+              revision={entries?.revision ?? head?.revision ?? null}
+              blocked={busy || !!pending}
+              onChanged={() => {
+                setPreview(null);
+                setEditorRevision(null);
+                void load();
+                onChanged?.();
+              }}
+              onDenied={failure}
+            />
+          )}
+          {tool === "deleted" && entries && (
             <>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={showDeleted}
-                  onChange={(event) => {
-                    setShowDeleted(event.target.checked);
-                    setPage(1);
-                  }}
-                />
-                已删除
-              </label>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>分类</th>
-                      <th>市场 / 代码</th>
-                      <th>名称</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.assets.map((asset) => (
-                      <tr key={asset.id}>
-                        <td>
-                          {assetTypes.find((type) => type.value === asset.type)
-                            ?.label || asset.type}
-                        </td>
-                        <td>
-                          {asset.market} / {asset.code}
-                        </td>
-                        <td>{asset.name}</td>
-                        <td>
-                          {showDeleted ? (
+              {entries.assets.length > 0 && (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>分类</th>
+                        <th>市场 / 代码</th>
+                        <th>名称</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.assets.map((asset) => (
+                        <tr key={asset.id}>
+                          <td>
+                            {assetTypes.find(
+                              (type) => type.value === asset.type,
+                            )?.label || asset.type}
+                          </td>
+                          <td>
+                            {asset.market} / {asset.code}
+                          </td>
+                          <td>{asset.name}</td>
+                          <td>
                             <button
                               disabled={
                                 busy || !!pending || asset.type === "card"
@@ -579,61 +577,133 @@ function CatalogSession({
                               }
                             >
                               恢复
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                disabled={
-                                  busy || !!pending || asset.type === "card"
-                                }
-                                onClick={() => edit(asset)}
-                              >
-                                编辑
-                              </button>
-                              <button
-                                disabled={
-                                  busy || !!pending || asset.type === "card"
-                                }
-                                onClick={() =>
-                                  setTarget({
-                                    asset,
-                                    action: "delete",
-                                    revision: entries.revision,
-                                  })
-                                }
-                              >
-                                删除
-                              </button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                            </button>{" "}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {!entries.assets.length && (
+                <div className="asset-catalog-empty">暂无已删除素材</div>
+              )}
+              {entries.total > entries.pageSize && (
+                <div className="asset-catalog-pagination">
+                  <button
+                    disabled={page <= 1 || busy}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    上一页
+                  </button>
+                  <span>
+                    {page} /{" "}
+                    {Math.max(1, Math.ceil(entries.total / entries.pageSize))}
+                  </span>
+                  <button
+                    disabled={page * entries.pageSize >= entries.total || busy}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    下一页
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          {tool === "create" && entries && (
+            <section className="asset-catalog-create">
+              <div className="form-grid">
+                <label>
+                  分类
+                  <SelectMenu
+                    label="目录分类"
+                    value={editor.type}
+                    options={assetTypes}
+                    variant="field"
+                    disabled={!!editor.id || busy}
+                    onChange={(type) => {
+                      ++editorGeneration.current;
+                      setEditor({
+                        ...editor,
+                        type,
+                        imageVersion: "",
+                        darkImageVersion: "",
+                      });
+                      setEditorConfirmed(false);
+                    }}
+                  />
+                </label>
+                {(
+                  [
+                    ["market", "市场"],
+                    ["code", "代码"],
+                    ["name", "名称"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <label key={field}>
+                    {label}
+                    <input
+                      value={editor[field]}
+                      maxLength={
+                        field === "name" ? 120 : field === "market" ? 16 : 40
+                      }
+                      disabled={busy || (!!editor.id && field !== "name")}
+                      onChange={(event) => {
+                        ++editorGeneration.current;
+                        setEditor({ ...editor, [field]: event.target.value });
+                        setEditorConfirmed(false);
+                      }}
+                    />
+                  </label>
+                ))}
+                {(
+                  [
+                    ["imageVersion", "浅色图片"],
+                    ["darkImageVersion", "深色图片"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <label key={field}>
+                    {label}
+                    <SelectMenu
+                      label={label}
+                      value={editor[field]}
+                      options={[
+                        { value: "", label: "不设置" },
+                        ...(editor[field] &&
+                        !head?.availableImages.some(
+                          (image) => image.id === editor[field],
+                        )
+                          ? [{ value: editor[field], label: "当前关联图片" }]
+                          : []),
+                        ...(head?.availableImages
+                          .filter((image) => image.type === editor.type)
+                          .map((image) => ({
+                            value: image.id,
+                            label: image.path,
+                          })) || []),
+                      ]}
+                      variant="field"
+                      disabled={busy}
+                      onChange={(value) => {
+                        ++editorGeneration.current;
+                        setEditor({ ...editor, [field]: value });
+                        setEditorConfirmed(false);
+                      }}
+                    />
+                  </label>
+                ))}
               </div>
-              {!entries.assets.length && <p>暂无当前平台记录，历史覆盖未知</p>}
-              <div>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={editorConfirmed}
+                  onChange={(event) => setEditorConfirmed(event.target.checked)}
+                />
+                确认本次素材字段可公开
+              </label>
+              <div className="asset-catalog-editor-actions">
                 <button
-                  disabled={page <= 1 || busy}
-                  onClick={() => setPage(page - 1)}
-                >
-                  上一页
-                </button>
-                <span>
-                  {page} /{" "}
-                  {Math.max(1, Math.ceil(entries.total / entries.pageSize))}
-                </span>
-                <button
-                  disabled={page * entries.pageSize >= entries.total || busy}
-                  onClick={() => setPage(page + 1)}
-                >
-                  下一页
-                </button>
-              </div>
-              <details>
-                <summary>{editor.id ? "编辑素材" : "新增素材"}</summary>
-                <button
+                  className="button secondary"
                   disabled={busy || !!pending}
                   onClick={() => {
                     ++editorGeneration.current;
@@ -642,100 +712,10 @@ function CatalogSession({
                     setEditorConfirmed(false);
                   }}
                 >
-                  新增
+                  清空表单
                 </button>
-                <div className="form-grid">
-                  <label>
-                    分类
-                    <SelectMenu
-                      label="目录分类"
-                      value={editor.type}
-                      options={assetTypes}
-                      variant="field"
-                      disabled={!!editor.id || busy}
-                      onChange={(type) => {
-                        ++editorGeneration.current;
-                        setEditor({
-                          ...editor,
-                          type,
-                          imageVersion: "",
-                          darkImageVersion: "",
-                        });
-                        setEditorConfirmed(false);
-                      }}
-                    />
-                  </label>
-                  {(
-                    [
-                      ["market", "市场"],
-                      ["code", "代码"],
-                      ["name", "名称"],
-                    ] as const
-                  ).map(([field, label]) => (
-                    <label key={field}>
-                      {label}
-                      <input
-                        value={editor[field]}
-                        maxLength={
-                          field === "name" ? 120 : field === "market" ? 16 : 40
-                        }
-                        disabled={busy || (!!editor.id && field !== "name")}
-                        onChange={(event) => {
-                          ++editorGeneration.current;
-                          setEditor({ ...editor, [field]: event.target.value });
-                          setEditorConfirmed(false);
-                        }}
-                      />
-                    </label>
-                  ))}
-                  {(
-                    [
-                      ["imageVersion", "浅色图片"],
-                      ["darkImageVersion", "深色图片"],
-                    ] as const
-                  ).map(([field, label]) => (
-                    <label key={field}>
-                      {label}
-                      <SelectMenu
-                        label={label}
-                        value={editor[field]}
-                        options={[
-                          { value: "", label: "不设置" },
-                          ...(editor[field] &&
-                          !head?.availableImages.some(
-                            (image) => image.id === editor[field],
-                          )
-                            ? [{ value: editor[field], label: "当前关联图片" }]
-                            : []),
-                          ...(head?.availableImages
-                            .filter((image) => image.type === editor.type)
-                            .map((image) => ({
-                              value: image.id,
-                              label: image.path,
-                            })) || []),
-                        ]}
-                        variant="field"
-                        disabled={busy}
-                        onChange={(value) => {
-                          ++editorGeneration.current;
-                          setEditor({ ...editor, [field]: value });
-                          setEditorConfirmed(false);
-                        }}
-                      />
-                    </label>
-                  ))}
-                </div>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={editorConfirmed}
-                    onChange={(event) =>
-                      setEditorConfirmed(event.target.checked)
-                    }
-                  />
-                  确认本次素材字段可公开
-                </label>
                 <button
+                  className="button primary"
                   disabled={
                     busy ||
                     !!pending ||
@@ -743,14 +723,15 @@ function CatalogSession({
                     editorRevision === null ||
                     (["stock", "market"].includes(editor.type) &&
                       !editor.market.trim()) ||
-                    (!["market", "group"].includes(editor.type) && !editor.code.trim())
+                    (!["market", "group"].includes(editor.type) &&
+                      !editor.code.trim())
                   }
                   onClick={() => void manage("save")}
                 >
                   保存素材
                 </button>
-              </details>
-            </>
+              </div>
+            </section>
           )}
           {pending && (
             <div>
@@ -763,82 +744,111 @@ function CatalogSession({
               </button>
             </div>
           )}
-          <label>
-            来源名称
-            <input
-              value={label}
-              maxLength={120}
-              onChange={(event) => {
-                setLabel(event.target.value);
-                changed();
-              }}
-            />
-          </label>
-          <label>
-            素材清单
-            <textarea
-              rows={8}
-              value={text}
-              onChange={(event) => {
-                setText(event.target.value);
-                changed();
-              }}
-            />
-          </label>
-          <p>
-            每批最多200项，清单60KB，请求64KiB；仅登记本批，不删除其他记录。
-          </p>
-          <label>
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(event) => {
-                setConfirmed(event.target.checked);
-                changed();
-              }}
-            />
-            确认清单仅包含可公开的素材字段
-          </label>
-          <button
-            disabled={busy || !confirmed || !label.trim() || !text.trim()}
-            onClick={() => void run("preview")}
-          >
-            预览
-          </button>
-          <button
-            disabled={busy || !!pending || !preview || preview.input !== input}
-            onClick={() => void run("import")}
-          >
-            登记
-          </button>
-          {rows && (
-            <table>
-              <thead>
-                <tr>
-                  <th>素材</th>
-                  <th>结果</th>
-                  <th>浅色原件</th>
-                  <th>深色原件</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.id}</td>
-                    <td>{states[row.error || row.state] || row.state}</td>
-                    <td>
-                      {states[row.materialState.light] ||
-                        row.materialState.light}
-                    </td>
-                    <td>
-                      {states[row.materialState.dark] || row.materialState.dark}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {tool === "import" && (
+            <section className="asset-import-flow">
+              <h3>
+                {preview?.input === input
+                  ? "核对预览并确认导入"
+                  : "选择清单或粘贴内容"}
+              </h3>
+              <input
+                type="file"
+                accept=".json,application/json"
+                aria-label="选择素材清单"
+                disabled={busy || !!pending}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 60000) {
+                    setError("清单不能超过 60KB");
+                    return;
+                  }
+                  setText(await file.text());
+                  setLabel(file.name.replace(/\.json$/i, ""));
+                  changed();
+                }}
+              />
+              <label>
+                来源名称
+                <input
+                  value={label}
+                  maxLength={120}
+                  onChange={(event) => {
+                    setLabel(event.target.value);
+                    changed();
+                  }}
+                />
+              </label>
+              <label>
+                素材清单
+                <textarea
+                  rows={8}
+                  value={text}
+                  onChange={(event) => {
+                    setText(event.target.value);
+                    changed();
+                  }}
+                />
+              </label>
+              <p>
+                每批最多200项，清单60KB，请求64KiB；仅登记本批，不删除其他记录。
+              </p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={(event) => {
+                    setConfirmed(event.target.checked);
+                    changed();
+                  }}
+                />
+                确认清单仅包含可公开的素材字段
+              </label>
+              <button
+                disabled={busy || !confirmed || !label.trim() || !text.trim()}
+                onClick={() => void run("preview")}
+              >
+                预览
+              </button>
+              <button
+                disabled={
+                  busy || !!pending || !preview || preview.input !== input
+                }
+                onClick={() => void run("import")}
+              >
+                登记
+              </button>
+              {rows && (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>素材</th>
+                      <th>结果</th>
+                      <th>浅色原件</th>
+                      <th>深色原件</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.id}</td>
+                        <td>{states[row.error || row.state] || row.state}</td>
+                        <td>
+                          {states[row.materialState.light] ||
+                            row.materialState.light}
+                        </td>
+                        <td>
+                          {states[row.materialState.dark] ||
+                            row.materialState.dark}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
           )}
-          {head && (
+          {tool === "maintenance" && head && (
             <details>
               <summary>最近20条来源与已登记图片</summary>
               {head.sources.map((source) => (
@@ -901,6 +911,6 @@ function CatalogSession({
           )}
         </>
       )}
-    </details>
+    </section>
   );
 }

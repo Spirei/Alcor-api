@@ -1,3 +1,4 @@
+import { useSortMotion } from "./sort-motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Grid2X2,
@@ -11,6 +12,7 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
+import { Dialog } from "./dialog";
 import { api, type Session } from "./api";
 import { AssetMarketFilter } from "./asset-market-filter";
 import { BrokerGrip, useBrokerOrder } from "./asset-broker-order";
@@ -92,6 +94,7 @@ export function AssetLibraryBrowser({
   const cache = useRef(new Map<string, Listing>());
   const generation = useRef(0);
   const categoryBar = useRef<HTMLElement>(null);
+  const itemRoot = useRef<HTMLDivElement>(null);
   const [type, setType] = useState("market"),
     [market, setMarket] = useState("");
   useLayoutEffect(() => {
@@ -111,6 +114,13 @@ export function AssetLibraryBrowser({
     observer.observe(bar);
     return () => observer.disconnect();
   }, [type]);
+  const [selection, setSelection] = useState<string[]>([]);
+  const [selecting, setSelecting] = useState(false),
+    [confirmBulk, setConfirmBulk] = useState(false),
+    [bulkBusy, setBulkBusy] = useState(false),
+    [bulkTotal, setBulkTotal] = useState(0),
+    [bulkStopping, setBulkStopping] = useState(false),
+    [bulkMessage, setBulkMessage] = useState("");
   const [creating, setCreating] = useState(false),
     [deleted, setDeleted] = useState(false);
   const localAll = type === "broker";
@@ -118,6 +128,17 @@ export function AssetLibraryBrowser({
   const [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [page, setPage] = useState(1);
+  useEffect(() => {
+    setSelection([]);
+    setSelecting(false);
+  }, [type, market, query, page, deleted]);
+  const bulkEpoch = useRef(0);
+  useEffect(() => {
+    ++bulkEpoch.current;
+    return () => {
+      ++bulkEpoch.current;
+    };
+  }, [active, session.csrf, type, market, query, page]);
   const [view, setView] = useState<"grid" | "list">("list");
   const [dark, setDark] = useState(
     typeof document !== "undefined" &&
@@ -412,6 +433,12 @@ export function AssetLibraryBrowser({
       else setRefresh((v) => v + 1);
     },
   });
+  useSortMotion(
+    itemRoot,
+    "[data-broker-id]",
+    (shown?.assets || []).map((asset) => asset.id).join(","),
+    `${type}:${view}`,
+  );
   return (
     <section
       className={`asset-library${readOnly ? " is-readonly" : ""}${type === "stock" ? " is-stock" : type === "broker" ? " is-broker" : ""}`}
@@ -439,6 +466,71 @@ export function AssetLibraryBrowser({
             onReplace?.(target.asset, target.revision, file);
         }}
       />
+      {bulkMessage && <p role="status">{bulkMessage}</p>}
+      {confirmBulk && (
+        <Dialog
+          title={`移除选中的 ${bulkBusy ? bulkTotal : selection.length} 项素材？`}
+          onClose={() => {
+            if (!bulkBusy) setConfirmBulk(false);
+          }}
+        >
+          <p>从素材库移除，保留原文件；已删除素材可单独恢复。</p>
+          <button
+            className="button"
+            disabled={bulkBusy}
+            onClick={async () => {
+              if (!loaded || bulkBusy || command.blocked) return;
+              setBulkStopping(false);
+              setBulkTotal(selection.length);
+              setBulkBusy(true);
+              const generation = bulkEpoch.current;
+              let currentRevision = loaded.revision!,
+                completed = 0;
+              const targets =
+                shown?.assets.filter((asset) => selection.includes(asset.id)) ||
+                [];
+              try {
+                for (const asset of targets) {
+                  if (document.hidden || generation !== bulkEpoch.current)
+                    break;
+                  const result = await command.execute({
+                    action: "delete",
+                    asset,
+                    revision: currentRevision,
+                  });
+                  if (!result || typeof result.revision !== "number") break;
+                  currentRevision = result.revision;
+                  completed++;
+                  setSelection((previous) =>
+                    previous.filter((id) => id !== asset.id),
+                  );
+                }
+              } finally {
+                setBulkBusy(false);
+                setConfirmBulk(false);
+                if (completed === targets.length) setSelecting(false);
+                setBulkMessage(
+                  `已移除 ${completed} / ${targets.length} 项${completed < targets.length ? "，已停止，请核对未完成操作" : ""}`,
+                );
+              }
+            }}
+          >
+            {bulkBusy ? "正在移除…" : "确认移除"}
+          </button>
+          {bulkBusy && (
+            <button
+              className="button secondary"
+              disabled={bulkStopping}
+              onClick={() => {
+                ++bulkEpoch.current;
+                setBulkStopping(true);
+              }}
+            >
+              {bulkStopping ? "正在停止…" : "停止后续移除"}
+            </button>
+          )}
+        </Dialog>
+      )}
       <nav
         ref={categoryBar}
         className="asset-library-tabs"
@@ -541,6 +633,47 @@ export function AssetLibraryBrowser({
               role="group"
               aria-label="素材显示方式"
             >
+              {!readOnly && !deleted && (
+                <>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={bulkBusy || command.blocked}
+                    onClick={() => {
+                      setSelecting(!selecting);
+                      setSelection([]);
+                    }}
+                  >
+                    {selecting ? "取消选择" : "批量选择"}
+                  </button>
+                  {selecting && (
+                    <>
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={bulkBusy}
+                        onClick={() =>
+                          setSelection(
+                            shown?.assets.map((asset) => asset.id) || [],
+                          )
+                        }
+                      >
+                        选择本页
+                      </button>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={
+                          bulkBusy || command.blocked || !selection.length
+                        }
+                        onClick={() => setConfirmBulk(true)}
+                      >
+                        移除 {selection.length} 项
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
               {type === "broker" && !deleted && (
                 <button
                   type="button"
@@ -597,24 +730,34 @@ export function AssetLibraryBrowser({
               </button>
             </div>
           </div>
+          {type === "broker" && (
+            <span className="asset-market-announcement" role="status">
+              {brokerOrder.message || "按住手柄拖动排序"}
+            </span>
+          )}
           {creating && (type === "stock" || type === "broker") && (
-            <MaterialCreate
-              kind={type}
-              market={market}
-              query={query}
-              disabled={
-                uploadDisabled || labelBlocked || command.blocked || loading
-              }
-              onCancel={() => setCreating(false)}
-              onSave={(asset) => {
-                if (loaded?.revision !== undefined)
-                  void command.execute({
-                    action: "create",
-                    revision: loaded.revision,
-                    asset,
-                  });
-              }}
-            />
+            <Dialog
+              title={type === "broker" ? "新增券商" : "添加股票素材"}
+              onClose={() => setCreating(false)}
+            >
+              <MaterialCreate
+                kind={type}
+                market={market}
+                query={query}
+                disabled={
+                  uploadDisabled || labelBlocked || command.blocked || loading
+                }
+                onCancel={() => setCreating(false)}
+                onSave={(asset) => {
+                  if (loaded?.revision !== undefined)
+                    void command.execute({
+                      action: "create",
+                      revision: loaded.revision,
+                      asset,
+                    });
+                }}
+              />
+            </Dialog>
           )}
           {(command.error || command.pending) && (
             <div className="notice" role="status">
@@ -657,7 +800,7 @@ export function AssetLibraryBrowser({
             ) : error ? (
               <span role="alert">{error}</span>
             ) : shown ? (
-              `${type === "card" ? "卡片素材 · " : type === "flag" ? "国家/地区旗帜 · " : type === "broker" ? "券商图标 · " : ""}${shown.total} ${type === "market" ? "个市场" : type === "card" ? "张" : type === "flag" || type === "broker" ? "个" : "项素材"}${loading ? " · 更新中…" : ""}`
+              `${type === "card" ? "卡片素材 · " : type === "flag" ? "国家/地区旗帜 · " : type === "broker" ? "券商图标 · " : ""}${shown.total} ${type === "market" ? "个市场" : type === "card" ? "张" : type === "flag" || type === "broker" ? "个" : "项素材"}`
             ) : loading ? (
               "正在读取素材…"
             ) : (
@@ -683,6 +826,7 @@ export function AssetLibraryBrowser({
               </div>
             )}
           <div
+            ref={itemRoot}
             className={`asset-library-items ${view} ${type === "card" ? "cards" : ""}`}
             aria-busy={loading}
           >
@@ -691,7 +835,24 @@ export function AssetLibraryBrowser({
                 className="asset-library-item"
                 key={asset.id}
                 data-broker-id={type === "broker" ? asset.id : undefined}
+                data-dragging={brokerOrder.dragging === asset.id || undefined}
               >
+                {selecting && (
+                  <input
+                    className="asset-batch-check"
+                    type="checkbox"
+                    aria-label={`选择 ${asset.name}`}
+                    checked={selection.includes(asset.id)}
+                    disabled={bulkBusy}
+                    onChange={(event) =>
+                      setSelection(
+                        event.target.checked
+                          ? [...selection, asset.id]
+                          : selection.filter((id) => id !== asset.id),
+                      )
+                    }
+                  />
+                )}
                 <span className="asset-library-rank" aria-hidden="true">
                   {(page - 1) * pageSize + index + 1}
                 </span>
@@ -780,19 +941,47 @@ export function AssetLibraryBrowser({
                         沿用 {asset.imageInheritance.code} 图标 ·{" "}
                       </span>
                     )}
-                    {type === "card"
-                      ? [
-                          asset.region || asset.market,
-                          asset.bank,
-                          asset.customized ? "自定义照片" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")
-                      : type === "broker"
-                        ? markets[asset.market || ""] || "未分类"
-                        : asset.code ||
-                          asset.market ||
-                          categories.find(([key]) => key === type)?.[1]}
+                    {type === "card" ? (
+                      [
+                        asset.region || asset.market,
+                        asset.bank,
+                        asset.customized ? "自定义照片" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    ) : type === "broker" ? (
+                      <button
+                        className="asset-broker-category"
+                        type="button"
+                        disabled={
+                          readOnly ||
+                          uploadDisabled ||
+                          labelBlocked ||
+                          command.blocked ||
+                          deleted ||
+                          loading ||
+                          !Number.isSafeInteger(loaded?.revision)
+                        }
+                        onClick={(event) =>
+                          nameEditor.begin(
+                            asset,
+                            loaded?.revision || 0,
+                            event.currentTarget,
+                          )
+                        }
+                        aria-label={`修改${asset.name}分类`}
+                      >
+                        {asset.brokerMarkets !== undefined
+                          ? asset.brokerMarkets
+                              .map((code) => markets[code] || code)
+                              .join(" · ") || "未分类"
+                          : markets[asset.market || ""] || "未分类"}
+                      </button>
+                    ) : (
+                      asset.code ||
+                      asset.market ||
+                      categories.find(([key]) => key === type)?.[1]
+                    )}
                   </small>
                 </span>
                 {type === "card" &&
@@ -837,6 +1026,12 @@ export function AssetLibraryBrowser({
                 </button>
                 {type === "stock" && (
                   <span className="asset-library-market">
+                    {marketFlags[asset.market || ""] && (
+                      <img
+                        src={assetImageUrl(marketFlags[asset.market || ""])}
+                        alt=""
+                      />
+                    )}
                     {markets[asset.market || ""] ||
                       asset.market ||
                       categories.find(([key]) => key === type)?.[1]}
@@ -863,11 +1058,21 @@ export function AssetLibraryBrowser({
           {!loading && shown?.assets.length === 0 && (
             <div className="asset-library-empty">
               <ImageOff size={30} />
-              <h3>{query || market ? "没有匹配的素材" : "这里还没有素材"}</h3>
+              <h3>
+                {deleted
+                  ? "暂无已移除素材"
+                  : query || market
+                    ? "没有匹配的素材"
+                    : "这里还没有素材"}
+              </h3>
               <p>
                 {query || market
                   ? "试试其他名称或代码"
-                  : "请确认公共素材目录已放入 uploads/asset，然后重新读取。"}
+                  : deleted
+                    ? "移除后的素材可以在这里恢复"
+                    : type === "broker"
+                      ? "添加券商，管理图标与市场分类"
+                      : "添加素材或从来源清单导入"}
               </p>
               {type === "stock" && query && !deleted && !creating ? (
                 <button
@@ -900,80 +1105,82 @@ export function AssetLibraryBrowser({
               )}
             </div>
           )}
-          <nav className="asset-library-pagination" aria-label="素材分页">
-            <button
-              className="button secondary"
-              disabled={loading || retired || page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              上一页
-            </button>
-            <span className="asset-library-page-position">
-              {page} / {pages}
-            </span>
-            <div className="asset-library-page-numbers">
-              {assetPageNumbers(page, pages).map((n, i) =>
-                typeof n === "number" ? (
-                  <button
-                    type="button"
-                    className="asset-library-page-button"
-                    key={n}
-                    aria-label={`第 ${n} 页`}
-                    aria-current={n === page ? "page" : undefined}
-                    disabled={loading || retired || !shown}
-                    onClick={() => setPage(n)}
-                  >
-                    {n}
-                  </button>
-                ) : (
-                  <span key={`gap-${i}`} aria-hidden="true">
-                    {n}
-                  </span>
-                ),
-              )}
-            </div>
-            <button
-              className="button secondary"
-              disabled={loading || retired || !shown || page >= pages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              下一页
-            </button>
-            {shown && pages > 1 && (
-              <form
-                className="asset-library-jump"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!loading && !retired && validTarget) {
-                    setPage(targetPage);
-                    setPageDraft("");
-                  }
-                }}
+          {pages > 1 && (
+            <nav className="asset-library-pagination" aria-label="素材分页">
+              <button
+                className="button secondary"
+                disabled={loading || retired || page <= 1}
+                onClick={() => setPage((p) => p - 1)}
               >
-                <label>
-                  共 {pages} 页 · 跳至
-                  <input
-                    aria-label="跳转素材页码"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={pages}
-                    step={1}
-                    placeholder={String(page)}
-                    value={pageDraft}
-                    disabled={loading || retired}
-                    onChange={(e) => setPageDraft(e.target.value)}
-                  />
-                </label>
-                <button
-                  className="button secondary"
-                  disabled={loading || retired || !validTarget}
+                上一页
+              </button>
+              <span className="asset-library-page-position">
+                {page} / {pages}
+              </span>
+              <div className="asset-library-page-numbers">
+                {assetPageNumbers(page, pages).map((n, i) =>
+                  typeof n === "number" ? (
+                    <button
+                      type="button"
+                      className="asset-library-page-button"
+                      key={n}
+                      aria-label={`第 ${n} 页`}
+                      aria-current={n === page ? "page" : undefined}
+                      disabled={loading || retired || !shown}
+                      onClick={() => setPage(n)}
+                    >
+                      {n}
+                    </button>
+                  ) : (
+                    <span key={`gap-${i}`} aria-hidden="true">
+                      {n}
+                    </span>
+                  ),
+                )}
+              </div>
+              <button
+                className="button secondary"
+                disabled={loading || retired || !shown || page >= pages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                下一页
+              </button>
+              {shown && pages > 1 && (
+                <form
+                  className="asset-library-jump"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!loading && !retired && validTarget) {
+                      setPage(targetPage);
+                      setPageDraft("");
+                    }
+                  }}
                 >
-                  跳转
-                </button>
-              </form>
-            )}
-          </nav>
+                  <label>
+                    共 {pages} 页 · 跳至
+                    <input
+                      aria-label="跳转素材页码"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={pages}
+                      step={1}
+                      placeholder={String(page)}
+                      value={pageDraft}
+                      disabled={loading || retired}
+                      onChange={(e) => setPageDraft(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="button secondary"
+                    disabled={loading || retired || !validTarget}
+                  >
+                    跳转
+                  </button>
+                </form>
+              )}
+            </nav>
+          )}
         </>
       )}
     </section>

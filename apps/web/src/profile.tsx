@@ -1,5 +1,12 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Pencil, Upload } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Pencil, Upload, ImagePlus } from "lucide-react";
 import { api, base } from "./api";
 import type { Profile, Session } from "./api";
 import { useProfileInvalidation, useResource } from "./hooks";
@@ -84,11 +91,13 @@ function ProfileEditor({
   profile,
   onClose,
   onSaved,
+  extra,
 }: {
   session: Session;
   profile: Profile;
   onClose: () => void;
   onSaved: () => void;
+  extra?: ReactNode;
 }) {
   const [name, setName] = useState(profile.display_name);
   const [dragging, setDragging] = useState(false);
@@ -246,6 +255,7 @@ function ProfileEditor({
           </button>
         </div>
       </form>
+      {extra}
     </Dialog>
   );
 }
@@ -254,6 +264,30 @@ export function ProfilePage({ session }: { session: Session }) {
     invalidate = useProfileInvalidation();
   const [editing, setEditing] = useState(false),
     [saved, setSaved] = useState(false);
+  const [personal, setPersonal] = useState<{
+    bio: string;
+    background: { path: string; sha256: string } | null;
+  } | null>(null);
+  const [personalError, setPersonalError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setPersonal(null);
+    setPersonalError("");
+    api<{ bio: string; background: { path: string; sha256: string } | null }>(
+      "/account/personal-profile",
+      { signal: controller.signal },
+    )
+      .then((value) => {
+        if (!controller.signal.aborted) setPersonal(value);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted)
+          setPersonalError(
+            error instanceof Error ? error.message : "资料读取失败",
+          );
+      });
+    return () => controller.abort();
+  }, [session.instance_id, session.user.id, session.receipt_scope]);
   useEffect(() => {
     const hide = () => {
       if (document.hidden) setEditing(false);
@@ -267,7 +301,27 @@ export function ProfilePage({ session }: { session: Session }) {
   return (
     <div className="profile-page">
       <ErrorLine message={profile.error} />
-      <div className="profile-identity">
+      <ErrorLine message={personalError} />
+      <div
+        className={`profile-identity profile-hero${personal?.background ? " has-cover" : ""}`}
+      >
+        <div className="profile-cover">
+          {personal?.background && (
+            <img
+              className="profile-cover-image"
+              src={personal.background.path}
+              alt="个人资料背景"
+            />
+          )}
+          <button
+            className="icon-button profile-cover-edit"
+            aria-label="编辑背景图片"
+            onClick={() => setEditing(true)}
+            disabled={!profile.data}
+          >
+            <ImagePlus size={18} />
+          </button>
+        </div>
         <button
           className="profile-avatar-button"
           aria-label="编辑头像和资料"
@@ -282,12 +336,13 @@ export function ProfilePage({ session }: { session: Session }) {
             profile={profile.data}
             username={session.user.username}
           />
-          <span className="avatar-pencil">
+          <span className="avatar-pencil profile-avatar-badge">
             <Pencil size={18} />
           </span>
         </button>
         <h1>{profile.data?.display_name || session.user.username}</h1>
         <p>@{session.user.username}</p>
+        {personal?.bio && <p className="profile-signature">{personal.bio}</p>}
         <button
           className="button secondary small"
           disabled={!profile.data}
@@ -310,22 +365,16 @@ export function ProfilePage({ session }: { session: Session }) {
           </button>
         )}
       </div>
-      <Suspense fallback={null}>
-        <PersonalProfile
-          key={JSON.stringify([
-            session.instance_id,
-            session.user.id,
-            session.user.role,
-            session.receipt_scope,
-          ])}
-          session={session}
-        />
-      </Suspense>
       <RequestHeatmap />
       {editing && profile.data && (
         <ProfileEditor
           session={session}
           profile={profile.data}
+          extra={
+            <Suspense fallback={null}>
+              <PersonalProfile session={session} onValue={setPersonal} />
+            </Suspense>
+          }
           onClose={() => setEditing(false)}
           onSaved={() => {
             invalidate();

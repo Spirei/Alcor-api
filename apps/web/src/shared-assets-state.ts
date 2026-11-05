@@ -9,7 +9,7 @@ export const assetKinds = [
   { value: "background", label: "主页背景" },
   { value: "logo", label: "站点标志" },
   { value: "login", label: "登录页图片" },
-  { value: "asset", label: "共享素材" },
+  { value: "asset", label: "素材库" },
 ] as const;
 export type AssetKind = (typeof assetKinds)[number]["value"];
 export const assetFolders = [
@@ -86,7 +86,7 @@ export function sharedAssetConfig(raw: unknown): AssetConfig {
     Number(v.cardMaxBytes) <= 0 ||
     Number(v.cardMaxBytes) > 20971520
   )
-    throw new Error("共享素材配置待核对");
+    throw new Error("素材库配置待核对");
   for (const { value } of assetKinds) {
     const kind = v.kinds?.[value];
     if (
@@ -100,7 +100,7 @@ export function sharedAssetConfig(raw: unknown): AssetConfig {
       kind.maxBytes <= 0 ||
       kind.maxBytes > 20971520
     )
-      throw new Error("共享素材配置待核对");
+      throw new Error("素材库配置待核对");
   }
   return v as AssetConfig;
 }

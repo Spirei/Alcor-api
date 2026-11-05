@@ -111,6 +111,7 @@ export function useMaterialCommand(
       setJob(null);
       setLast(expected);
       onChanged();
+      return v;
     }
     try {
       const params = new URLSearchParams({
@@ -162,7 +163,7 @@ export function useMaterialCommand(
         },
         session.csrf,
       );
-      if (valid()) finish(result);
+      if (valid()) return finish(result);
     } catch (reason) {
       if (valid()) {
         setError(
