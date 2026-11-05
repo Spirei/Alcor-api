@@ -38,13 +38,14 @@ export function Dialog({
     dialog?.querySelector<HTMLElement>("[data-dialog-autofocus]")?.focus();
     return () => {
       dialog?.close();
+      const target = returnFocusRef?.current ?? previous;
       if (
-        previous instanceof HTMLElement &&
-        previous.isConnected &&
-        previous.getClientRects().length &&
-        !previous.closest("[inert]")
+        target instanceof HTMLElement &&
+        target.isConnected &&
+        target.getClientRects().length &&
+        !target.closest("[inert]")
       )
-        previous.focus({ preventScroll: true });
+        target.focus({ preventScroll: true });
     };
   }, []);
   return (

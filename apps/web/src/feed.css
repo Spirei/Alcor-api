@@ -202,3 +202,416 @@
     gap: 14px;
   }
 }
+
+/* Old Web feed composition, using the shared page, field and dialog tokens. */
+.feed-page {
+  max-width: 868px;
+  padding-bottom: 40px;
+}
+.feed-identity {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 28px;
+}
+.feed-identity-button {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.feed-mascot {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  background: var(--soft);
+}
+.feed-mascot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.feed-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.feed-settings-trigger {
+  background: var(--soft);
+}
+.feed-groups {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 2px 1px 10px;
+  margin-top: 22px;
+  scrollbar-width: thin;
+}
+.feed-groups button {
+  flex: none;
+  padding: 7px 15px;
+  min-height: 38px;
+  border: 1px dashed var(--edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.feed-groups button[aria-pressed="true"] {
+  border-style: solid;
+  border-color: transparent;
+  background: var(--soft);
+  color: var(--text);
+}
+.feed-groups .feed-group-add {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  padding: 0;
+}
+.feed-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 18px;
+}
+.feed-filters select {
+  min-height: 38px;
+  width: auto;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.feed-post {
+  padding-block: 24px;
+  gap: 12px;
+}
+.feed-post h2 {
+  font-size: 18px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+.feed-post-avatar {
+  background: transparent;
+  border-radius: 0;
+}
+.feed-post .feed-more {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 50%;
+  margin-top: -5px;
+}
+.feed-post .feed-actions {
+  gap: 6px;
+  margin-top: 12px;
+}
+.feed-post .feed-actions button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text);
+}
+.feed-post .feed-actions button:first-child {
+  margin-left: -8px;
+}
+.feed-post .feed-actions button[aria-pressed="true"] {
+  color: #dc5675;
+}
+.feed-page .feed-list[aria-busy="true"] {
+  opacity: 0.65;
+}
+.feed-dialog {
+  width: min(640px, calc(100vw - 36px));
+}
+.feed-group-dialog {
+  width: min(480px, calc(100vw - 36px));
+}
+.feed-dialog label,
+.feed-dialog .feed-fields {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.feed-dialog .feed-fields {
+  gap: 22px;
+}
+.feed-dialog :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%;
+  min-width: 0;
+}
+.feed-dialog textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+.feed-config-section {
+  display: grid;
+  gap: 16px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--edge);
+}
+.feed-config-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.feed-config-section p {
+  margin: 0;
+  line-height: 1.65;
+  font-size: 12px;
+}
+.feed-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.feed-template-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.feed-template-options > button {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px dashed var(--edge);
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+}
+.feed-template-options > button[aria-pressed="true"] {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--soft);
+}
+.feed-template-options > button svg {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  color: var(--accent);
+}
+.feed-template-options strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.feed-template-options small {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.feed-dialog .feed-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.feed-dialog input[type="checkbox"] {
+  width: auto;
+  flex: none;
+}
+.feed-dialog .feed-source-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--edge);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.feed-advanced {
+  margin-block: 10px;
+}
+.feed-advanced > summary {
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.feed-advanced[open] {
+  display: grid;
+  gap: 12px;
+}
+.feed-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.feed-modal-actions > button {
+  min-width: 100px;
+}
+.feed-job {
+  overflow-wrap: anywhere;
+}
+.feed-job > span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.feed-job small {
+  display: block;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.feed-dialog .feed-plain-text {
+  font-size: 14px;
+}
+.feed-discussion-title {
+  font-size: 18px;
+  line-height: 1.5;
+  margin-top: 0;
+}
+.feed-discussion-log {
+  display: grid;
+  gap: 16px;
+  margin: 18px 0;
+  max-height: 36dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.feed-message {
+  max-width: 90%;
+  border-radius: 16px;
+  padding: 12px 16px;
+  background: var(--soft);
+}
+.feed-message-user {
+  justify-self: end;
+}
+.feed-message-assistant {
+  justify-self: start;
+  background: transparent;
+  padding-left: 0;
+}
+.feed-message p {
+  margin: 6px 0;
+}
+.feed-message small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.feed-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  padding: 10px;
+  margin-top: 18px;
+}
+.feed-dialog .feed-composer textarea {
+  min-height: 60px;
+  max-height: 180px;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 6px;
+}
+.feed-composer button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  border: 0;
+}
+@media (hover: hover) {
+  .feed-post :is(.feed-more, .feed-actions button):hover:not(:disabled),
+  .feed-groups button:hover:not(:disabled) {
+    background: var(--soft);
+  }
+}
+@media (max-width: 640px) {
+  .feed-dialog :is(input, select, textarea) {
+    font-size: 16px;
+  }
+  .feed-template-options {
+    gap: 8px;
+  }
+  .feed-template-options > button {
+    padding: 12px;
+  }
+  .feed-post h2 {
+    font-size: 16px;
+  }
+  .feed-identity {
+    margin-bottom: 22px;
+  }
+  .feed-message {
+    max-width: 96%;
+  }
+}
+.feed-post-heading > div {
+  flex: 1;
+  min-width: 0;
+}
+.feed-post-heading time {
+  margin: 2px 0 0;
+  white-space: nowrap;
+  flex: none;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .feed-post-heading {
+    position: relative;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-right: 28px;
+  }
+  .feed-post-heading > div {
+    flex-basis: 100%;
+  }
+  .feed-post-heading .feed-more {
+    position: absolute;
+    right: -6px;
+    top: 0;
+  }
+}
+.feed-post p {
+  font-size: 16px;
+  line-height: 1.55;
+  margin-block: 6px 0;
+}
+.feed-post-options {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 12px;
+}
+.feed-post-options > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.feed-dialog > .feed-fields,
+.feed-dialog > .feed-plain-text {
+  padding: 20px 22px 22px;
+  margin: 0;
+}
+.feed-dialog > .feed-job {
+  margin-inline: 22px;
+}
+.feed-update-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .feed-dialog > .feed-fields,
+  .feed-dialog > .feed-plain-text {
+    padding: 18px 18px 22px;
+  }
+}

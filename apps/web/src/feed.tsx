@@ -6,12 +6,19 @@ import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
 import { Dialog } from "./dialog";
 import "./feed.css";
+import { feedTimestamp, feedDateTime } from "./feed-display";
 import {
   Heart,
   MessageCircle,
   Newspaper,
   EyeOff,
   Ellipsis,
+  RefreshCw,
+  SlidersHorizontal,
+  Plus,
+  History,
+  ArrowUp,
+  Check,
 } from "lucide-react";
 type Subscription = { name: string; url: string };
 type Group = {
@@ -197,6 +204,8 @@ const jobLabel = (raw: string) =>
       writing: "整理中",
       done: "已完成",
       succeeded: "已完成",
+      completed: "已完成",
+      admitted: "已登记",
       error: "失败",
       failed: "失败",
       unknown: "结果待核对",
@@ -238,6 +247,10 @@ function FeedSession({
 }) {
   const [workspaceSection, setWorkspaceSection] = useWorkspaceState("news");
 
+  const newsActive = active && workspaceSection === "news";
+  const [creating, setCreating] = useState(false);
+  const dialogTrigger = useRef<HTMLElement | null>(null);
+  const settingsAutofocus = useRef(false);
   const storage =
     "feed-operation:" +
     JSON.stringify([
@@ -299,6 +312,16 @@ function FeedSession({
       return null;
     }
   });
+  useEffect(() => {
+    if (settings && !busy && settingsAutofocus.current) {
+      settingsAutofocus.current = false;
+      document
+        .querySelector<HTMLInputElement>(
+          ".feed-settings-dialog input[data-dialog-autofocus]",
+        )
+        ?.focus({ preventScroll: true });
+    }
+  }, [settings, busy]);
   const postRead = useRef(0),
     selectedId = useRef<string | null>(null),
     discussionPost = useRef<string | null>(null);
@@ -330,6 +353,7 @@ function FeedSession({
     setSettings(false);
     setProfileOpen(false);
     setHistory(false);
+    setCreating(false);
   }
   function fail(reason: unknown) {
     if (reason instanceof ApiError && [401, 403].includes(reason.status)) {
@@ -356,11 +380,12 @@ function FeedSession({
     setError(reason instanceof Error ? reason.message : "动态暂时不可用");
   }
   useEffect(() => {
-    live.current = active;
-    if (active && !document.hidden) void load();
+    live.current = newsActive;
+    if (newsActive && !document.hidden) void load();
     else clear();
     const visibility = () => {
       if (document.hidden) clear();
+      else if (live.current) void load();
     };
     document.addEventListener("visibilitychange", visibility);
     return () => {
@@ -370,12 +395,36 @@ function FeedSession({
       controllers.current.clear();
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [active, groupId, author, filter]);
+  }, [newsActive, groupId, author, filter]);
   function current(run: number) {
     return live.current && !document.hidden && run === epoch.current;
   }
+  function returnActionFocus(target: Element | null, run: number) {
+    requestAnimationFrame(() => {
+      if (
+        target instanceof HTMLElement &&
+        target.matches(":disabled") &&
+        target.closest(".feed-composer")
+      )
+        target = target.closest(".feed-composer")!.querySelector("textarea");
+      const dialogs = document.querySelectorAll("dialog[open]");
+      const top = dialogs[dialogs.length - 1];
+      if (
+        current(run) &&
+        document.activeElement === document.body &&
+        target instanceof HTMLElement &&
+        target.isConnected &&
+        target.getClientRects().length &&
+        !target.matches(":disabled") &&
+        !target.closest("[inert]") &&
+        (!top || top.contains(target))
+      )
+        target.focus({ preventScroll: true });
+    });
+  }
   async function load(more = false) {
     if (!live.current || document.hidden) return;
+    const trigger = document.activeElement;
     const run = epoch.current,
       seq = ++reading.current,
       c = new AbortController();
@@ -417,7 +466,10 @@ function FeedSession({
         fail(reason);
     } finally {
       controllers.current.delete(c);
-      if (current(run) && seq === reading.current) setBusy(false);
+      if (current(run) && seq === reading.current) {
+        setBusy(false);
+        returnActionFocus(trigger, run);
+      }
     }
   }
   function remember(id: string | null) {
@@ -431,7 +483,7 @@ function FeedSession({
       return false;
     }
   }
-  function accept(value: Operation, id: string) {
+  async function accept(value: Operation, id: string) {
     if (value.requestId !== id) throw new Error("原动态请求仍待核对");
     if (["unknown", "running", "admitted"].includes(value.state)) {
       setNotice("原请求尚待核对，不会自动重发");
@@ -476,7 +528,6 @@ function FeedSession({
         kind: value.kind,
         sources: value.sources,
       });
-      setHistory(true);
     }
     if (value.kind === "test_source" || value.kind === "source_test")
       setTestResult(value.data ?? value.result ?? value);
@@ -501,6 +552,13 @@ function FeedSession({
           setDiscussionError("本人消息已保存；当前未生成讨论回复");
       }
       if (
+        result.id === selectedId.current &&
+        typeof result.liked === "boolean" &&
+        typeof result.hidden === "boolean" &&
+        typeof result.revision === "number"
+      )
+        setSelected(result as Post);
+      if (
         typeof result.name === "string" &&
         typeof result.revision === "number" &&
         "image" in result
@@ -516,18 +574,21 @@ function FeedSession({
         if (result.id !== groupId || result.mode !== "people") setAuthor("");
         setGroupId(result.id);
         setNewName("");
+        setCreating(false);
       }
       if (typeof result.jobId === "string")
         setJob({ id: result.jobId, state: String(result.state || "queued") });
     }
-    if (value.state === "completed" || value.state === "succeeded") void load();
+    if (value.state === "completed" || value.state === "succeeded")
+      await load();
   }
   async function mutate(
     path: string,
     method: string,
     body: Record<string, unknown> | FormData,
   ) {
-    if (busy || pending || !active || document.hidden) return;
+    if (busy || pending || !newsActive || document.hidden) return;
+    const trigger = document.activeElement;
     const id = requestId();
     if (!remember(id)) return;
     discussionPost.current = path.endsWith("/discussion")
@@ -563,7 +624,7 @@ function FeedSession({
           value.state === "completed"
         )
           setAuthor("");
-        accept(value, id);
+        await accept(value, id);
       }
     } catch (reason) {
       if (current(run)) {
@@ -574,7 +635,7 @@ function FeedSession({
         ) {
           try {
             const known = await api<Operation>(base + "/operations/" + id);
-            if (current(run)) accept(known, id);
+            if (current(run)) await accept(known, id);
           } catch (lookup) {
             if (current(run)) {
               if (lookup instanceof ApiError && lookup.status === 404) {
@@ -590,18 +651,21 @@ function FeedSession({
         }
       }
     } finally {
-      if (current(run)) setBusy(false);
+      if (current(run)) {
+        setBusy(false);
+        returnActionFocus(trigger, run);
+      }
     }
   }
   async function query() {
-    if (!pending || busy || !active || document.hidden) return;
+    if (!pending || busy || !newsActive || document.hidden) return;
     const id = pending,
       run = epoch.current;
     setBusy(true);
     setError("");
     try {
       const value = await api<Operation>(base + "/operations/" + id);
-      if (current(run)) accept(value, id);
+      if (current(run)) await accept(value, id);
     } catch (reason) {
       if (current(run)) fail(reason);
     } finally {
@@ -636,7 +700,7 @@ function FeedSession({
     }
   }
   async function readTargets() {
-    if (busy || !active || document.hidden) return;
+    if (busy || !newsActive || document.hidden) return;
     const run = epoch.current,
       c = new AbortController();
     controllers.current.add(c);
@@ -680,14 +744,36 @@ function FeedSession({
       if (current(run)) setBusy(false);
     }
   }
+  function closePost() {
+    const trigger = dialogTrigger.current;
+    if (!trigger?.isConnected) {
+      const row = [
+        ...document.querySelectorAll<HTMLElement>("[data-feed-post-id]"),
+      ].find((item) => item.dataset.feedPostId === selectedId.current);
+      const key = trigger?.getAttribute("aria-label") || trigger?.textContent;
+      dialogTrigger.current =
+        [...(row?.querySelectorAll<HTMLElement>("button") || [])].find(
+          (item) =>
+            (item.getAttribute("aria-label") || item.textContent) === key,
+        ) || document.querySelector<HTMLElement>("[data-feed-refresh]");
+    }
+    postRead.current++;
+    selectedId.current = null;
+    setSelected(null);
+    setMessages([]);
+    setQuestion("");
+    setDiscussionError("");
+  }
   async function showPost(post: Post) {
     if (busy || document.hidden) return;
+    setNotice("");
     selectedId.current = post.id;
     const sequence = ++postRead.current;
     setSelected(post);
     setMessages([]);
     setQuestion("");
     setDiscussionError("");
+    void readTargets();
     const run = epoch.current,
       c = new AbortController();
     controllers.current.add(c);
@@ -797,7 +883,8 @@ function FeedSession({
     }
   }
   async function cancelJob(id: string, reply = false) {
-    if (busy || pending || cancelPending || !active || document.hidden) return;
+    if (busy || pending || cancelPending || !newsActive || document.hidden)
+      return;
     const run = epoch.current;
     setBusy(true);
     setError("");
@@ -823,7 +910,7 @@ function FeedSession({
     }
   }
   async function original(pageId: string) {
-    if (busy || !active || document.hidden) return;
+    if (busy || !newsActive || document.hidden) return;
     const run = epoch.current,
       c = new AbortController();
     controllers.current.add(c);
@@ -854,7 +941,7 @@ function FeedSession({
     }
   }
   async function queryJobOperation(id: string, reply = false) {
-    if (busy || !active || document.hidden) return;
+    if (busy || !newsActive || document.hidden) return;
     const run = epoch.current;
     setBusy(true);
     try {
@@ -873,6 +960,7 @@ function FeedSession({
   }
   async function editProfile() {
     if (busy) return;
+    setNotice("");
     const run = epoch.current;
     setBusy(true);
     setProfileOpen(true);
@@ -890,6 +978,7 @@ function FeedSession({
   }
   function editSettings() {
     if (!data?.group) return;
+    setNotice("");
     setDraft({
       name: data.group.name,
       instructions: data.preferences.instructions,
@@ -899,7 +988,9 @@ function FeedSession({
       people: data.group.people,
       subscriptions: data.group.subscriptions,
     });
+    settingsAutofocus.current = true;
     setSettings(true);
+    void readTargets();
   }
   const sourceBusy = [job, replyJob].some(
     (item) =>
@@ -914,7 +1005,7 @@ function FeedSession({
       ].includes(item.state || item.status || "unknown") ||
         item.sources?.some((source) => source.state === "unknown")),
   );
-  const disabled = busy || !!pending || !active;
+  const disabled = busy || !!pending || !newsActive;
   const posts = (data?.posts || []).filter((post) =>
     filter === "hidden"
       ? post.hidden
@@ -924,30 +1015,75 @@ function FeedSession({
   );
   return (
     <section className="feed-page">
-      <div className="page-heading">
-        <h1>动态</h1>
-        <div className="feed-actions">
+      {workspaceSection === "news" && (
+        <div className="feed-identity">
           <button
-            className="button"
+            type="button"
+            className="feed-identity-button"
             disabled={disabled}
-            onClick={() => void load()}
+            onClick={(event) => {
+              dialogTrigger.current = event.currentTarget;
+              void editProfile();
+            }}
+            aria-label="编辑动态形象"
           >
-            读取列表
-          </button>
-          <button
-            className="button"
-            disabled={disabled || sourceBusy || !data?.group}
-            onClick={() =>
-              void mutate("/refresh", "POST", {
-                groupId: data!.group!.id,
-                groupRevision: data!.group!.revision,
-                ...(composeTarget ? { modelTargetId: composeTarget } : {}),
-              })
-            }
-          >
-            明确刷新来源
+            <span className="feed-mascot">
+              {ownedImage(data?.agent.image ?? null) ? (
+                <AgentImage src={ownedImage(data!.agent.image)!} />
+              ) : (
+                <Newspaper size={30} aria-hidden="true" />
+              )}
+            </span>
+            <span>{data?.agent.name || "动态"}</span>
           </button>
         </div>
+      )}
+      <div className="page-heading">
+        <h1>
+          {workspaceSection === "news" ? data?.group?.name || "动态" : "动态"}
+        </h1>
+        {workspaceSection === "news" && (
+          <div className="feed-header-actions">
+            <button
+              type="button"
+              className="icon-button"
+              disabled={disabled}
+              data-feed-refresh
+              aria-label="刷新已保留动态"
+              title="刷新已保留动态"
+              aria-busy={busy}
+              onClick={() => void load()}
+            >
+              <RefreshCw size={19} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              disabled={disabled}
+              aria-label="更新记录"
+              title="更新记录"
+              onClick={(event) => {
+                dialogTrigger.current = event.currentTarget;
+                void readJobs();
+              }}
+            >
+              <History size={19} />
+            </button>
+            <button
+              type="button"
+              className="icon-button feed-settings-trigger"
+              disabled={disabled || !data?.group}
+              aria-label="动态设置"
+              title="动态设置"
+              onClick={(event) => {
+                dialogTrigger.current = event.currentTarget;
+                editSettings();
+              }}
+            >
+              <SlidersHorizontal size={20} />
+            </button>
+          </div>
+        )}
       </div>
       {error && (
         <p className="error" role="alert">
@@ -959,7 +1095,7 @@ function FeedSession({
         <div className="feed-pending">
           <p role="status">原动态操作结果待核对</p>
           <code>{pending}</code>
-          <button disabled={busy || !active} onClick={() => void query()}>
+          <button disabled={busy || !newsActive} onClick={() => void query()}>
             查询原请求
           </button>
         </div>
@@ -983,53 +1119,64 @@ function FeedSession({
       </WorkspaceView>
 
       <WorkspaceView active={workspaceSection === "news"} label="资讯动态">
-        <div className="feed-toolbar">
-          <button
-            className="button"
-            disabled={disabled}
-            onClick={() => void readGroups()}
-          >
-            读取分组
-          </button>
-          <label>
-            分组
-            <select
-              value={groupId}
+        <nav className="feed-groups" aria-label="动态信息组">
+          {(data?.groups || [{ id: groupId, name: "动态" }]).map((group) => (
+            <button
+              type="button"
+              key={group.id}
+              aria-pressed={group.id === groupId}
               disabled={disabled}
-              onChange={(e) => {
+              onClick={() => {
+                if (group.id === groupId) return;
                 clear();
                 setAuthor("");
-                setGroupId(e.target.value);
+                setGroupId(group.id);
               }}
             >
-              {!data?.groups.some((group) => group.id === groupId) && (
-                <option value={groupId}>
-                  {groupId === "default" ? "默认分组" : "分组待核对"}
-                </option>
-              )}
-              {data?.groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              {group.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="feed-group-add"
+            aria-label="新建动态组"
+            title="新建动态组"
+            disabled={disabled}
+            onClick={(event) => {
+              dialogTrigger.current = event.currentTarget;
+              setNewName("");
+              setNewMode("news");
+              setNewPeople(["trump", "duan"]);
+              setCreating(true);
+            }}
+          >
+            <Plus size={17} />
+          </button>
+        </nav>
+        <div className="feed-filters">
           <label>
-            帖子
-            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-              <option value="all">未隐藏</option>
-              <option value="liked">已喜欢（当前已读范围）</option>
-              <option value="hidden">已隐藏（当前已读范围）</option>
+            <span className="sr-only">帖子筛选</span>
+            <select
+              aria-label="帖子筛选"
+              value={filter}
+              disabled={disabled}
+              onChange={(event) => setFilter(event.target.value)}
+            >
+              <option value="all">全部动态</option>
+              <option value="liked">已喜欢（已读范围）</option>
+              <option value="hidden">已隐藏（已读范围）</option>
             </select>
           </label>
           {data?.group?.mode === "people" && (
             <label>
-              人物
+              <span className="sr-only">人物筛选</span>
               <select
+                aria-label="人物筛选"
                 value={author}
-                onChange={(e) => {
+                disabled={disabled}
+                onChange={(event) => {
                   clear();
-                  setAuthor(e.target.value);
+                  setAuthor(event.target.value);
                 }}
               >
                 <option value="">本组人物</option>
@@ -1041,98 +1188,7 @@ function FeedSession({
               </select>
             </label>
           )}
-          <button
-            className="button"
-            disabled={disabled || !data?.group}
-            onClick={editSettings}
-          >
-            分组与个人偏好
-          </button>
         </div>
-        <details className="workspace-tools feed-tools">
-          <summary>来源与分组管理</summary>
-          <div className="feed-toolbar">
-            <button disabled={busy} onClick={() => void readTargets()}>
-              读取已安装来源
-            </button>
-            <label>
-              文章整理模型
-              <select
-                value={composeTarget}
-                disabled={disabled}
-                onChange={(event) => setComposeTarget(event.target.value)}
-              >
-                <option value="">
-                  不请求模型整理（保留RSS原文，个人指示不应用）
-                </option>
-                {modelTargets
-                  .filter((target) => target.purpose === "feed.compose")
-                  .map((target) => (
-                    <option key={target.id} value={target.id}>
-                      {target.model || target.id} ·{" "}
-                      {target.licenseRevision || "许可待核对"}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <button
-              className="button"
-              disabled={disabled}
-              onClick={() => void editProfile()}
-            >
-              动态形象
-            </button>
-            <button
-              className="button"
-              disabled={busy}
-              onClick={() => void readJobs()}
-            >
-              更新记录
-            </button>
-          </div>
-          <details>
-            <summary>新建分组</summary>
-            <div className="feed-fields">
-              <label>
-                名称
-                <input
-                  value={newName}
-                  maxLength={40}
-                  onChange={(e) => setNewName(e.target.value)}
-                  disabled={disabled}
-                />
-              </label>
-              <ModeFields
-                mode={newMode}
-                people={newPeople}
-                disabled={disabled}
-                onMode={setNewMode}
-                onPeople={setNewPeople}
-              />
-              <button
-                className="button"
-                disabled={disabled || !newName.trim()}
-                onClick={() =>
-                  void mutate("/groups", "POST", {
-                    name: newName,
-                    mode: newMode,
-                    people: newPeople,
-                  })
-                }
-              >
-                创建分组
-              </button>
-            </div>
-          </details>
-        </details>
-        {data?.agent && (
-          <div className="feed-agent">
-            {ownedImage(data.agent.image) && (
-              <AgentImage src={ownedImage(data.agent.image)!} />
-            )}
-            <strong>{data.agent.name}</strong>
-          </div>
-        )}
         {data?.peopleSources?.map(
           (source) =>
             source.error && (
@@ -1149,9 +1205,13 @@ function FeedSession({
             description="可以切换分组或筛选条件，已保留的来源不会被改写。"
           />
         )}
-        <div className="feed-list">
+        <div className="feed-list" role="feed" aria-busy={busy}>
           {posts.map((post) => (
-            <article key={post.id} className="feed-post">
+            <article
+              key={post.id}
+              className="feed-post"
+              data-feed-post-id={post.id}
+            >
               <div className="feed-post-avatar" aria-hidden="true">
                 {post.original ? (
                   post.original.person.name.slice(0, 1)
@@ -1172,30 +1232,47 @@ function FeedSession({
                       </div>
                     )}
                     <h2>
-                      <button onClick={() => void showPost(post)}>
+                      <button
+                        onClick={(event) => {
+                          dialogTrigger.current = event.currentTarget;
+                          void showPost(post);
+                        }}
+                      >
                         {post.title}
                       </button>
                     </h2>
                   </div>
+                  <time
+                    dateTime={
+                      feedTimestamp(post.publishedAt, post.createdAt).dateTime
+                    }
+                    title={
+                      feedTimestamp(post.publishedAt, post.createdAt).title
+                    }
+                  >
+                    {feedTimestamp(post.publishedAt, post.createdAt).text}
+                  </time>
                   <button
                     className="feed-more"
                     aria-label={"查看“" + post.title + "”原文与来源"}
-                    onClick={() => void showPost(post)}
+                    onClick={(event) => {
+                      dialogTrigger.current = event.currentTarget;
+                      void showPost(post);
+                    }}
                   >
                     <Ellipsis size={20} />
                   </button>
                 </div>
-                <time>
-                  {post.publishedAt || "发布时间未知"}
-                  {!post.publishedAt && " · 收录 " + post.createdAt}
-                </time>
                 {post.segments.map((segment, index) => (
                   <p key={index}>
                     {segment.text}
                     {segment.sourceId && (
                       <button
                         className="feed-source-link"
-                        onClick={() => void showPost(post)}
+                        onClick={(event) => {
+                          dialogTrigger.current = event.currentTarget;
+                          void showPost(post);
+                        }}
                       >
                         {segment.linkText || "查看来源"}
                       </button>
@@ -1256,27 +1333,18 @@ function FeedSession({
                       size={17}
                       fill={post.liked ? "currentColor" : "none"}
                     />
-                    {post.liked ? "已喜欢" : "喜欢"}
+                    <span className="sr-only">
+                      {post.liked ? "取消喜欢" : "喜欢"}
+                    </span>
                   </button>
                   <button
-                    disabled={disabled}
-                    onClick={() =>
-                      void mutate(
-                        "/posts/" + encodeURIComponent(post.id),
-                        "PUT",
-                        {
-                          revision: post.revision,
-                          hidden: !post.hidden,
-                        },
-                      )
-                    }
+                    onClick={(event) => {
+                      dialogTrigger.current = event.currentTarget;
+                      void showPost(post);
+                    }}
                   >
-                    <EyeOff size={17} />
-                    {post.hidden ? "恢复显示" : "隐藏"}
-                  </button>
-                  <button onClick={() => void showPost(post)}>
                     <MessageCircle size={17} />
-                    原文与讨论
+                    讨论
                   </button>
                 </div>
               </div>
@@ -1322,222 +1390,381 @@ function FeedSession({
             }
           />
         )}
-        {history && (
-          <details open>
-            <summary>更新记录</summary>
-            {jobs.map((item) => (
-              <JobView
-                key={item.id}
-                job={item}
-                busy={busy}
-                onRead={() => void readJob(item.id, item.kind === "discussion")}
-                onCancel={() =>
-                  void cancelJob(item.id, item.kind === "discussion")
-                }
-                cancelBlocked={!!cancelPending || !!pending}
-                onOriginal={original}
-                onQuery={
-                  item.requestId
-                    ? () =>
-                        void queryJobOperation(
-                          item.requestId!,
-                          item.kind === "discussion",
-                        )
-                    : undefined
-                }
-              />
-            ))}
-            {jobsCursor && (
-              <button disabled={busy} onClick={() => void readJobs(true)}>
-                读取更早任务
-              </button>
-            )}
-          </details>
-        )}
       </WorkspaceView>
-
-      {settings && data?.group && (
-        <Dialog title="分组与个人偏好" onClose={() => setSettings(false)}>
+      {history && (
+        <Dialog
+          title="更新记录"
+          className="feed-dialog"
+          returnFocusRef={dialogTrigger}
+          onClose={() => setHistory(false)}
+        >
+          {!jobs.length &&
+            (busy ? (
+              <p role="status">正在读取更新记录…</p>
+            ) : (
+              <WorkspaceEmpty title="暂无更新记录" />
+            ))}
+          {jobs.map((item) => (
+            <JobView
+              key={item.id}
+              job={item}
+              busy={busy}
+              onRead={() => void readJob(item.id, item.kind === "discussion")}
+              onCancel={() =>
+                void cancelJob(item.id, item.kind === "discussion")
+              }
+              cancelBlocked={!!cancelPending || !!pending}
+              onOriginal={original}
+              onQuery={
+                item.requestId
+                  ? () =>
+                      void queryJobOperation(
+                        item.requestId!,
+                        item.kind === "discussion",
+                      )
+                  : undefined
+              }
+            />
+          ))}
+          {jobsCursor && (
+            <button disabled={busy} onClick={() => void readJobs(true)}>
+              读取更早任务
+            </button>
+          )}
+        </Dialog>
+      )}
+      {creating && (
+        <Dialog
+          title="新建动态组"
+          className="feed-dialog feed-group-dialog"
+          returnFocusRef={dialogTrigger}
+          onClose={() => setCreating(false)}
+        >
           <div className="feed-fields">
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
             <label>
-              分组名称
+              组名称
               <input
-                value={draft.name}
+                data-dialog-autofocus
+                value={newName}
                 maxLength={40}
                 disabled={disabled}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder="例如：公司动态、名人动态"
               />
             </label>
-            <button
-              disabled={disabled}
-              onClick={() =>
-                void mutate(
-                  "/groups/" + encodeURIComponent(data.group!.id),
-                  "PUT",
-                  { name: draft.name, revision: data.group!.revision },
-                )
-              }
-            >
-              仅保存分组名称
-            </button>
             <ModeFields
-              mode={draft.mode}
-              people={draft.people}
+              mode={newMode}
+              people={newPeople}
               disabled={disabled}
-              onMode={(mode) => setDraft({ ...draft, mode })}
-              onPeople={(people) => setDraft({ ...draft, people })}
+              onMode={setNewMode}
+              onPeople={setNewPeople}
             />
-            <label>
-              个人编辑指示
-              <textarea
-                value={draft.instructions}
-                maxLength={10000}
-                disabled={disabled}
-                onChange={(e) =>
-                  setDraft({ ...draft, instructions: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={draft.enabled}
-                disabled={disabled}
-                onChange={(e) =>
-                  setDraft({ ...draft, enabled: e.target.checked })
-                }
-              />
-              明确启用定时更新
-            </label>
-            <label>
-              间隔分钟
-              <input
-                type="number"
-                min="5"
-                max="10080"
-                value={draft.intervalMinutes}
-                disabled={disabled}
-                onChange={(e) =>
-                  setDraft({ ...draft, intervalMinutes: e.target.value })
-                }
-              />
-            </label>
-            <button disabled={busy} onClick={() => void readTargets()}>
-              读取已安装订阅来源
-            </button>
-            {!targets.length && (
-              <p>当前未读到可用订阅来源；不会自动安装或外取</p>
-            )}
-            <label>
-              测试来源
-              <select
-                value={testTarget}
-                disabled={disabled}
-                onChange={(e) => setTestTarget(e.target.value)}
+            <div className="feed-modal-actions">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setCreating(false)}
               >
-                <option value="">选择已安装来源</option>
-                {targets
-                  .filter((target) => target.provider === "rss-atom")
-                  .map((target) => (
-                    <option key={target.id} value={target.id}>
-                      {target.name} · {target.provider} ·{" "}
-                      {target.licenseRevision}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <button
-              disabled={disabled || sourceBusy || !testTarget}
-              onClick={() =>
-                void mutate("/subscriptions/test", "POST", {
-                  targetId: testTarget,
-                })
-              }
-            >
-              明确读取测试一次（不加入文章）
-            </button>
-            {testResult !== null && <OperationDetails value={testResult} />}
-            <div>
-              {targets.map((target) => (
-                <label key={target.id}>
-                  <input
-                    type="checkbox"
+                取消
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={disabled || !newName.trim()}
+                onClick={() =>
+                  void mutate("/groups", "POST", {
+                    name: newName,
+                    mode: newMode,
+                    people: newPeople,
+                  })
+                }
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+      {settings && data?.group && (
+        <Dialog
+          title="动态设置"
+          className="feed-dialog feed-settings-dialog"
+          returnFocusRef={dialogTrigger}
+          onClose={() => setSettings(false)}
+        >
+          <div className="feed-fields">
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {notice && <p role="status">{notice}</p>}
+            <section className="feed-config-section">
+              <div className="feed-section-heading">
+                <h3>信息组</h3>
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={busy}
+                  aria-label="重新读取分组"
+                  onClick={() => void readGroups()}
+                >
+                  <RefreshCw size={17} />
+                </button>
+              </div>
+              <label>
+                分组名称
+                <input
+                  value={draft.name}
+                  data-dialog-autofocus
+                  maxLength={40}
+                  disabled={disabled}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
+              </label>
+              <ModeFields
+                mode={draft.mode}
+                people={draft.people}
+                disabled={disabled}
+                onMode={(mode) => setDraft({ ...draft, mode })}
+                onPeople={(people) => setDraft({ ...draft, people })}
+              />
+            </section>
+            <section className="feed-config-section">
+              <h3>内容与更新</h3>
+              {draft.mode === "news" && (
+                <label>
+                  个人编辑指示
+                  <textarea
+                    value={draft.instructions}
+                    maxLength={10000}
                     disabled={disabled}
-                    checked={draft.subscriptions.some(
-                      (source) => source.url === target.url,
-                    )}
                     onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        subscriptions: e.target.checked
-                          ? [
-                              ...draft.subscriptions.filter(
-                                (source) => source.url !== target.url,
-                              ),
-                              { name: target.name, url: target.url },
-                            ]
-                          : draft.subscriptions.filter(
-                              (source) => source.url !== target.url,
-                            ),
-                      })
+                      setDraft({ ...draft, instructions: e.target.value })
                     }
                   />
-                  {target.name} · 到期 {target.expiresAt}
                 </label>
-              ))}
-              {draft.subscriptions
-                .filter(
-                  (source) =>
-                    !targets.some((target) => target.url === source.url),
-                )
-                .map((source) => (
-                  <div key={source.url}>
-                    <span>{source.name} · 未匹配当前已安装来源</span>
-                    <button
+              )}
+              <div className="feed-update-setting">
+                <span>自动更新动态</span>
+                <button
+                  type="button"
+                  className="appearance-switch"
+                  role="switch"
+                  aria-label="自动更新动态"
+                  aria-checked={draft.enabled}
+                  disabled={disabled}
+                  onClick={() =>
+                    setDraft({ ...draft, enabled: !draft.enabled })
+                  }
+                >
+                  <span className="appearance-switch-track" aria-hidden="true">
+                    <span />
+                  </span>
+                </button>
+              </div>
+              <label>
+                间隔分钟
+                <input
+                  type="number"
+                  min={draft.mode === "people" ? "5" : "60"}
+                  max="1440"
+                  value={draft.intervalMinutes}
+                  disabled={disabled}
+                  onChange={(e) =>
+                    setDraft({ ...draft, intervalMinutes: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                文章整理模型
+                <select
+                  value={composeTarget}
+                  disabled={disabled}
+                  onChange={(event) => setComposeTarget(event.target.value)}
+                >
+                  <option value="">保留RSS原文，不请求模型整理</option>
+                  {modelTargets
+                    .filter((target) => target.purpose === "feed.compose")
+                    .map((target) => (
+                      <option key={target.id} value={target.id}>
+                        {target.name || target.model || target.id}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </section>
+            <section className="feed-config-section">
+              <div className="feed-section-heading">
+                <h3>订阅来源</h3>
+                <button
+                  type="button"
+                  className="icon-button"
+                  disabled={busy}
+                  aria-label="重新读取已安装来源"
+                  onClick={() => void readTargets()}
+                >
+                  <RefreshCw size={17} />
+                </button>
+              </div>
+              {!targets.length && (
+                <p>当前未读到可用订阅来源；不会自动安装或外取</p>
+              )}
+              <div>
+                {targets.map((target) => (
+                  <label className="feed-source-choice" key={target.id}>
+                    <input
+                      type="checkbox"
                       disabled={disabled}
-                      onClick={() =>
+                      checked={draft.subscriptions.some(
+                        (source) => source.url === target.url,
+                      )}
+                      onChange={(e) =>
                         setDraft({
                           ...draft,
-                          subscriptions: draft.subscriptions.filter(
-                            (item) => item.url !== source.url,
-                          ),
+                          subscriptions: e.target.checked
+                            ? [
+                                ...draft.subscriptions.filter(
+                                  (source) => source.url !== target.url,
+                                ),
+                                { name: target.name, url: target.url },
+                              ]
+                            : draft.subscriptions.filter(
+                                (source) => source.url !== target.url,
+                              ),
                         })
                       }
-                    >
-                      移除此订阅
-                    </button>
-                  </div>
+                    />
+                    {target.name} · 到期 {target.expiresAt}
+                  </label>
                 ))}
+                {draft.subscriptions
+                  .filter(
+                    (source) =>
+                      !targets.some((target) => target.url === source.url),
+                  )
+                  .map((source) => (
+                    <div key={source.url}>
+                      <span>{source.name} · 未匹配当前已安装来源</span>
+                      <button
+                        disabled={disabled}
+                        onClick={() =>
+                          setDraft({
+                            ...draft,
+                            subscriptions: draft.subscriptions.filter(
+                              (item) => item.url !== source.url,
+                            ),
+                          })
+                        }
+                      >
+                        移除此订阅
+                      </button>
+                    </div>
+                  ))}
+              </div>
+              <details className="feed-advanced">
+                <summary>单次来源测试</summary>{" "}
+                <label>
+                  测试来源
+                  <select
+                    value={testTarget}
+                    disabled={disabled}
+                    onChange={(e) => setTestTarget(e.target.value)}
+                  >
+                    <option value="">选择已安装来源</option>
+                    {targets
+                      .filter((target) => target.provider === "rss-atom")
+                      .map((target) => (
+                        <option key={target.id} value={target.id}>
+                          {target.name} · {target.provider} ·{" "}
+                          {target.licenseRevision}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button
+                  disabled={disabled || sourceBusy || !testTarget}
+                  onClick={() =>
+                    void mutate("/subscriptions/test", "POST", {
+                      targetId: testTarget,
+                    })
+                  }
+                >
+                  明确读取测试一次（不加入文章）
+                </button>
+                {testResult !== null && <OperationDetails value={testResult} />}
+              </details>
+            </section>
+            <section className="feed-config-section">
+              <h3>来源更新</h3>
+              <p className="muted">
+                保存设置仅登记偏好；读取外部来源需要单独发起。
+              </p>
+              <button
+                type="button"
+                disabled={disabled || sourceBusy || !data?.group}
+                onClick={() =>
+                  void mutate("/refresh", "POST", {
+                    groupId: data!.group!.id,
+                    groupRevision: data!.group!.revision,
+                    ...(composeTarget ? { modelTargetId: composeTarget } : {}),
+                  })
+                }
+              >
+                <RefreshCw size={16} /> 更新来源
+              </button>
+            </section>
+            <div className="feed-modal-actions">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setSettings(false)}
+              >
+                取消
+              </button>
+              <button
+                className="button primary"
+                disabled={disabled}
+                onClick={() =>
+                  void mutate(
+                    "/preferences?group=" + encodeURIComponent(groupId),
+                    "PUT",
+                    {
+                      ...draft,
+                      revision: data.preferences.revision,
+                      intervalMinutes: Number(draft.intervalMinutes),
+                    },
+                  )
+                }
+              >
+                保存设置
+              </button>
             </div>
-            <button
-              className="button primary"
-              disabled={disabled}
-              onClick={() =>
-                void mutate(
-                  "/preferences?group=" + encodeURIComponent(groupId),
-                  "PUT",
-                  {
-                    ...draft,
-                    revision: data.preferences.revision,
-                    intervalMinutes: Number(draft.intervalMinutes),
-                  },
-                )
-              }
-            >
-              保存偏好（不自动刷新）
-            </button>
           </div>
         </Dialog>
       )}
       {profileOpen && (
         <Dialog
           title="动态形象"
+          className="feed-dialog"
+          returnFocusRef={dialogTrigger}
           onClose={() => {
             setProfileOpen(false);
             setProfileFile(null);
             if (fileInput.current) fileInput.current.value = "";
           }}
         >
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          {notice && <p role="status">{notice}</p>}
           {profile ? (
             <div className="feed-fields">
               {ownedImage(profile.image) && (
@@ -1612,17 +1839,19 @@ function FeedSession({
       )}
       {selected && (
         <Dialog
-          title={selected.title}
-          onClose={() => {
-            postRead.current++;
-            selectedId.current = null;
-            setSelected(null);
-            setMessages([]);
-            setQuestion("");
-            setDiscussionError("");
-          }}
+          title="原文与讨论"
+          className="feed-dialog feed-discussion-dialog"
+          returnFocusRef={dialogTrigger}
+          onClose={closePost}
         >
           <article className="feed-plain-text">
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {notice && <p role="status">{notice}</p>}
+            <h3 className="feed-discussion-title">{selected.title}</h3>
             {selected.original && (
               <>
                 <h3>保留原文</h3>
@@ -1654,6 +1883,25 @@ function FeedSession({
             {selected.segments.map((segment, index) => (
               <p key={index}>{segment.text}</p>
             ))}
+            <div className="feed-post-options">
+              {" "}
+              <button
+                disabled={disabled}
+                onClick={() =>
+                  void mutate(
+                    "/posts/" + encodeURIComponent(selected.id),
+                    "PUT",
+                    {
+                      revision: selected.revision,
+                      hidden: !selected.hidden,
+                    },
+                  )
+                }
+              >
+                <EyeOff size={17} />
+                <span>{selected.hidden ? "恢复显示" : "隐藏"}</span>
+              </button>
+            </div>
             <details>
               <summary>来源与保留证据</summary>
               {selected.sources.map((source) => (
@@ -1709,24 +1957,50 @@ function FeedSession({
             )}
             <h3>仅此帖讨论</h3>
             {discussionError && <p role="alert">{discussionError}</p>}
-            {messages.map((message) => (
-              <div key={message.id}>
-                <strong>
-                  {message.role === "assistant" ? "帖子讨论回复" : "本人"}
-                </strong>
-                <p>{message.text}</p>
-                <small>{message.createdAt}</small>
-              </div>
-            ))}
+            <div
+              className="feed-discussion-log"
+              role="log"
+              aria-label="此帖讨论"
+            >
+              {!messages.length && <p className="muted">从这条动态聊起。</p>}
+              {messages.map((message) => (
+                <div
+                  className={`feed-message feed-message-${message.role}`}
+                  key={message.id}
+                >
+                  <strong>
+                    {message.role === "assistant" ? "帖子讨论回复" : "本人"}
+                  </strong>
+                  <p>{message.text}</p>
+                  <small>
+                    <time
+                      dateTime={message.createdAt}
+                      title={message.createdAt}
+                    >
+                      {feedDateTime(message.createdAt)}
+                    </time>
+                  </small>
+                </div>
+              ))}
+            </div>
             {!data?.capabilities?.discussion &&
               !modelTargets.some(
                 (target) => target.purpose === "feed.discussion",
               ) && <p>帖子讨论模型当前未明确可用；不会生成占位回复</p>}
-            <button disabled={busy} onClick={() => void readTargets()}>
-              读取已安装帖子回复模型
-            </button>
+            <div className="feed-section-heading">
+              <span className="muted">帖子回复来源</span>
+              <button
+                type="button"
+                className="icon-button"
+                disabled={busy}
+                aria-label="重新读取帖子回复模型"
+                onClick={() => void readTargets()}
+              >
+                <RefreshCw size={17} />
+              </button>
+            </div>
             <label>
-              帖子回复来源
+              <span className="sr-only">帖子回复来源</span>
               <select
                 value={modelTarget}
                 disabled={disabled}
@@ -1744,30 +2018,36 @@ function FeedSession({
                   ))}
               </select>
             </label>
-            <textarea
-              value={question}
-              maxLength={2000}
-              disabled={disabled}
-              onChange={(e) => setQuestion(e.target.value)}
-              aria-label="对此帖的讨论内容"
-            />
-            <button
-              disabled={
-                disabled || !question.trim() || (!!modelTarget && sourceBusy)
-              }
-              onClick={() =>
-                void mutate(
-                  "/posts/" + encodeURIComponent(selected.id) + "/discussion",
-                  "POST",
-                  {
-                    text: question,
-                    ...(modelTarget ? { modelTargetId: modelTarget } : {}),
-                  },
-                )
-              }
-            >
-              {modelTarget ? "明确请求此帖回复" : "保存本人帖子讨论"}
-            </button>
+            <div className="feed-composer">
+              <textarea
+                placeholder="聊聊这条动态…"
+                value={question}
+                maxLength={2000}
+                disabled={disabled}
+                onChange={(e) => setQuestion(e.target.value)}
+                aria-label="对此帖的讨论内容"
+              />
+              <button
+                disabled={
+                  disabled || !question.trim() || (!!modelTarget && sourceBusy)
+                }
+                onClick={() =>
+                  void mutate(
+                    "/posts/" + encodeURIComponent(selected.id) + "/discussion",
+                    "POST",
+                    {
+                      text: question,
+                      ...(modelTarget ? { modelTargetId: modelTarget } : {}),
+                    },
+                  )
+                }
+              >
+                <ArrowUp size={19} aria-hidden="true" />
+                <span className="sr-only">
+                  {modelTarget ? "明确请求此帖回复" : "保存本人帖子讨论"}
+                </span>
+              </button>
+            </div>
             <button disabled={busy} onClick={() => void readDiscussion()}>
               读取已有讨论
             </button>
@@ -1792,23 +2072,30 @@ function ModeFields({
 }) {
   return (
     <>
-      <label>
-        模式
-        <select
-          value={mode}
-          disabled={disabled}
-          onChange={(e) => onMode(e.target.value)}
-        >
-          <option value="news">文章动态</option>
-          <option value="people">人物原文</option>
-        </select>
-      </label>
+      <div className="feed-template-options" role="group" aria-label="动态模板">
+        {[
+          { value: "news", label: "文章动态", detail: "保留订阅原文与来源" },
+          { value: "people", label: "人物原文", detail: "关注人物公开发布" },
+        ].map((item) => (
+          <button
+            type="button"
+            key={item.value}
+            aria-pressed={mode === item.value}
+            disabled={disabled}
+            onClick={() => onMode(item.value)}
+          >
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+            {mode === item.value && <Check size={16} aria-hidden="true" />}
+          </button>
+        ))}
+      </div>
       {mode === "people" &&
         [
           ["trump", "特朗普"],
           ["duan", "段永平"],
         ].map(([id, label]) => (
-          <label key={id}>
+          <label className="feed-check-row" key={id}>
             <input
               type="checkbox"
               checked={people.includes(id)}
