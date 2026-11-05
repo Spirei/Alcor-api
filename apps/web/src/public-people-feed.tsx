@@ -132,6 +132,9 @@ function Panel({ active, expanded }: { active: boolean; expanded: boolean }) {
       live.current = false;
       epoch.current++;
       controller.current?.abort();
+      setBusy(false);
+      setData(null);
+      setSources(false);
       document.removeEventListener("visibilitychange", visibility);
     };
   }, [active, expanded, open, author]);

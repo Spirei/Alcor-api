@@ -1,31 +1,58 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
+import { RefreshCw } from "lucide-react";
+import { feedDateTime } from "./feed-display";
 import {
   legacyImportLabel,
+  requestObservationFilters,
+  requestObservationSearch,
   requestSnapshot,
   type RequestSnapshot,
 } from "./request-observation-state";
 
-export function RequestObservations() {
+export function RequestObservations({
+  expanded = false,
+  active = true,
+}: {
+  expanded?: boolean;
+  active?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  if (expanded)
+    return (
+      <section aria-label="请求观察">
+        <RequestDetails visible={active} />
+      </section>
+    );
   return (
     <details onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>接口请求</summary>
-      <RequestDetails visible={open} />
+      <RequestDetails visible={open && active} />
     </details>
   );
 }
 function RequestDetails({ visible }: { visible: boolean }) {
   const [data, setData] = useState<RequestSnapshot | null>(null),
-    [error, setError] = useState("");
-  const [period, setPeriod] = useState("today"),
-    [status, setStatus] = useState("all"),
-    [source, setSource] = useState("all"),
-    [method, setMethod] = useState("all"),
-    [query, setQuery] = useState("");
-  const [page, setPage] = useState(1),
-    [anchor, setAnchor] = useState(0),
-    [revision, setRevision] = useState(0),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const location = useLocation(),
+    navigate = useNavigate();
+  const { period, status, source, method, query, page, anchor } =
+    requestObservationFilters(location.search);
+  const update = (
+    patch: Partial<ReturnType<typeof requestObservationFilters>>,
+  ) =>
+    navigate(
+      {
+        pathname: location.pathname,
+        search: requestObservationSearch(location.search, patch),
+      },
+      { replace: true },
+    );
+  const updateRef = useRef(update);
+  updateRef.current = update;
+  const [revision, setRevision] = useState(0),
     [live, setLive] = useState(false);
   const [shown, setShown] = useState(!document.hidden);
   useEffect(() => {
@@ -43,10 +70,15 @@ function RequestDetails({ visible }: { visible: boolean }) {
     rAnchor: String(anchor),
   }).toString();
   useEffect(() => {
-    if (!visible || !shown) return;
+    if (!visible || !shown) {
+      setData(null);
+      setBusy(false);
+      return;
+    }
     let current = true;
     const controller = new AbortController();
     setError("");
+    setBusy(true);
     api<{ data: unknown }>(`/request-logs?${params}`, {
       signal: controller.signal,
     })
@@ -58,6 +90,9 @@ function RequestDetails({ visible }: { visible: boolean }) {
           setData(null);
           setError(cause.message);
         }
+      })
+      .finally(() => {
+        if (current) setBusy(false);
       });
     return () => {
       current = false;
@@ -67,9 +102,10 @@ function RequestDetails({ visible }: { visible: boolean }) {
   useEffect(() => {
     if (!visible || !shown || !live) return;
     const stream = new EventSource("/api/request-logs/events");
+    let current = true;
     const update = () => {
-      setAnchor(0);
-      setPage(1);
+      if (!current || document.hidden) return;
+      updateRef.current({ anchor: 0, page: 1 });
       setRevision((old) => old + 1);
     };
     stream.addEventListener("change", update);
@@ -78,12 +114,14 @@ function RequestDetails({ visible }: { visible: boolean }) {
       setLive(false);
       setError("实时连接已断开，请重新读取");
     };
-    return () => stream.close();
+    return () => {
+      current = false;
+      stream.close();
+    };
   }, [visible, shown, live]);
-  function reset(change: () => void) {
-    change();
-    setPage(1);
-    setAnchor(0);
+  function reset(patch: Partial<ReturnType<typeof requestObservationFilters>>) {
+    setData(null);
+    update({ ...patch, page: 1, anchor: 0 });
   }
   return (
     <div className="request-observations">
@@ -91,7 +129,7 @@ function RequestDetails({ visible }: { visible: boolean }) {
         <select
           aria-label="请求时间"
           value={period}
-          onChange={(event) => reset(() => setPeriod(event.target.value))}
+          onChange={(event) => reset({ period: event.target.value })}
         >
           {[
             ["today", "今天"],
@@ -106,7 +144,7 @@ function RequestDetails({ visible }: { visible: boolean }) {
         <select
           aria-label="请求结果"
           value={status}
-          onChange={(event) => reset(() => setStatus(event.target.value))}
+          onChange={(event) => reset({ status: event.target.value })}
         >
           {[
             ["all", "全部结果"],
@@ -123,7 +161,7 @@ function RequestDetails({ visible }: { visible: boolean }) {
         <select
           aria-label="请求来源"
           value={source}
-          onChange={(event) => reset(() => setSource(event.target.value))}
+          onChange={(event) => reset({ source: event.target.value })}
         >
           {[
             ["all", "全部来源"],
@@ -140,7 +178,7 @@ function RequestDetails({ visible }: { visible: boolean }) {
         <select
           aria-label="请求方法"
           value={method}
-          onChange={(event) => reset(() => setMethod(event.target.value))}
+          onChange={(event) => reset({ method: event.target.value })}
         >
           {[
             "all",
@@ -159,35 +197,58 @@ function RequestDetails({ visible }: { visible: boolean }) {
           ))}
         </select>
         <input
+          placeholder="查找接口模板"
           aria-label="查找接口模板"
           value={query}
           maxLength={120}
-          onChange={(event) => reset(() => setQuery(event.target.value))}
+          onChange={(event) => reset({ query: event.target.value })}
         />
         <button
-          className="button secondary small"
-          onClick={() => reset(() => setRevision((old) => old + 1))}
+          type="button"
+          className="icon-button"
+          disabled={busy}
+          aria-busy={busy}
+          aria-label="刷新请求观察"
+          onClick={() => {
+            reset({});
+            setRevision((old) => old + 1);
+          }}
         >
-          重新读取
+          <RefreshCw size={18} />
         </button>
-        <label>
-          <input
-            type="checkbox"
-            checked={live}
-            onChange={(event) => setLive(event.target.checked)}
-          />
-          实时
-        </label>
+        <div className="activity-live-setting">
+          <span>实时</span>
+          <button
+            type="button"
+            className="appearance-switch"
+            role="switch"
+            aria-label="实时请求观察"
+            aria-checked={live}
+            onClick={() => setLive((value) => !value)}
+          >
+            <span className="appearance-switch-track" aria-hidden="true">
+              <span />
+            </span>
+          </button>
+        </div>
       </div>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {!data && !error && <p role="status">正在读取请求观察…</p>}
       {data && (
         <>
-          <p role="status">{legacyImportLabel(data.legacyImport)}</p>
-          <p>
-            已观测 {data.summary.total} 次 · 错误 {data.summary.errors} 次 ·
-            服务端错误 {data.summary.serverErrors} 次 · 平均{" "}
-            {data.summary.averageMs.toFixed(1)} ms
-          </p>
+          <RequestObservationMetrics data={data} />
+          <details className="activity-scope-proof">
+            <summary>统计范围</summary>
+            <p>仅统计当前服务已保留的请求观察，不代表所有客户端或完整历史。</p>
+            <p>{legacyImportLabel(data.legacyImport)}</p>
+            <p>
+              汇总修订 {data.aggregateRevision} · 记录修订 {data.revision}
+            </p>
+          </details>
           {data.localCollector?.buffered > 0 && (
             <p role="status">请求记录正在写入</p>
           )}
@@ -195,9 +256,7 @@ function RequestDetails({ visible }: { visible: boolean }) {
             <p role="status">请求记录存储暂不可用，统计可能不完整</p>
           )}
           {data.rollupPending && (
-            <p role="status">
-              汇总处理中（{data.aggregateRevision}/{data.revision}）
-            </p>
+            <p role="status">统计汇总处理中，数值暂不展示。</p>
           )}
           {data.detailGap && <p role="status">该页部分明细已超过保留范围</p>}
           {data.lostBuffered > 0 && (
@@ -221,7 +280,7 @@ function RequestDetails({ visible }: { visible: boolean }) {
               <tbody>
                 {data.logs.map((row) => (
                   <tr key={row.id}>
-                    <td>{new Date(row.at).toLocaleString()}</td>
+                    <td>{feedDateTime(row.at)}</td>
                     <td>{row.path}</td>
                     <td>{row.method}</td>
                     <td>{row.source}</td>
@@ -238,8 +297,10 @@ function RequestDetails({ visible }: { visible: boolean }) {
               className="button secondary small"
               disabled={data.pagination.page <= 1}
               onClick={() => {
-                setAnchor(data.pagination.anchor);
-                setPage(data.pagination.page - 1);
+                update({
+                  anchor: data.pagination.anchor,
+                  page: data.pagination.page - 1,
+                });
               }}
             >
               上一页
@@ -252,8 +313,10 @@ function RequestDetails({ visible }: { visible: boolean }) {
               className="button secondary small"
               disabled={data.pagination.page * 20 >= data.pagination.total}
               onClick={() => {
-                setAnchor(data.pagination.anchor);
-                setPage(data.pagination.page + 1);
+                update({
+                  anchor: data.pagination.anchor,
+                  page: data.pagination.page + 1,
+                });
               }}
             >
               下一页
@@ -312,5 +375,30 @@ function RequestDetails({ visible }: { visible: boolean }) {
         </>
       )}
     </div>
+  );
+}
+
+export function RequestObservationMetrics({
+  data,
+}: {
+  data: Pick<RequestSnapshot, "summary" | "rollupPending">;
+}) {
+  return (
+    <dl className="activity-metrics request-metrics">
+      {[
+        { label: "已观测请求", value: data.summary.total },
+        { label: "错误", value: data.summary.errors },
+        { label: "服务端错误", value: data.summary.serverErrors },
+        {
+          label: "平均耗时",
+          value: `${data.summary.averageMs.toFixed(1)} ms`,
+        },
+      ].map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd>{data.rollupPending ? "待汇总" : item.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

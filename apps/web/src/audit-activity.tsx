@@ -1,7 +1,15 @@
 import "./audit-activity.css";
 import "./portfolio.css";
 import { DailyActivitySummary } from "./daily-activity-summary";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { RefreshCw, Search } from "lucide-react";
+import {
+  activitySelection,
+  activitySearch,
+  activityLabel,
+} from "./activity-presentation";
+import { Dialog } from "./dialog";
+import { feedDateTime } from "./feed-display";
 import { RequestObservations } from "./request-observations";
 import { useState } from "react";
 import type { Session } from "./api";
@@ -28,60 +36,124 @@ type Declaration = {
 };
 
 function ImportedActivity() {
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = useState(0),
+    [subpage, setSubpage] = useState(0);
   const { data, error, reload } = useResource<{
     items: Declaration[];
     hasMore: boolean;
     nextOffset: number | null;
   }>(`/activities/imported?offset=${offset}`);
+  const [selected, setSelected] = useState<Declaration | null>(null);
   return (
-    <details>
-      <summary>导入的旧活动声明</summary>
-      <p>这些记录来自本人导入原件，保留原时间与内容；平台执行审计单独展示。</p>
-      <button type="button" className="button secondary small" onClick={reload}>
-        重新读取
-      </button>
-      {error && <p role="alert">{error}</p>}
-      {data?.items.map((row) => (
-        <details key={row.id}>
-          <summary>
-            {String(row.original.created_at ?? "原时间未知")} ·{" "}
-            {String(row.original.action ?? "旧活动")}
-          </summary>
-          <p>
-            原编号 {row.originalId} · 原件 {row.sourceId}
-          </p>
-          <pre>{JSON.stringify(row.original, null, 2)}</pre>
-        </details>
-      ))}
-      {data && !data.items.length && <p>没有导入声明</p>}
-      {offset > 0 && (
+    <section className="activity-imported">
+      <div className="activity-section-heading">
+        <h2>本人导入的旧活动声明</h2>
         <button
           type="button"
-          onClick={() => setOffset(Math.max(0, offset - 200))}
+          className="icon-button"
+          aria-label="刷新旧活动声明"
+          onClick={reload}
         >
-          上一页
+          <RefreshCw size={18} />
         </button>
+      </div>
+      <p>这些记录来自本人导入原件，保留原时间与内容；平台执行审计单独展示。</p>
+      {error && <p role="alert">{error}</p>}
+      <div className="activity-log-card">
+        {data?.items.slice(subpage * 20, (subpage + 1) * 20).map((row) => (
+          <div className="activity-import-row" key={row.id}>
+            <button
+              type="button"
+              className="activity-entry-title"
+              onClick={() => setSelected(row)}
+            >
+              {activityLabel(String(row.original.action || "")) === "平台事件"
+                ? "旧活动声明"
+                : activityLabel(String(row.original.action || ""))}
+            </button>
+            <time>
+              {feedDateTime(
+                typeof row.original.created_at === "string"
+                  ? row.original.created_at
+                  : undefined,
+              )}
+            </time>
+          </div>
+        ))}
+      </div>
+      {selected && (
+        <Dialog
+          title="旧活动原件声明"
+          className="activity-proof-dialog"
+          onClose={() => setSelected(null)}
+        >
+          <div className="activity-proof">
+            <p>来源：{selected.source} · 本人导入声明</p>
+            <p>原编号 {selected.originalId}</p>
+            <p>原件 {selected.sourceId}</p>
+            <pre className="activity-original">
+              {JSON.stringify(selected.original, null, 2)}
+            </pre>
+          </div>
+        </Dialog>
       )}
-      {data?.hasMore && data.nextOffset !== null && (
-        <button type="button" onClick={() => setOffset(data.nextOffset!)}>
-          下一页
-        </button>
+      {data && !data.items.length && <p>没有导入声明</p>}
+      {data && (offset > 0 || data.items.length > 20 || data.hasMore) && (
+        <div className="workspace-pagination">
+          <button
+            type="button"
+            disabled={offset === 0 && subpage === 0}
+            onClick={() => {
+              if (subpage > 0) setSubpage((value) => value - 1);
+              else {
+                setOffset(Math.max(0, offset - 200));
+                setSubpage(9);
+              }
+            }}
+          >
+            上一页
+          </button>
+          <span>当前读取{data.items.length}条声明</span>
+          <button
+            type="button"
+            disabled={(subpage + 1) * 20 >= data.items.length && !data.hasMore}
+            onClick={() => {
+              if ((subpage + 1) * 20 < data.items.length)
+                setSubpage((value) => value + 1);
+              else if (data.nextOffset !== null) {
+                setOffset(data.nextOffset);
+                setSubpage(0);
+              }
+            }}
+          >
+            下一页
+          </button>
+        </div>
       )}
-    </details>
+    </section>
   );
 }
 
 export function ActivityPage({ session }: { session: Session }) {
-  const location = useLocation();
-  const { data, error, reload } = useResource<Activity>("/activities");
-  const [system, setSystem] = useState(false);
-  const [query, setQuery] = useState("");
-  const [view, setView] = useState("activity"),
-    [page, setPage] = useState(0);
+  const location = useLocation(),
+    navigate = useNavigate();
+  const { data, error, reload, refreshing } =
+    useResource<Activity>("/activities");
+  const { view, query, page } = activitySelection(
+    location.search,
+    session.user.role === "admin",
+  );
+  const update = (nextView: string = view, nextPage = 0, nextQuery = query) =>
+    navigate(
+      {
+        pathname: location.pathname,
+        search: activitySearch(location.search, nextView, nextPage, nextQuery),
+      },
+      { replace: true },
+    );
   usePanelReady("/activity", Boolean(data));
   const rows =
-    (session.user.role === "admin" && system
+    (session.user.role === "admin" && view === "system"
       ? data?.systemLogs
       : data?.userLogs) || [];
   const filtered = rows.filter((row) =>
@@ -93,16 +165,27 @@ export function ActivityPage({ session }: { session: Session }) {
     <section className="audit-activity">
       <div className="page-heading">
         <h1>活动</h1>
-        <button className="button secondary" onClick={reload}>
-          重新读取
-        </button>
+        {(view === "user" || view === "system") && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="刷新活动"
+            disabled={refreshing}
+            onClick={reload}
+          >
+            <RefreshCw size={19} />
+          </button>
+        )}
       </div>
       <WorkspaceTabs
         label="活动视图"
         value={view}
-        onChange={setView}
+        onChange={(value) => update(value)}
         items={[
-          { value: "activity", label: "活动时间线" },
+          { value: "user", label: "本人活动" },
+          ...(session.user.role === "admin"
+            ? [{ value: "system", label: "系统活动" }]
+            : []),
           { value: "summary", label: "每日摘要" },
           { value: "imported", label: "旧活动声明" },
           ...(session.user.role === "admin"
@@ -126,56 +209,45 @@ export function ActivityPage({ session }: { session: Session }) {
         />
       </WorkspaceView>
       <WorkspaceView active={view === "requests"} label="请求观察">
-        {session.user.role === "admin" && <RequestObservations />}
+        {session.user.role === "admin" && (
+          <RequestObservations
+            key={JSON.stringify([
+              session.instance_id,
+              session.user.id,
+              session.user.role,
+              session.receipt_scope,
+              session.csrf,
+            ])}
+            expanded
+            active={view === "requests"}
+          />
+        )}
       </WorkspaceView>
-      <WorkspaceView active={view === "activity"} label="活动时间线">
+      <WorkspaceView
+        active={view === "user" || view === "system"}
+        label="活动时间线"
+      >
         <div className="activity-filters">
-          <div className="module-actions">
+          <label className="activity-search">
+            <Search size={17} aria-hidden="true" />
             <input
               aria-label="查找活动"
               placeholder="查找活动"
               value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(0);
-              }}
+              maxLength={200}
+              onChange={(event) => update(view, 0, event.target.value)}
             />
-          </div>
-          {session.user.role === "admin" && (
-            <div
-              className="audit-activity-range"
-              role="group"
-              aria-label="活动范围"
-            >
-              <button
-                type="button"
-                className="button secondary small"
-                aria-pressed={!system}
-                onClick={() => {
-                  setSystem(false);
-                  setPage(0);
-                }}
-              >
-                本人活动
-              </button>
-              <button
-                type="button"
-                className="button secondary small"
-                aria-pressed={system}
-                onClick={() => {
-                  setSystem(true);
-                  setPage(0);
-                }}
-              >
-                系统活动
-              </button>
-            </div>
-          )}
+          </label>
         </div>
         {error && <p role="alert">{error}</p>}
         {!data && !error && <p role="status">正在读取…</p>}
         {data && (
-          <ActivityTimeline rows={filtered} page={page} onPage={setPage} />
+          <ActivityTimeline
+            rows={filtered}
+            page={page}
+            onPage={(value) => update(view, value)}
+            showUser={view === "system"}
+          />
         )}
       </WorkspaceView>
     </section>

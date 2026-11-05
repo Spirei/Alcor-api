@@ -106,3 +106,68 @@ export function legacyImportLabel(
   if (value.hourCells) parts.push(`小时汇总 ${value.hourCells} 格，不含时长`);
   return `已单独导入${parts.join("、")}，未计入本次汇总；历史是否完整尚未核对`;
 }
+
+export function requestObservationFilters(search: string) {
+  const p = new URLSearchParams(search);
+  const choice = (key: string, values: readonly string[], fallback: string) => {
+    const value = p.get(key);
+    return value && values.includes(value) ? value : fallback;
+  };
+  const integer = (key: string, fallback: number) => {
+    const raw = p.get(key) || "";
+    const value = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN;
+    return Number.isSafeInteger(value) && value >= fallback ? value : fallback;
+  };
+  return {
+    period: choice("rPeriod", ["today", "7d", "30d"], "today"),
+    status: choice(
+      "rStatus",
+      ["all", "success", "4xx", "5xx", "cancelled"],
+      "all",
+    ),
+    source: choice("rSource", ["all", "web", "ios", "app", "other"], "all"),
+    method: choice(
+      "rMethod",
+      [
+        "all",
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "HEAD",
+        "OPTIONS",
+        "OTHER",
+      ],
+      "all",
+    ),
+    query: (p.get("rQ") || "").slice(0, 120),
+    page: integer("rPage", 1),
+    anchor: integer("rAnchor", 0),
+  };
+}
+export function requestObservationSearch(
+  search: string,
+  patch: Partial<ReturnType<typeof requestObservationFilters>>,
+) {
+  const p = new URLSearchParams(search),
+    next = { ...requestObservationFilters(search), ...patch },
+    defaults = requestObservationFilters("");
+  for (const key of Object.keys(defaults)) {
+    const value = next[key as keyof typeof next];
+    const parameter = (
+      {
+        period: "rPeriod",
+        status: "rStatus",
+        source: "rSource",
+        method: "rMethod",
+        query: "rQ",
+        page: "rPage",
+        anchor: "rAnchor",
+      } as Record<string, string>
+    )[key];
+    if (value === defaults[key as keyof typeof defaults]) p.delete(parameter);
+    else p.set(parameter, String(value));
+  }
+  return p.toString();
+}

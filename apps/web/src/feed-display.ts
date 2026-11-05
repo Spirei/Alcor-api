@@ -14,8 +14,13 @@ const absolute = (value: number) =>
     hourCycle: "h23",
   }).format(value);
 
-export function feedDateTime(raw: string | null | undefined) {
-  const value = timestamp(raw);
+export function feedDateTime(raw: string | number | null | undefined) {
+  const value =
+    typeof raw === "number"
+      ? Number.isFinite(new Date(raw).getTime())
+        ? raw
+        : null
+      : timestamp(raw);
   return value === null ? "时间未知" : absolute(value);
 }
 

@@ -8,6 +8,9 @@ test("feed publication gaps never borrow collection dates", () => {
   assert.equal(unknown.dateTime, undefined);
   assert.equal(feedDateTime("2026-11-04T16:00:00Z"), "2026/11/5 00:00");
   assert.equal(feedDateTime(null), "时间未知");
+  assert.equal(feedDateTime(0), "1970/1/1 08:00");
+  for (const invalid of [Infinity, NaN, 1e20])
+    assert.equal(feedDateTime(invalid), "时间未知");
   assert.match(unknown.title, /2026\/11\/5 00:00/);
   for (const bad of ["invalid", "2026-11-05T12:00:00", "", null]) {
     assert.equal(feedTimestamp(bad, "invalid").text, "发布时间未知");
