@@ -2,7 +2,11 @@ import {
   watchRecordsPath,
   allDisplayedRecordsSelected,
 } from "./watch-display-state";
-import { PrivateAmount, MarketBadge } from "./financial-display";
+import {
+  PrivateAmount,
+  MarketBadge,
+  AmountVisibilityControl,
+} from "./financial-display";
 import { PortfolioAnalysis } from "./portfolio-analysis";
 import { WorkspaceTabs, WorkspaceView, WorkspaceEmpty } from "./workspace-ui";
 import {
@@ -656,7 +660,10 @@ function PortfolioSession({ session }: { session: Session }) {
   return (
     <section className="portfolio-page">
       <div className="page-heading">
-        <h1>资产记录</h1>
+        <div className="portfolio-page-title">
+          <h1>资产记录</h1>
+          <AmountVisibilityControl />
+        </div>
         <button
           className="icon-button"
           aria-label="刷新资产记录"

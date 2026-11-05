@@ -2063,7 +2063,7 @@ function Workspace({
             <PanelLeft size={20} />
           </button>
           <div className="topbar-end">
-            {["/portfolio", "/cards", "/fire", "/activity"].includes(
+            {["/cards", "/fire", "/activity"].includes(
               location.pathname,
             ) && <AmountVisibilityControl />}
             <button

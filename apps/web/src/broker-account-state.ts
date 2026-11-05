@@ -135,3 +135,42 @@ export function brokerCurrencyStatus(value: {
 }) {
   return value.complete ? "已核实" : value.opening ? "待核实" : "期初未登记";
 }
+
+/** Human labels keep the opaque account ID as the selector value, never infer a target by name. */
+export function brokerAccountLabels<
+  T extends {
+    id: string;
+    name: string;
+    account_kind: string;
+    currency: string;
+    currencies?: string[];
+  },
+>(accounts: T[]) {
+  const kinds: Record<string, string> = { real: "真实", simulated: "模拟" };
+  const base = (row: T) =>
+    [
+      row.name || "未命名账户",
+      kinds[row.account_kind] || "来源未核实",
+      (row.currencies || [row.currency]).filter(Boolean).join(" / "),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  const groups = new Map<string, T[]>();
+  for (const row of accounts) {
+    const label = base(row);
+    groups.set(label, [...(groups.get(label) || []), row]);
+  }
+  return new Map(
+    accounts.map((row) => {
+      const label = base(row),
+        siblings = groups.get(label)!;
+      return [
+        row.id,
+        label +
+          (siblings.length > 1
+            ? ` · 账户 ${siblings.findIndex((sibling) => sibling.id === row.id) + 1}`
+            : ""),
+      ];
+    }),
+  );
+}

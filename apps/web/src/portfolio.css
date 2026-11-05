@@ -171,3 +171,12 @@
   font-size: 12px;
   min-height: 32px;
 }
+
+.portfolio-page-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.portfolio-page-title > h1 {
+  margin: 0;
+}

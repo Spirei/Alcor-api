@@ -1,0 +1,84 @@
+.cash-overview {
+  border: 1px solid var(--edge);
+  border-radius: var(--panel-radius, 16px);
+  padding: var(--panel-padding, 22px);
+  margin-bottom: 24px;
+}
+.cash-currency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
+}
+.cash-currency-card {
+  padding: 18px;
+  background: var(--soft);
+  border-radius: 12px;
+  min-width: 0;
+}
+.cash-currency-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cash-currency-card header span,
+.cash-asof {
+  font-size: 11px;
+  color: var(--muted);
+}
+.cash-balance {
+  margin: 18px 0;
+  display: grid;
+  gap: 4px;
+  font-size: 24px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.cash-balance small {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.cash-balance-precise {
+  font-size: 18px;
+}
+.cash-currency-card dl {
+  margin: 0 0 12px;
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+}
+.cash-currency-card dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cash-currency-card dt {
+  color: var(--muted);
+}
+.cash-currency-card dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .cash-overview {
+    padding: 16px;
+  }
+}
+
+.cash-registered-note {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.cash-uncertain-note {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 12px 0;
+}
+.financial-ledger .ledger-account-picker {
+  max-width: 520px;
+  margin: 20px 0;
+}

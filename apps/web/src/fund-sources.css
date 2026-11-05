@@ -1,0 +1,142 @@
+.fund-sources-panel {
+  min-width: 0;
+}
+dialog.fund-sources-dialog {
+  width: min(1120px, calc(100vw - 32px));
+}
+.fund-sources-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.fund-sources-toolbar > div:first-child {
+  flex: 1;
+  min-width: 180px;
+}
+.fund-sources-toolbar p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+.fund-sources-panel .workspace-table {
+  width: 100%;
+  max-height: 340px;
+  overflow: auto;
+  margin: 18px 0;
+}
+.fund-sources-empty {
+  text-align: center !important;
+  color: var(--muted);
+  padding: 32px 16px !important;
+}
+.fund-source-form {
+  padding: 20px 0;
+  border: 0;
+  border-top: 1px solid var(--edge);
+  margin-top: 24px;
+  min-width: 0;
+}
+.fund-source-form legend {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 0 10px 0 0;
+}
+.fund-source-form .form-grid {
+  gap: 18px;
+  margin-top: 12px;
+}
+.fund-source-form label,
+.fund-sources-panel > label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+}
+.fund-source-form :is(input, select),
+.fund-sources-panel > label > input {
+  width: 100%;
+  min-height: 44px;
+  color: var(--ink);
+}
+.fund-sources-panel > label {
+  margin: 18px 0;
+}
+.fund-sources-panel > button {
+  margin-bottom: 16px;
+}
+.fund-sources-panel .portfolio-proof {
+  padding: 18px;
+  background: var(--soft);
+  border-radius: 14px;
+  margin: 20px 0;
+}
+.fund-sources-panel details {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--edge);
+  font-size: 12px;
+}
+.fund-sources-panel details > summary {
+  color: var(--muted);
+}
+.fund-sources-panel code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .fund-sources-panel .workspace-table table {
+    min-width: 0;
+    width: 100%;
+  }
+  .fund-sources-panel thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .fund-sources-panel tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "currency state" "time time" "source source" "amount amount" "delta delta" "actions actions";
+    gap: 10px 12px;
+    padding: 16px;
+    border-bottom: 1px solid var(--edge);
+  }
+  .fund-sources-panel.workspace-ui .workspace-table table tbody tr td {
+    padding: 0;
+    border: 0;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+  .fund-sources-panel tbody td:nth-child(1) { grid-area: time; color: var(--muted); font-size: 11px; }
+  .fund-sources-panel tbody td:nth-child(2) { grid-area: currency; font-weight: 600; }
+  .fund-sources-panel tbody td:nth-child(3) { grid-area: source; }
+  .fund-sources-panel tbody td:nth-child(4) { grid-area: amount; }
+  .fund-sources-panel tbody td:nth-child(5) { grid-area: delta; }
+  .fund-sources-panel tbody td:nth-child(6) { grid-area: state; color: var(--muted); text-align: right; font-size: 11px; }
+  .fund-sources-panel tbody td:nth-child(7) { grid-area: actions; display: flex; flex-wrap: wrap; gap: 8px; }
+  .fund-sources-panel td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 5px;
+  }
+  .fund-sources-panel tbody .fund-sources-empty { grid-column: 1 / -1; grid-row: auto; }
+  .fund-source-form .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .fund-sources-panel :is(input, select) {
+    font-size: 16px;
+  }
+  .fund-sources-toolbar .button {
+    min-height: 36px;
+    padding: 8px 12px;
+  }
+}

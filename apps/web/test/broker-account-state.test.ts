@@ -6,6 +6,7 @@ import {
   brokerCommand,
   currencyRemovalBlocked,
   brokerCurrencyStatus,
+  brokerAccountLabels,
   type BrokerAccount,
 } from "../src/broker-account-state.ts";
 const row: BrokerAccount = {
@@ -113,4 +114,37 @@ test("existing opening with unresolved source or actual fees is unknown, distinc
     }),
     "已核实",
   );
+});
+
+test("account selectors distinguish duplicate labels without exposing opaque identifiers", () => {
+  const rows = [
+    {
+      id: "private-opaque-a",
+      name: "同名账户",
+      account_kind: "real",
+      currency: "USD",
+      currencies: ["USD"],
+    },
+    {
+      id: "private-opaque-b",
+      name: "同名账户",
+      account_kind: "real",
+      currency: "USD",
+      currencies: ["USD"],
+    },
+    {
+      id: "private-opaque-c",
+      name: "同名账户",
+      account_kind: "simulated",
+      currency: "USD",
+      currencies: ["USD"],
+    },
+  ];
+  const labels = brokerAccountLabels(rows);
+  assert.equal(labels.get(rows[0].id), "同名账户 · 真实 · USD · 账户 1");
+  assert.equal(labels.get(rows[1].id), "同名账户 · 真实 · USD · 账户 2");
+  assert.equal(labels.get(rows[2].id), "同名账户 · 模拟 · USD");
+  for (const label of labels.values())
+    assert.ok(!label.includes("private-opaque"));
+  assert.equal(rows[1].id, "private-opaque-b");
 });

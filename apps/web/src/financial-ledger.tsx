@@ -1,6 +1,14 @@
+import { WorkspaceTabs } from "./workspace-ui";
+import { Settings2 } from "lucide-react";
 import { PrivateAmount } from "./financial-display";
 import { ImportedOrderDeclarations } from "./imported-order-declarations";
-import {TradeAttachmentsEditor,TradeAttachmentsSummary,attachmentCommand,emptyLeg,type Leg} from "./trade-attachments";
+import {
+  TradeAttachmentsEditor,
+  TradeAttachmentsSummary,
+  attachmentCommand,
+  emptyLeg,
+  type Leg,
+} from "./trade-attachments";
 import { OrderObservationPanel } from "./order-observations";
 import { OrderIntentEditor } from "./order-intents";
 import { TradeHistoryExchangePanel } from "./trade-history-exchange";
@@ -17,7 +25,10 @@ import { FundSourcesPanel } from "./fund-sources";
 import { CashOverviewPanel } from "./cash-overview";
 import { CashHistory } from "./cash-entries";
 import { cashCommand } from "./cash-flow-state";
-import { brokerCurrencyStatus } from "./broker-account-state";
+import {
+  brokerCurrencyStatus,
+  brokerAccountLabels,
+} from "./broker-account-state";
 import { financialSummary } from "./financial-view";
 
 type Kind = "cash" | "trade" | "order";
@@ -193,7 +204,8 @@ export function FinancialLedger({
   ) => Promise<boolean>;
 }) {
   const [kind, setKind] = useState<Kind>("cash");
-  const [fundsOpen,setFundsOpen] = useState(false);
+  const [fundsOpen, setFundsOpen] = useState(false);
+  const accountLabels = brokerAccountLabels(brokers || []);
   const [accountId, setAccountId] = useState("");
   const [recordId, setRecordId] = useState("");
   const [page, setPage] = useState(1),
@@ -228,8 +240,12 @@ export function FinancialLedger({
     note: "",
     confirmed: false,
   });
-  const [tradeLegs,setTradeLegs]=useState<Record<string,Leg>>({takeProfit:emptyLeg(),stopLoss:emptyLeg()});
-  const [attachmentSession,setAttachmentSession]=useState("REGULAR"),[attachmentTif,setAttachmentTif]=useState("day");
+  const [tradeLegs, setTradeLegs] = useState<Record<string, Leg>>({
+    takeProfit: emptyLeg(),
+    stopLoss: emptyLeg(),
+  });
+  const [attachmentSession, setAttachmentSession] = useState("REGULAR"),
+    [attachmentTif, setAttachmentTif] = useState("day");
   const [financingIntent, setFinancingIntent] = useState({
     confirmed: false,
     statement: "",
@@ -511,9 +527,12 @@ export function FinancialLedger({
           );
         if (kind === "trade") {
           if (!draft.occurredAt) throw new Error("请填写实际发生时间");
-          const attachments=draft.side!=="dividend"?attachmentCommand(tradeLegs,attachmentSession,attachmentTif):undefined;
+          const attachments =
+            draft.side !== "dividend"
+              ? attachmentCommand(tradeLegs, attachmentSession, attachmentTif)
+              : undefined;
           data = {
-            ...(attachments?{attachments}:{}),
+            ...(attachments ? { attachments } : {}),
             requestId: id,
             recordId: record.id,
             recordRevision: record.revision,
@@ -583,7 +602,12 @@ export function FinancialLedger({
         label,
       });
     } catch (e) {
-      if (active.current && epoch.current === run && proofDraftEpoch.current === draftRun) fail(e);
+      if (
+        active.current &&
+        epoch.current === run &&
+        proofDraftEpoch.current === draftRun
+      )
+        fail(e);
     } finally {
       if (active.current && epoch.current === run) setBusy(false);
     }
@@ -635,58 +659,97 @@ export function FinancialLedger({
     }));
   }
   return (
-    <div>
-      <div className="portfolio-actions">
-        <SelectMenu
-          label="账本视图"
-          value={kind}
-          onChange={(v) => {
-            setKind(v as Kind);
-            setEditing(false);
-            setDraft((d) => ({ ...d, confirmed: false, side: "buy" }));
-          }}
-          options={kinds}
-        />
-      </div>
+    <div className="financial-ledger">
+      <WorkspaceTabs
+        label="现金与交易"
+        value={kind}
+        disabled={busy || blocked}
+        onChange={(v) => {
+          setKind(v as Kind);
+          setEditing(false);
+          setProof(null);
+          setDraft((d) => ({ ...d, confirmed: false, side: "buy" }));
+        }}
+        items={kinds.map((item) => ({
+          value: item.value as Kind,
+          label: item.label,
+        }))}
+      />
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
-      {kind !== "cash" && <TradeHistoryExchangePanel session={session} recordId={recordId} generation={generation} onChanged={()=>setRefresh(value=>value+1)} onDenied={fail}/>}
+      {kind !== "cash" && (
+        <TradeHistoryExchangePanel
+          session={session}
+          recordId={recordId}
+          generation={generation}
+          onChanged={() => setRefresh((value) => value + 1)}
+          onDenied={fail}
+        />
+      )}
       {kind === "cash" ? (
         <>
-          <CashOverviewPanel session={session} generation={`${generation}:${refresh}`} onDenied={fail} />
-          <details onToggle={event=>setFundsOpen(event.currentTarget.open)}><summary>本人登记资金来源</summary><Activity mode={fundsOpen?"visible":"hidden"}><FundSourcesPanel session={session} accounts={brokers || []} generation={`${generation}:${refresh}`} onChanged={()=>setRefresh(value=>value+1)} /></Activity></details>
-          <SelectMenu
-            variant="field"
-            label="现金账户"
-            value={accountId}
-            onChange={(v) => {
-              setAccountId(v);
-              recordSnapshot.current = null;
-              setPage(1);
-              setRecordId("");
-              setFillOffset(0);
-              fillSnapshot.current = null;
-              setFills(null);
-              setProof(null);
-              setEditing(false);
-              setDraft((d) => ({
-                ...d,
-                currency: brokers?.find((b) => b.id === v)?.currency || "",
-                action: "",
-                openingBasis: "",
-              }));
-            }}
-            options={[
-              { value: "", label: "选择账户" },
-              ...(brokers || []).map((b) => ({
-                value: b.id,
-                label: `${b.name} · ${human[b.account_kind] || "来源未核实"} · ${b.id}`,
-              })),
-            ]}
+          <CashOverviewPanel
+            session={session}
+            generation={`${generation}:${refresh}`}
+            onDenied={fail}
           />
+          <div className="workspace-section-heading">
+            <h2>账户现金</h2>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="管理资金来源"
+              onClick={() => setFundsOpen(true)}
+            >
+              <Settings2 size={17} />
+            </button>
+          </div>
+          <Activity mode={fundsOpen ? "visible" : "hidden"}>
+            <Dialog title="资金来源" className="fund-sources-dialog" onClose={() => setFundsOpen(false)}>
+              <div className="dialog-content">
+                <FundSourcesPanel
+                  session={session}
+                  accounts={brokers || []}
+                  generation={`${generation}:${refresh}`}
+                  onChanged={() => setRefresh((v) => v + 1)}
+                />
+              </div>
+            </Dialog>
+          </Activity>
+          <div className="ledger-account-picker">
+            <SelectMenu
+              variant="field"
+              label="现金账户"
+              value={accountId}
+              onChange={(v) => {
+                setAccountId(v);
+                recordSnapshot.current = null;
+                setPage(1);
+                setRecordId("");
+                setFillOffset(0);
+                fillSnapshot.current = null;
+                setFills(null);
+                setProof(null);
+                setEditing(false);
+                setDraft((d) => ({
+                  ...d,
+                  currency: brokers?.find((b) => b.id === v)?.currency || "",
+                  action: "",
+                  openingBasis: "",
+                }));
+              }}
+              options={[
+                { value: "", label: "选择账户" },
+                ...(brokers || []).map((b) => ({
+                  value: b.id,
+                  label: accountLabels.get(b.id) || b.name,
+                })),
+              ]}
+            />
+          </div>
           {account && ["real", "simulated"].includes(account.account_kind) && (
             <FinancingPolicyPanel
               session={session}
@@ -716,18 +779,39 @@ export function FinancialLedger({
                   <tbody>
                     {cash.currencies.map((c) => (
                       <tr key={c.currency}>
-                        <td>{c.currency}{c.sourceOnly && <small>未配置原币观察</small>}</td>
                         <td>
-                          <PrivateAmount>{c.balance ?? "未知"}</PrivateAmount>
-                          {(!c.complete || c.officialObservation) && c.registeredBalance !== null && (
-                            <small>登记余额 <PrivateAmount>{c.registeredBalance}</PrivateAmount></small>
-                          )}
+                          {c.currency}
+                          {c.sourceOnly && <small>未配置原币观察</small>}
                         </td>
                         <td>
-                          {c.officialObservation ? <>
-                            官方账单 · {c.officialObservation.reportDate ? `截至 ${c.officialObservation.reportDate}` : "报告日期未知"}
-                            <small>{c.balance === null ? "报告余额未知" : "报告期末余额"} · 可提现金额未知</small>
-                          </> : brokerCurrencyStatus(c)}
+                          <PrivateAmount>{c.balance ?? "未知"}</PrivateAmount>
+                          {(!c.complete || c.officialObservation) &&
+                            c.registeredBalance !== null && (
+                              <small>
+                                登记余额{" "}
+                                <PrivateAmount>
+                                  {c.registeredBalance}
+                                </PrivateAmount>
+                              </small>
+                            )}
+                        </td>
+                        <td>
+                          {c.officialObservation ? (
+                            <>
+                              官方账单 ·{" "}
+                              {c.officialObservation.reportDate
+                                ? `截至 ${c.officialObservation.reportDate}`
+                                : "报告日期未知"}
+                              <small>
+                                {c.balance === null
+                                  ? "报告余额未知"
+                                  : "报告期末余额"}{" "}
+                                · 可提现金额未知
+                              </small>
+                            </>
+                          ) : (
+                            brokerCurrencyStatus(c)
+                          )}
                           {c.opening && <small>{c.opening.opening_at}</small>}
                         </td>
                       </tr>
@@ -855,27 +939,31 @@ export function FinancialLedger({
               下一页记录
             </button>
             {kind === "trade" && (
-            <button
-              className="button"
-              disabled={!record || blocked || busy}
-              onClick={() => {
-                setProof(null);
-                setDraft((value) => ({
-                  ...value,
-                  action: "",
-                  openingBasis: "",
-                  amount: "",
-                  currency: "",
-                  occurredAt: "",
-                  note: "",
-                }));
-                setTradeLegs({takeProfit:emptyLeg(),stopLoss:emptyLeg()});
-                setAttachmentSession("REGULAR");setAttachmentTif("day");
-                setEditing(true);
-              }}
-            >
-              {kind === "trade" ? "登记实际成交" : "建立内部预留"}
-            </button>
+              <button
+                className="button"
+                disabled={!record || blocked || busy}
+                onClick={() => {
+                  setProof(null);
+                  setDraft((value) => ({
+                    ...value,
+                    action: "",
+                    openingBasis: "",
+                    amount: "",
+                    currency: "",
+                    occurredAt: "",
+                    note: "",
+                  }));
+                  setTradeLegs({
+                    takeProfit: emptyLeg(),
+                    stopLoss: emptyLeg(),
+                  });
+                  setAttachmentSession("REGULAR");
+                  setAttachmentTif("day");
+                  setEditing(true);
+                }}
+              >
+                {kind === "trade" ? "登记实际成交" : "建立内部预留"}
+              </button>
             )}
           </div>
           {kind === "trade" && recordId && (
@@ -925,7 +1013,9 @@ export function FinancialLedger({
                             </small>
                           )}
                         </td>
-                        <td><PrivateAmount>{f.quantity}</PrivateAmount></td>
+                        <td>
+                          <PrivateAmount>{f.quantity}</PrivateAmount>
+                        </td>
                         <td>
                           <PrivateAmount>{f.price}</PrivateAmount> {f.currency}
                         </td>
@@ -933,15 +1023,19 @@ export function FinancialLedger({
                           <PrivateAmount>{f.amount}</PrivateAmount> {f.currency}
                         </td>
                         <td>
-                          <PrivateAmount>{f.fees === null
-                            ? "未知"
-                            : `${["rule_calculated", "owner_reconstructed"].includes(f.feeSource || "") ? "≈ " : ""}${f.fees}`}</PrivateAmount>{" "}
+                          <PrivateAmount>
+                            {f.fees === null
+                              ? "未知"
+                              : `${["rule_calculated", "owner_reconstructed"].includes(f.feeSource || "") ? "≈ " : ""}${f.fees}`}
+                          </PrivateAmount>{" "}
                           {f.currency}
                         </td>
                         <td>
-                          <PrivateAmount>{f.effectiveActive === false
-                            ? "已撤销有效影响"
-                            : (f.cash_delta ?? "未知")}</PrivateAmount>{" "}
+                          <PrivateAmount>
+                            {f.effectiveActive === false
+                              ? "已撤销有效影响"
+                              : (f.cash_delta ?? "未知")}
+                          </PrivateAmount>{" "}
                           {f.settlement_currency}
                         </td>
                       </tr>
@@ -970,9 +1064,23 @@ export function FinancialLedger({
           )}
           {kind === "order" && (
             <>
-              <ImportedOrderDeclarations session={session} generation={generation+refresh} onDenied={fail}/>
-              <OrderIntentEditor session={session} generation={generation+refresh} onChanged={()=>setRefresh(value=>value+1)} onDenied={fail}/>
-              <OrderObservationPanel session={session} generation={generation+refresh} onChanged={()=>setRefresh(value=>value+1)} onDenied={fail}/>
+              <ImportedOrderDeclarations
+                session={session}
+                generation={generation + refresh}
+                onDenied={fail}
+              />
+              <OrderIntentEditor
+                session={session}
+                generation={generation + refresh}
+                onChanged={() => setRefresh((value) => value + 1)}
+                onDenied={fail}
+              />
+              <OrderObservationPanel
+                session={session}
+                generation={generation + refresh}
+                onChanged={() => setRefresh((value) => value + 1)}
+                onDenied={fail}
+              />
               <div className="portfolio-table">
                 <table>
                   <thead>
@@ -991,13 +1099,31 @@ export function FinancialLedger({
                       <tr key={o.id}>
                         <td>{o.recordId}</td>
                         <td>{human[o.side] || o.side}</td>
-                        <td><PrivateAmount>{o.quantity}</PrivateAmount></td>
                         <td>
-                          <PrivateAmount>{o.limitPrice}</PrivateAmount> {o.currency}
+                          <PrivateAmount>{o.quantity}</PrivateAmount>
                         </td>
-                        <td><PrivateAmount>{o.reservedCash}</PrivateAmount></td>
                         <td>
-                          {({cancelled:"已取消",expired:"已到期",filled:"已内部记账（非券商成交）",observed:"已观察条件，未代表券商成交",rejected:"已拒绝"} as Record<string,string>)[o.status] || (o.status === "pending" ? o.executionEnabled ? "内部执行已启用，非券商单" : "预留中 · 自动执行未启用" : o.status)}
+                          <PrivateAmount>{o.limitPrice}</PrivateAmount>{" "}
+                          {o.currency}
+                        </td>
+                        <td>
+                          <PrivateAmount>{o.reservedCash}</PrivateAmount>
+                        </td>
+                        <td>
+                          {(
+                            {
+                              cancelled: "已取消",
+                              expired: "已到期",
+                              filled: "已内部记账（非券商成交）",
+                              observed: "已观察条件，未代表券商成交",
+                              rejected: "已拒绝",
+                            } as Record<string, string>
+                          )[o.status] ||
+                            (o.status === "pending"
+                              ? o.executionEnabled
+                                ? "内部执行已启用，非券商单"
+                                : "预留中 · 自动执行未启用"
+                              : o.status)}
                         </td>
                         <td>
                           {o.status === "pending" && (
@@ -1118,10 +1244,21 @@ export function FinancialLedger({
                     />
                   </label>
                 )}
-                {draft.action === "reconcile_balance" && <>{field("evidenceReference", "本人余额核对依据")}{field("evidenceObservedAt", "实际观察时间", "datetime-local")}</>}
+                {draft.action === "reconcile_balance" && (
+                  <>
+                    {field("evidenceReference", "本人余额核对依据")}
+                    {field(
+                      "evidenceObservedAt",
+                      "实际观察时间",
+                      "datetime-local",
+                    )}
+                  </>
+                )}
                 {field(
                   "amount",
-                  draft.action === "reconcile_balance" ? "核对后的目标余额" : "金额",
+                  draft.action === "reconcile_balance"
+                    ? "核对后的目标余额"
+                    : "金额",
                 )}
               </>
             ) : (
@@ -1233,7 +1370,46 @@ export function FinancialLedger({
                 )}
               </>
             )}
-            {kind === "trade" && draft.side !== "dividend" && <><label>附加意图时段<select value={attachmentSession} onChange={e=>{proofDraftEpoch.current++;setProof(null);setAttachmentSession(e.target.value);}}><option value="REGULAR">常规</option><option value="EXTENDED">扩展</option></select></label><label>附加意图有效期<select value={attachmentTif} onChange={e=>{proofDraftEpoch.current++;setProof(null);setAttachmentTif(e.target.value);}}><option value="day">当日</option><option value="gtc">持续有效</option></select></label><TradeAttachmentsEditor legs={tradeLegs} onChange={value=>{proofDraftEpoch.current++;setProof(null);setTradeLegs(value);}}/></>}
+            {kind === "trade" && draft.side !== "dividend" && (
+              <>
+                <label>
+                  附加意图时段
+                  <select
+                    value={attachmentSession}
+                    onChange={(e) => {
+                      proofDraftEpoch.current++;
+                      setProof(null);
+                      setAttachmentSession(e.target.value);
+                    }}
+                  >
+                    <option value="REGULAR">常规</option>
+                    <option value="EXTENDED">扩展</option>
+                  </select>
+                </label>
+                <label>
+                  附加意图有效期
+                  <select
+                    value={attachmentTif}
+                    onChange={(e) => {
+                      proofDraftEpoch.current++;
+                      setProof(null);
+                      setAttachmentTif(e.target.value);
+                    }}
+                  >
+                    <option value="day">当日</option>
+                    <option value="gtc">持续有效</option>
+                  </select>
+                </label>
+                <TradeAttachmentsEditor
+                  legs={tradeLegs}
+                  onChange={(value) => {
+                    proofDraftEpoch.current++;
+                    setProof(null);
+                    setTradeLegs(value);
+                  }}
+                />
+              </>
+            )}
             {field("note", "备注")}
             {kind !== "cash" && (
               <label className="ledger-confirmation">
@@ -1276,13 +1452,15 @@ export function FinancialLedger({
               .map(([k, v]) => (
                 <div key={`input-${k}`}>
                   <dt>
-                    {k === "amount" && proof.kind === "cash" && proof.data.action === "reconcile_balance"
+                    {k === "amount" &&
+                    proof.kind === "cash" &&
+                    proof.data.action === "reconcile_balance"
                       ? "核对后的目标余额"
                       : k === "amount" && proof.kind === "trade"
-                      ? proof.data.side === "dividend"
-                        ? "股息总额（不含费用）"
-                        : "成交金额（不含费用）"
-                      : inputLabels[k]}
+                        ? proof.data.side === "dividend"
+                          ? "股息总额（不含费用）"
+                          : "成交金额（不含费用）"
+                        : inputLabels[k]}
                   </dt>
                   <dd>{human[String(v)] || text(v)}</dd>
                 </div>
@@ -1296,7 +1474,38 @@ export function FinancialLedger({
                 </div>
               ))}
           </dl>
-          {proof.kind === "cash" && Boolean(proof.value.reconciliationEvidence) && typeof proof.value.reconciliationEvidence === "object" && <dl className="portfolio-proof"><div><dt>本人观察依据</dt><dd>{text((proof.value.reconciliationEvidence as Record<string, unknown>).reference)}</dd></div><div><dt>观察时间</dt><dd>{text((proof.value.reconciliationEvidence as Record<string, unknown>).observedAt)}</dd></div></dl>}
+          {proof.kind === "cash" &&
+            Boolean(proof.value.reconciliationEvidence) &&
+            typeof proof.value.reconciliationEvidence === "object" && (
+              <dl className="portfolio-proof">
+                <div>
+                  <dt>本人观察依据</dt>
+                  <dd>
+                    {text(
+                      (
+                        proof.value.reconciliationEvidence as Record<
+                          string,
+                          unknown
+                        >
+                      ).reference,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>观察时间</dt>
+                  <dd>
+                    {text(
+                      (
+                        proof.value.reconciliationEvidence as Record<
+                          string,
+                          unknown
+                        >
+                      ).observedAt,
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            )}
           {Boolean(proof.value.financing) &&
             typeof proof.value.financing === "object" && (
               <dl className="portfolio-proof">
@@ -1334,7 +1543,9 @@ export function FinancialLedger({
                 </p>
               </details>
             )}
-          {proof.kind === "trade" && <TradeAttachmentsSummary value={proof.value.attachments}/>}
+          {proof.kind === "trade" && (
+            <TradeAttachmentsSummary value={proof.value.attachments} />
+          )}
           {proof.kind === "order" && <p>仅更新内部预留，自动执行未启用。</p>}
           <button
             className="button primary"
