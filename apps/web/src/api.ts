@@ -1,3 +1,4 @@
+import { httpFailureMessage } from "./http-failure";
 import { delayRead, readStarted } from "./transition-qa";
 import {
   apiSessionSnapshot,
@@ -100,7 +101,7 @@ export async function api<T>(
         response.status,
         data?.error?.message ||
           (typeof data?.error === "string" ? data.error : data?.message) ||
-          "服务连接失败，请稍后重试",
+          httpFailureMessage(response.status, data?.detail),
         data?.request_id || "",
         response.headers.get("X-Alcor-Reauthentication") === "required"
           ? "reauth_required"

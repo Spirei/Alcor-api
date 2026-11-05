@@ -20,7 +20,7 @@ function createStore() {
     (path, signal) => {
       if (!managementReadAllowed(path))
         throw new Error("内容暂时无法读取");
-      return api(path, { signal });
+      return api(path, { signal }, undefined, path === "/deployment" || path.startsWith("/deployment/") ? 30000 : 10000);
     },
     {
       isVisible: () => !document.hidden,

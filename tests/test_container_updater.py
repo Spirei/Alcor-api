@@ -376,3 +376,26 @@ def test_recovery_never_deletes_running_previous_container(setup):
     updater.run()
     assert receipts[-1]["status"] == "unknown"
     assert not any(call[0] == "DELETE" for call in docker.calls)
+
+
+def test_cleanup_failure_keeps_original_request_and_recovers_missing_old_container(setup):
+    m, updater, docker, release, receipts = setup
+    original = docker.request
+    def fail_delete(method, path, body=None, **kwargs):
+        if method == "DELETE":
+            raise OSError("lost cleanup response")
+        return original(method, path, body, **kwargs)
+    docker.request = fail_delete
+    updater.run()
+    assert not receipts and updater.pending.exists()
+    pending = json.loads(updater.pending.read_text())
+    assert pending["phase"] == "cleanup" and pending["result"] is None
+    original_inspect = docker.inspect
+    def inspect(identity):
+        if identity == docker.current["Id"]:
+            raise m.DockerError(404)
+        return original_inspect(identity)
+    docker.inspect = inspect
+    updater.run()
+    assert receipts == [{"id": release["id"], "status": "succeeded"}]
+    assert not updater.pending.exists()

@@ -68,6 +68,12 @@ class UnixConnection(http.client.HTTPConnection):
         self.sock.connect(self.path)
 
 
+class DockerError(OSError):
+    def __init__(self, status):
+        self.status = status
+        super().__init__("Docker API HTTP " + str(status))
+
+
 class Docker:
     def __init__(self, path="/var/run/docker.sock", auth="/config/config.json"):
         self.path, self.auth = path, Path(auth)
@@ -102,7 +108,7 @@ class Docker:
             )
             response = conn.getresponse()
             if response.status >= 300:
-                raise OSError("Docker API HTTP " + str(response.status))
+                raise DockerError(response.status)
             if pull:
                 budget = 32 * 1024 * 1024
                 while line := response.readline(65537):
@@ -287,9 +293,16 @@ class Updater:
                 if self.healthy(pending):
                     old_id = pending.get("old_id")
                     if old_id and old_id != pending.get("new_id"):
-                        old = self.docker.inspect(old_id)
+                        try:
+                            old = self.docker.inspect(old_id)
+                        except DockerError as exc:
+                            if exc.status != 404:
+                                raise
+                            old = None
                         expected = pending["name"].rstrip("/") + "-previous-" + pending["release"]["id"][:8]
-                        if (old["Id"] == old_id and old["Name"] == expected
+                        if old is None:
+                            pending["result"] = "succeeded"
+                        elif (old["Id"] == old_id and old["Name"] == expected
                             and not old["State"].get("Running")):
                             self.docker.request("DELETE", "/containers/" + old_id + "?v=false")
                             pending["result"] = "succeeded"
@@ -364,8 +377,14 @@ class Updater:
                 pending["result"] = "unknown"
             if pending["result"] == "succeeded":
                 # Never remove a volume or old image. Keep the private snapshot for reviewed recovery.
+                pending.update(result=None, phase="cleanup")
+                atomic(self.pending, pending)
                 self.docker.request("DELETE", "/containers/" + current["Id"] + "?v=false")
+                pending["result"] = "succeeded"
         except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
+            if pending["phase"] == "cleanup":
+                atomic(self.pending, pending)
+                return
             if not pending["result"]:
                 pending["result"] = "failed" if pending["phase"] == "claimed" else "unknown"
         atomic(self.pending, pending)
