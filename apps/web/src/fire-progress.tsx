@@ -4,12 +4,10 @@ import { PrivateAmount, useFinancialDisplay } from "./financial-display";
 export function FireProgress({
   progress,
   current,
-  target,
   currency,
 }: {
   progress: unknown;
   current: string;
-  target: string;
   currency: string;
 }) {
   const { visible } = useFinancialDisplay();
@@ -33,7 +31,7 @@ export function FireProgress({
       : 200;
   return (
     <section className="fire-progress-hero" aria-label="年度手填规划进度">
-      <div className="fire-progress-orb">
+      <div className="fire-progress-orb" data-known={value !== null}>
         <svg viewBox="0 0 200 200" aria-hidden="true">
           <defs>
             <clipPath id={`fire-clip-${id}`}>
@@ -59,12 +57,14 @@ export function FireProgress({
           {visible && value !== null && (
             <g clipPath={`url(#fire-clip-${id})`}>
               <path
-                d={`M0 ${height} Q50 ${height - 7} 100 ${height} T200 ${height} V200 H0Z`}
+                className="fire-orb-wave"
+                d={`M-200 ${height} Q-150 ${height - 7} -100 ${height} T0 ${height} T100 ${height} T200 ${height} T300 ${height} T400 ${height} V220 H-200Z`}
                 fill={`url(#fire-water-${id})`}
                 opacity=".82"
               />
               <path
-                d={`M0 ${height + 3} Q50 ${height + 10} 100 ${height + 3} T200 ${height + 3}`}
+                className="fire-orb-wave-back"
+                d={`M-200 ${height + 3} Q-150 ${height + 10} -100 ${height + 3} T0 ${height + 3} T100 ${height + 3} T200 ${height + 3} T300 ${height + 3} T400 ${height + 3}`}
                 fill="none"
                 stroke="#ffffff77"
               />
@@ -79,29 +79,30 @@ export function FireProgress({
           />
         </svg>
         <div className="fire-progress-label">
-          <small>年度规划进度</small>
-          <strong>
-            <PrivateAmount>{value === null ? "—" : `${raw}%`}</PrivateAmount>
+          <small>{currency || "币种未知"} · 当前手填资产</small>
+          <strong className="fire-orb-amount">
+            <PrivateAmount>
+              <span
+                title={current || undefined}
+                aria-label={current || undefined}
+              >
+                {current.length <= 14
+                  ? current || "—"
+                  : /^[+-]?\d{1,10}\.\d+$/.test(current)
+                    ? current.split(".")[0] +
+                      "." +
+                      current.split(".")[1].slice(0, 2) +
+                      "…"
+                    : current.slice(0, 10) + "…"}
+              </span>
+            </PrivateAmount>
           </strong>
+          <span className="fire-orb-percent">
+            <PrivateAmount>{value === null ? "—" : `${raw}%`}</PrivateAmount>
+          </span>
           <span>{value === null ? "进度待填写" : "手填年度记录"}</span>
         </div>
       </div>
-      <dl className="fire-progress-metrics">
-        <div>
-          <dt>当前资产 · 手填</dt>
-          <dd>
-            <PrivateAmount>{current || "—"}</PrivateAmount>
-            <small>{currency || "币种未知"}</small>
-          </dd>
-        </div>
-        <div>
-          <dt>目标资产 · 手填</dt>
-          <dd>
-            <PrivateAmount>{target || "—"}</PrivateAmount>
-            <small>{currency || "币种未知"}</small>
-          </dd>
-        </div>
-      </dl>
     </section>
   );
 }

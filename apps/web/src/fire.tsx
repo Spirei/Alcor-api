@@ -1,5 +1,8 @@
 import { PrivateAmount } from "./financial-display";
 import { FireProgress } from "./fire-progress";
+import { FireObservations } from "./fire-observations";
+import { RefreshCw, Plus, Trash2 } from "lucide-react";
+import { WorkspaceEmpty } from "./workspace-ui";
 import {
   useCallback,
   useEffect,
@@ -35,18 +38,6 @@ const base = "/fire-settings";
 type Snapshot = { fire: Fire; revision: number };
 const validId = (id: string) =>
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id);
-function dateLabel(value: unknown) {
-  if (typeof value !== "string" || !Number.isFinite(Date.parse(value)))
-    return "时间待核对";
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 export function FireAnnualTable({
   rows,
   year,
@@ -74,7 +65,11 @@ export function FireAnnualTable({
                 {field.label}
               </th>
             ))}
-            <th scope="col">操作</th>
+            {editable && (
+              <th scope="col">
+                <span className="sr-only">操作</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -108,25 +103,78 @@ export function FireAnnualTable({
                     )}
                   </td>
                 ))}
-                <td>
-                  {editable && y > year && !duplicate && (
-                    <button
-                      type="button"
-                      className="button secondary"
-                      disabled={disabled}
-                      aria-label={"移除 " + y + " 年"}
-                      onClick={() => onRemove(y)}
-                    >
-                      移除
-                    </button>
-                  )}
-                </td>
+                {editable && (
+                  <td>
+                    {editable && y > year && !duplicate && (
+                      <button
+                        type="button"
+                        className="icon-button"
+                        disabled={disabled}
+                        aria-label={"移除 " + y + " 年"}
+                        onClick={() => onRemove(y)}
+                      >
+                        <Trash2 size={16} aria-hidden="true" />
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
+  );
+}
+export function FirePlanFields({
+  value,
+  editing,
+  disabled,
+  onChange,
+}: {
+  value: (key: string) => string;
+  editing: boolean;
+  disabled: boolean;
+  onChange: (key: string, value: string) => void;
+}) {
+  const summary = [
+    "fireTargetBase",
+    "passiveInput",
+    "currentInput",
+    "yearsInput",
+  ];
+  const field = (key: string) => {
+    const item = fireFields.find((entry) => entry.key === key)!;
+    return (
+      <div className="fire-plan-field" key={key}>
+        <label htmlFor={editing ? `fire-field-${key}` : undefined}>
+          {item.label}
+        </label>
+        {editing ? (
+          <input
+            id={`fire-field-${key}`}
+            inputMode="decimal"
+            disabled={disabled}
+            value={value(key)}
+            onChange={(event) => onChange(key, event.target.value)}
+          />
+        ) : (
+          <strong data-long={value(key).length > 18 || undefined}>
+            <PrivateAmount>{value(key) || "—"}</PrivateAmount>
+          </strong>
+        )}
+      </div>
+    );
+  };
+  return (
+    <>
+      <div className="fire-summary-fields">{summary.map(field)}</div>
+      <div className="fire-parameter-fields">
+        {fireFields
+          .filter((item) => !summary.includes(item.key))
+          .map((item) => field(item.key))}
+      </div>
+    </>
   );
 }
 export function FirePage({
@@ -167,7 +215,9 @@ function FireSession({
     [journalReady, setJournalReady] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [changes, setChanges] = useState<FireChanges>(emptyFireChanges),
-    [newYear, setNewYear] = useState(String(year));
+    [newYear, setNewYear] = useState(String(year)),
+    [editing, setEditing] = useState(false),
+    [observationOpen, setObservationOpen] = useState(false);
   const [amount, setAmount] = useState(""),
     [usd, setUsd] = useState(""),
     [assetCurrency, setAssetCurrency] = useState("");
@@ -266,7 +316,6 @@ function FireSession({
     reading.current?.abort();
     reading.current = controller;
     setReady(false);
-    setSnapshot(null);
     try {
       const value = await api<Snapshot>(base, { signal: controller.signal });
       if (
@@ -308,12 +357,16 @@ function FireSession({
       releaseFireRequest(sessionStorage, scope, id);
       original.current = null;
       setPending(null);
-      if (operationKind.current === "plan") setChanges(emptyFireChanges());
+      if (operationKind.current === "plan") {
+        setChanges(emptyFireChanges());
+        setEditing(false);
+      }
+      if (operationKind.current === "asset") setObservationOpen(false);
       operationKind.current = null;
       rejected.current = undefined;
     }
     setLookup(receipt.requestId);
-    setNotice("已保存 · " + receipt.requestId);
+    setNotice("已保存");
     setError("");
     clearObservation();
     void load();
@@ -482,42 +535,83 @@ function FireSession({
     changes.added.length > 0 ||
     changes.removed.length > 0;
   const history = Array.isArray(fire.assetHistory) ? fire.assetHistory : [];
-  const [editing, setEditing] = useState(false);
   const currentRows = rows.filter((row) => Number(row.year) === year);
+  const changeField = (key: string, value: string) =>
+    setChanges((old) => ({
+      ...old,
+      fields: { ...old.fields, [key]: value },
+    }));
   return (
-    <section className="fire-planning-page">
+    <section
+      className="fire-planning-page"
+      data-motion-active={active && visible}
+    >
       <header className="page-heading">
         <h1>FIRE 规划</h1>
         <div className="fire-heading-actions">
+          {editing ? (
+            <>
+              <button
+                type="submit"
+                form="fire-plan-form"
+                className="button"
+                disabled={blocked || !dirty}
+              >
+                {busy ? "保存中…" : "保存规划"}
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy || !!pending}
+                onClick={() => {
+                  setChanges(emptyFireChanges());
+                  setEditing(false);
+                  setError("");
+                }}
+              >
+                取消
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="button secondary"
+              disabled={blocked}
+              onClick={() => setEditing(true)}
+            >
+              编辑规划
+            </button>
+          )}
           <button
             type="button"
-            className="button secondary"
-            disabled={blocked || (editing && dirty)}
-            onClick={() => setEditing(!editing)}
-          >
-            {editing ? "退出编辑" : "编辑规划"}
-          </button>
-          <button
-            className="button"
-            disabled={busy || locked}
+            className="icon-button"
+            aria-label="刷新规划"
+            disabled={busy || locked || !!pending || (editing && dirty)}
             onClick={() => void load()}
           >
-            重新读取
+            <RefreshCw size={17} aria-hidden="true" />
           </button>
         </div>
       </header>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      )}
       {notice && (
-        <p role="status" className="fire-request-id">
+        <p role="status" className="fire-notice">
           {notice}
         </p>
       )}
       {pending && (
         <div className="fire-pending" role="status">
-          <p>等待原操作结果</p>
-          <p className="fire-request-id">{pending}</p>
+          <div>
+            <strong>正在核对保存结果</strong>
+            <small className="fire-request-id">{pending}</small>
+          </div>
           <button
-            className="button"
+            type="button"
+            className="button secondary"
             disabled={busy || locked}
             onClick={() => void check()}
           >
@@ -528,18 +622,17 @@ function FireSession({
       <FireProgress
         progress={currentRows.length === 1 ? currentRows[0].progress : null}
         current={changes.fields.currentInput ?? fireText(fire.currentInput)}
-        target={changes.fields.fireTargetBase ?? fireText(fire.fireTargetBase)}
         currency={currency}
       />
       <form
+        id="fire-plan-form"
         onSubmit={(event) => {
           event.preventDefault();
           void save(false);
         }}
       >
-        <details className="workspace-tools" open={editing}>
-          <summary>规划参数</summary>
-          <div className="fire-currency">
+        <div className="fire-plan-currency">
+          {editing ? (
             <label>
               规划币种
               <SelectMenu
@@ -547,229 +640,141 @@ function FireSession({
                 value={currency}
                 options={options}
                 variant="field"
-                disabled={blocked || !editing || currencyLocked}
-                onChange={(value) =>
-                  setChanges((old) => ({
-                    ...old,
-                    fields: { ...old.fields, baseCurrency: value },
-                  }))
-                }
+                disabled={blocked || currencyLocked}
+                onChange={(value) => changeField("baseCurrency", value)}
               />
             </label>
-            {currencyLocked && (
-              <span>
-                已结束年度币种固定
-                {!fireText(fire.baseCurrency) ? " · 未知" : ""}
-              </span>
-            )}
-          </div>
-          <div className="fire-fields">
-            {fireFields.map((field) => (
-              <label key={field.key}>
-                {field.label}
-                <input
-                  inputMode="decimal"
-                  disabled={blocked || !editing}
-                  value={changes.fields[field.key] ?? fireText(fire[field.key])}
-                  onChange={(event) =>
-                    setChanges((old) => ({
-                      ...old,
-                      fields: {
-                        ...old.fields,
-                        [field.key]: event.target.value,
-                      },
-                    }))
-                  }
-                />
-              </label>
-            ))}
-          </div>
-          <p className="fire-source">
-            年度金额 · {currency || "币种未知"} · 手填
-          </p>
-        </details>
-        {Array.isArray(fire.tableRows) &&
-          fireRows(fire).length !== fire.tableRows.length && (
-            <p role="alert">部分年度记录待核对</p>
+          ) : (
+            <span>{currency || "币种待选择"} · 手填规划</span>
           )}
-        <FireAnnualTable
-          rows={rows}
-          editable={editing}
-          year={year}
-          disabled={blocked}
-          onChange={(y, key, value) =>
-            setChanges((old) => ({
-              ...old,
-              rows: { ...old.rows, [y]: { ...old.rows[y], [key]: value } },
-            }))
-          }
-          onRemove={(y) =>
-            setChanges((old) => ({
-              ...old,
-              added: old.added.filter((v) => v !== y),
-              removed: [...old.removed, y],
-            }))
-          }
-        />
-        {editing && (
-          <div className="fire-year-add">
-            <label>
-              年份
-              <input
-                inputMode="numeric"
-                value={newYear}
-                disabled={blocked}
-                onChange={(event) => setNewYear(event.target.value)}
-              />
-            </label>
-            <button
-              type="button"
-              className="button secondary"
-              disabled={blocked}
-              onClick={() => {
-                const y = Number(newYear);
-                if (
-                  !Number.isSafeInteger(y) ||
-                  y < year ||
-                  y > 9999 ||
-                  rows.some((row) => Number(row.year) === y)
-                ) {
-                  setError("年份重复或已结束");
-                  return;
-                }
-                setChanges((old) => ({ ...old, added: [...old.added, y] }));
-              }}
-            >
-              添加年份
-            </button>
-          </div>
-        )}
-        <div className="fire-actions">
-          <button className="button" disabled={blocked || !dirty}>
-            保存规划
-          </button>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={busy || !!pending || !dirty}
-            onClick={() => setChanges(emptyFireChanges())}
-          >
-            放弃草稿
-          </button>
+          {currencyLocked && <small>已结束年度的币种保持固定</small>}
         </div>
+        <FirePlanFields
+          value={(key) => changes.fields[key] ?? fireText(fire[key])}
+          editing={editing}
+          disabled={blocked}
+          onChange={changeField}
+        />
+        <section className="fire-annual-section" aria-label="年度手填记录">
+          <header className="fire-section-heading">
+            <div>
+              <h2>年度记录</h2>
+              <p>{currency || "币种未知"} · 手填原值，已结束年度不可修改</p>
+            </div>
+            {editing && (
+              <div className="fire-year-add">
+                <label>
+                  <span className="sr-only">年份</span>
+                  <input
+                    aria-label="年份"
+                    inputMode="numeric"
+                    value={newYear}
+                    disabled={blocked}
+                    onChange={(event) => setNewYear(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={blocked}
+                  onClick={() => {
+                    const y = Number(newYear);
+                    if (
+                      !Number.isSafeInteger(y) ||
+                      y < year ||
+                      y > 9999 ||
+                      rows.some((row) => Number(row.year) === y)
+                    ) {
+                      setError("年份重复或已结束");
+                      return;
+                    }
+                    setError("");
+                    setChanges((old) => ({ ...old, added: [...old.added, y] }));
+                    setNewYear(String(Math.min(9999, y + 1)));
+                  }}
+                >
+                  <Plus size={15} aria-hidden="true" />
+                  添加年份
+                </button>
+              </div>
+            )}
+          </header>
+          {Array.isArray(fire.tableRows) &&
+            fireRows(fire).length !== fire.tableRows.length && (
+              <p role="alert" className="notice error">
+                部分年度记录待核对
+              </p>
+            )}
+          {rows.length ? (
+            <FireAnnualTable
+              rows={rows}
+              editable={editing}
+              year={year}
+              disabled={blocked}
+              onChange={(y, key, value) =>
+                setChanges((old) => ({
+                  ...old,
+                  rows: { ...old.rows, [y]: { ...old.rows[y], [key]: value } },
+                }))
+              }
+              onRemove={(y) =>
+                setChanges((old) => ({
+                  ...old,
+                  added: old.added.filter((v) => v !== y),
+                  removed: [...old.removed, y],
+                }))
+              }
+            />
+          ) : (
+            <WorkspaceEmpty
+              title={ready ? "还没有年度记录" : "正在读取规划"}
+              description={
+                ready ? "编辑规划后添加年份，填写该年的原始记录。" : ""
+              }
+            />
+          )}
+        </section>
       </form>
-      <section className="fire-observations">
-        <h2>手填资产观察</h2>
+      <FireObservations
+        history={history}
+        year={year}
+        ready={ready}
+        disabled={blocked}
+        open={observationOpen}
+        onOpenChange={setObservationOpen}
+        amount={amount}
+        usd={usd}
+        currency={assetCurrency}
+        onAmount={setAmount}
+        onUsd={setUsd}
+        onCurrency={setAssetCurrency}
+        onSave={() => void save(true)}
+      />
+      <details className="fire-receipt-tools">
+        <summary>操作回执</summary>
         <form
+          className="fire-lookup"
           onSubmit={(event) => {
             event.preventDefault();
-            void save(true);
+            void check(lookup.trim());
           }}
         >
-          <div className="fire-fields">
-            <label>
-              原币金额
-              <input
-                inputMode="decimal"
-                value={amount}
-                disabled={blocked}
-                onChange={(event) => setAmount(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              观察币种
-              <SelectMenu
-                label="观察币种"
-                value={assetCurrency}
-                options={[
-                  { value: "", label: "选择币种" },
-                  ...fireCurrencies.map((value) => ({ value, label: value })),
-                ]}
-                variant="field"
-                disabled={blocked}
-                onChange={setAssetCurrency}
-              />
-            </label>
-            {assetCurrency !== "USD" && (
-              <label>
-                美元金额（手填）
-                <input
-                  inputMode="decimal"
-                  value={usd}
-                  disabled={blocked}
-                  onChange={(event) => setUsd(event.target.value)}
-                  required
-                />
-              </label>
-            )}
-          </div>
+          <label>
+            操作编号
+            <input
+              value={lookup}
+              disabled={locked}
+              onChange={(event) => setLookup(event.target.value)}
+            />
+          </label>
           <button
-            className="button"
-            disabled={
-              blocked ||
-              !amount ||
-              !assetCurrency ||
-              (assetCurrency !== "USD" && !usd)
-            }
+            className="button secondary"
+            disabled={busy || locked || !validId(lookup.trim())}
           >
-            记录观察
+            查询回执
           </button>
         </form>
-        <div className="fire-history" aria-label="手填资产观察记录">
-          {history.map((raw, index) => {
-            const row =
-              raw && typeof raw === "object"
-                ? (raw as Record<string, unknown>)
-                : {};
-            return (
-              <div className="fire-history-row" key={index}>
-                <time>{dateLabel(row.recordedAt)}</time>
-                <span>
-                  <PrivateAmount>
-                    {fireText(row.amountBase) || "—"}
-                  </PrivateAmount>{" "}
-                  {fireText(row.currency) || "币种未知"}
-                </span>
-                {!(
-                  row.currency === "USD" && row.amountBase === row.amountUsd
-                ) && (
-                  <span>
-                    <PrivateAmount>
-                      {fireText(row.amountUsd) || "—"}
-                    </PrivateAmount>{" "}
-                    USD
-                  </span>
-                )}
-                <small>手填</small>
-              </div>
-            );
-          })}
-          {ready && history.length === 0 && <p>暂无资产观察</p>}
-        </div>
-      </section>
-      <form
-        className="fire-lookup"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void check(lookup.trim());
-        }}
-      >
-        <label>
-          操作编号
-          <input
-            value={lookup}
-            disabled={locked}
-            onChange={(event) => setLookup(event.target.value)}
-          />
-        </label>
-        <button
-          className="button secondary"
-          disabled={busy || locked || !validId(lookup.trim())}
-        >
-          查询回执
-        </button>
-      </form>
+      </details>
     </section>
   );
 }

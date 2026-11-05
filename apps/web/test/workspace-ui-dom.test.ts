@@ -18,7 +18,7 @@ test("migrated presentation keeps source gaps, exact amounts and bounded media e
     await build({
       stdin: {
         contents:
-          'export {WorkspaceTabs,WorkspaceView} from "./src/workspace-ui";export {WorkspaceRoutes} from "./src/workspace-routes";export {MemoryRouter,Route,useLocation} from "react-router-dom";export {FireProgress} from "./src/fire-progress";export {FxConverter} from "./src/fx-converter";export {CalendarMonth} from "./src/market-calendar";export {ActivityTimeline} from "./src/activity-timeline";export {CardGallery} from "./src/card-gallery";',
+          'export {WorkspaceTabs,WorkspaceView} from "./src/workspace-ui";export {WorkspaceRoutes} from "./src/workspace-routes";export {MemoryRouter,Route,useLocation} from "react-router-dom";export {FireProgress} from "./src/fire-progress";export {FirePlanFields} from "./src/fire";export {FxConverter} from "./src/fx-converter";export {CalendarMonth} from "./src/market-calendar";export {ActivityTimeline} from "./src/activity-timeline";export {CardGallery} from "./src/card-gallery";',
         resolveDir: fileURLToPath(new URL("../", import.meta.url)),
         loader: "tsx",
       },
@@ -37,12 +37,22 @@ test("migrated presentation keeps source gaps, exact amounts and bounded media e
       "FIRE unknown and explicit zero are distinct; progress is not inferred from balances",
       () => {
         const unknown = render(
-          element(ui.FireProgress, {
-            progress: null,
-            current: "0",
-            target: "1000000.123456789",
-            currency: "",
-          }),
+          element(
+            React.Fragment,
+            null,
+            element(ui.FireProgress, {
+              progress: null,
+              current: "0",
+              currency: "",
+            }),
+            element(ui.FirePlanFields, {
+              editing: false,
+              disabled: false,
+              onChange() {},
+              value: (key) =>
+                key === "fireTargetBase" ? "1000000.123456789" : "",
+            }),
+          ),
         );
         assert.match(unknown, /进度待填写/);
         assert.match(unknown, />0</);

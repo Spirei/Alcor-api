@@ -50,7 +50,7 @@ test("actual FIRE SSR supports ordinary user form and immutable past annual rows
           "当前资产（手填）",
           "预期年化回报",
           "手填资产观察",
-          "美元金额（手填）",
+          "资产记录热力图",
           "查询回执",
         ])
           assert.ok(html.includes(label));
@@ -59,6 +59,35 @@ test("actual FIRE SSR supports ordinary user form and immutable past annual rows
         assert.ok(!html.includes('value="60000"'));
         assert.ok(!html.includes("canvas"));
         assert.ok(!html.includes("已迁移"));
+        assert.ok(!html.includes('type="submit" form="fire-plan-form"'));
+        assert.ok(!html.includes("规划参数</summary>"));
+        assert.ok(!html.includes("放弃草稿"));
+      },
+    );
+    await t.test(
+      "plan values are inline read-only until one edit action, with explicit zero and unknown kept distinct",
+      () => {
+        const values = {
+          currentInput: "0",
+          annualReturn: "0.000000000000000001",
+        };
+        const props = {
+          value: (key) => values[key] ?? "",
+          disabled: false,
+          onChange() {},
+        };
+        const html = renderToStaticMarkup(
+          React.createElement(m.FirePlanFields, { ...props, editing: false }),
+        );
+        assert.ok(!html.includes("<input"));
+        assert.ok(html.includes("<span>0</span>"));
+        assert.ok(html.includes("0.000000000000000001"));
+        assert.ok(html.includes("<span>—</span>"));
+        const form = renderToStaticMarkup(
+          React.createElement(m.FirePlanFields, { ...props, editing: true }),
+        );
+        assert.equal((form.match(/<input/g) ?? []).length, 10);
+        assert.ok(form.includes('value="0.000000000000000001"'));
       },
     );
     await t.test(
