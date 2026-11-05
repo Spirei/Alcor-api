@@ -417,7 +417,7 @@ export function DeploymentSettings({
               </dl>
               {data?.receipts.map((r) => (
                 <p key={r.id}>
-                  v{r.version} · {states[r.status] || r.status} · {r.request_id}
+                  {states[r.status] || r.status} · {r.request_id}
                 </p>
               ))}
               {data?.build_requests.map((r) => (
@@ -435,8 +435,8 @@ export function DeploymentSettings({
           <div className="deploy-section-head">
             <h2 id="flow-title">发布流程</h2>
             <NavLink className="deploy-runtime" to="/settings">
-              <i className="deploy-dot good" />
-              运行 v{data?.running_version || "—"}
+              <i className={`deploy-dot ${data?.running_revision ? "good" : "neutral"}`} />
+              线上 {data?.running_revision?.slice(0, 7) || "待核对"}
             </NavLink>
           </div>
           <div className="deploy-flow-steps">
@@ -646,7 +646,7 @@ export function DeploymentSettings({
           </div>
           <p>
             {data?.release
-              ? `v${data.release.version} · ${data.release.revision.slice(0, 7)}`
+              ? data.release.revision.slice(0, 7)
               : data?.release_error ||
                 (!data?.configured ? "尚未配置发布仓库" : "暂无发布记录")}
           </p>
@@ -749,7 +749,7 @@ export function DeploymentSettings({
         {confirm && data?.can_update && (
           <Dialog title="确认更新群晖" onClose={() => setConfirm(false)}>
             <p>
-              更新到 v{data.release?.version}？期间网页与后台任务会短暂中断。
+              更新到 {data.release?.revision.slice(0, 7)}？期间网页与后台任务会短暂中断。
             </p>
             <div className="dialog-actions">
               <button
