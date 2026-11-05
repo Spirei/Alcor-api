@@ -8,7 +8,7 @@ import { build } from "esbuild";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-test("all sixteen legacy routes expose real typed controls and preserve independent declaration wording", async () => {
+test("all sixteen legacy routes expose real typed controls and preserve independent declaration wording", async (t) => {
   const root = fileURLToPath(new URL("../../../", import.meta.url)),
     dir = await mkdtemp(join(root, ".local/simple-pages-"));
   try {
@@ -16,7 +16,7 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
     await build({
       stdin: {
         contents:
-          'export {SimplePages} from "./src/simple-app-pages";export {pages,decode} from "./src/simple-app-model";',
+          'export {SimplePages} from "./src/simple-app-pages";export {pages,decode,encode} from "./src/simple-app-model";export {budgetSummary,declaredInvestmentPnl,displayDecimal,displayRatio,ledgerSection,ledgerMonthCells,shiftLedgerMonth} from "./src/simple-app-view-model";',
         resolveDir: fileURLToPath(new URL("../", import.meta.url)),
         loader: "tsx",
       },
@@ -26,6 +26,7 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
       format: "cjs",
       jsx: "automatic",
       external: ["react", "react/jsx-runtime"],
+      loader: { ".css": "empty" },
       logLevel: "silent",
     });
     const module = createRequire(import.meta.url)(output);
@@ -67,7 +68,8 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
       "addSummary",
     ])
       assert.ok(
-        htmls[page].includes("<input") || htmls[page].includes("<select"),
+        htmls[page].includes("<input") ||
+          htmls[page].includes('aria-haspopup="listbox"'),
         page,
       );
     assert.ok(
@@ -78,6 +80,8 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
     assert.ok(htmls.family.includes("已登记家庭资产快照"));
     assert.ok(htmls.calendar.includes("没有已登记观察"));
     assert.ok(htmls.invest.includes("归档"));
+    assert.match(htmls.invest, /全部账本/);
+    assert.match(htmls.invest, /全部分类/);
     assert.ok(htmls.summary.includes("不从当前估值合成"));
     const cashflow = {
       incomeItems: [{ id: "i", name: "收入", amount: "1000", freq: "month" }],
@@ -102,6 +106,111 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
     assert.match(declaredBudget, /预估年度收入 12000 CNY/);
     assert.match(declaredBudget, /预估年度支出 3600 CNY/);
     assert.match(declaredBudget, /预估年度结余 8400 CNY/);
+    await t.test(
+      "overview keeps exact amounts and never invents a cross-account return",
+      () => {
+        assert.match(htmls.home, /家庭总资产/);
+        assert.match(htmls.home, /123,456,789,012,345,678,901,344/);
+        assert.doesNotMatch(htmls.home, /年化|资产没有变化|负债没有变化/);
+        assert.equal(
+          module.displayDecimal("9007199254740993.000000000000000001"),
+          "9,007,199,254,740,993.000000000000000001",
+        );
+        const hidden = renderToStaticMarkup(
+          React.createElement(module.SimplePages, {
+            ledger: { ...ledger, hide: true },
+            page: "home",
+            context: {},
+            patch: () => {},
+            go: () => {},
+          }),
+        );
+        assert.doesNotMatch(hidden, /123,456,789|110|12000|8400/);
+        assert.match(hidden, /显示独立账本金额/);
+      },
+    );
+    await t.test(
+      "shared budget summary preserves unknown currency, malformed rows and source tokens",
+      () => {
+        const value = { ...ledger, cashflow: { ...cashflow, currency: "CNY" } },
+          before = module.encode(value);
+        assert.deepEqual(module.budgetSummary(value), {
+          currency: "CNY",
+          income: "12000",
+          expense: "3600",
+          surplus: "8400",
+        });
+        assert.equal(module.encode(value), before);
+        assert.equal(module.budgetSummary({ ...value, cashflow }).income, null);
+        assert.equal(
+          module.budgetSummary({
+            ...value,
+            cashflow: {
+              ...value.cashflow,
+              incomeItems: [...cashflow.incomeItems, null],
+            },
+          }).income,
+          null,
+        );
+        assert.equal(
+          module.budgetSummary({
+            ...value,
+            cashflow: { ...value.cashflow, incomeItems: [] },
+          }).income,
+          null,
+        );
+        assert.equal(
+          module.budgetSummary({
+            ...value,
+            cashflow: {
+              ...value.cashflow,
+              expenseItems: [{ amount: "10", freq: "unknown" }],
+            },
+          }).surplus,
+          null,
+        );
+      },
+    );
+    await t.test(
+      "observation calendar keeps leap days, empty dates and UTC month boundaries",
+      () => {
+        const feb = module.ledgerMonthCells("2024-02");
+        assert.equal(feb.length, 42);
+        assert.equal(feb.filter(Boolean).length, 29);
+        assert.equal(feb[3], "2024-02-01");
+        assert.equal(module.ledgerMonthCells("2026-11")[6], "2026-11-01");
+        assert.deepEqual(module.ledgerMonthCells("2026-13"), []);
+        assert.equal(module.shiftLedgerMonth("2026-12", 1), "2027-01");
+        assert.equal(module.shiftLedgerMonth("2026-01", -1), "2025-12");
+        assert.match(htmls.calendar, /本人登记观察月历/);
+      },
+    );
+    await t.test(
+      "investment summary needs declared flows and parent routes keep account settings in investment",
+      () => {
+        assert.equal(module.declaredInvestmentPnl(ledger, "CNY"), "10");
+        assert.equal(
+          module.declaredInvestmentPnl(
+            { ...ledger, invest: [{ ...ledger.invest[0], inAmt: null }] },
+            "CNY",
+          ),
+          null,
+        );
+        assert.equal(
+          module.declaredInvestmentPnl({ ...ledger, invest: [] }, "CNY"),
+          null,
+        );
+        assert.equal(module.declaredInvestmentPnl(ledger, "USD"), null);
+        assert.equal(module.ledgerSection("settings", "invest-1"), "invest");
+        assert.equal(module.ledgerSection("settings"), "home");
+        assert.equal(module.ledgerSection("editItem"), "family");
+        assert.equal(module.ledgerSection("summary"), "invest");
+        assert.equal(module.displayRatio("4.25531914893617021"), "约 4.26");
+        assert.equal(module.displayRatio("9.999"), "约 10");
+        assert.equal(module.displayRatio(null), "未知");
+        assert.equal(module.displayRatio("-0.001"), "约 0");
+      },
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

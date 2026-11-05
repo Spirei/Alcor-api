@@ -1,4 +1,8 @@
 import { WorkspaceTabs } from "./workspace-ui";
+import { ArrowLeft, Code2, Files, RefreshCw } from "lucide-react";
+import { SelectMenu } from "./select-menu";
+import { useConfirmationDialog } from "./confirm-dialog";
+import { ledgerSection } from "./simple-app-view-model";
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
@@ -84,6 +88,7 @@ function SimpleAppEditor({
     [locked, setLocked] = useState(false),
     [confirm, setConfirm] = useState(false),
     [advanced, setAdvanced] = useState(false),
+    [filesOpen, setFilesOpen] = useState(false),
     [advancedDraft, setAdvancedDraft] = useState(""),
     [readGeneration, setReadGeneration] = useState(0),
     [candidate, setCandidate] = useState<Row[]>([]),
@@ -109,6 +114,9 @@ function SimpleAppEditor({
     session.receipt_scope,
   ]);
   const dirty = ledger !== null && encode(ledger) !== saved;
+  const { ask, dialog } = useConfirmationDialog(
+    storage + ":" + active + ":" + locked,
+  );
   function forget() {
     epoch.current++;
     controllers.current.forEach((c) => c.abort());
@@ -125,6 +133,7 @@ function SimpleAppEditor({
     setExportGroup("");
     setConfirm(false);
     setAdvanced(false);
+    setFilesOpen(false);
     setAdvancedDraft("");
     setBusy(false);
     inFlight.current = false;
@@ -267,6 +276,7 @@ function SimpleAppEditor({
         setSaved(encode(next));
         setRevision(revisionToken(value.revision));
         setConfirm(false);
+        setNotice("");
       }
     } catch (e) {
       if (current(run)) setError(e instanceof Error ? e.message : "读取失败");
@@ -533,28 +543,69 @@ function SimpleAppEditor({
   const disabled = busy || !!pending || locked || !active;
   return (
     <section className="simple-app panel workspace-ui">
-      <header>
-        <h1>家庭与投资记账</h1>
-        <p>独立本人登记账本 · 与券商持仓、实际成交及现金权限分离</p>
+      <header className="simple-ledger-header">
+        <div>
+          <h1>独立记账</h1>
+          <p>家庭资产与投资规划</p>
+        </div>
         <div className="module-actions">
           <button
+            className="icon-button"
+            aria-label="重新读取独立账本"
             disabled={busy || locked}
-            onClick={() => {
-              if (!dirty || window.confirm("放弃未保存草稿并重新读取？"))
+            onClick={async () => {
+              if (
+                !dirty ||
+                (await ask("放弃未保存草稿并重新读取？", {
+                  title: "重新读取账本",
+                  confirmLabel: "放弃并读取",
+                }))
+              )
                 void load();
             }}
           >
-            重新读取
+            <RefreshCw size={18} className={busy ? "spinning" : ""} />
           </button>
           <button
+            className="icon-button"
+            aria-label="账本文件与投资候选"
+            aria-expanded={filesOpen}
             disabled={!ledger || disabled}
-            onClick={() => {
-              setAdvanced(!advanced);
-              setAdvancedDraft(ledger ? encode(ledger) : "");
-            }}
+            onClick={() => setFilesOpen(!filesOpen)}
           >
-            高级 JSON 与原件工具
+            <Files size={18} />
           </button>
+          <SelectMenu
+            label="账本工具"
+            value={
+              [
+                "weather",
+                "calendar",
+                "manage",
+                "update",
+                "summary",
+                "settings",
+                "help",
+              ].includes(page) && !text(context.account)
+                ? page
+                : ""
+            }
+            variant="compact"
+            disabled={!ledger || disabled}
+            onChange={(next) => {
+              if (next) go(next as Page);
+            }}
+            options={[
+              { value: "", label: "账本工具" },
+              { value: "weather", label: "财务晴雨表" },
+              { value: "calendar", label: "记账日历" },
+              { value: "manage", label: "家庭成员" },
+              { value: "update", label: "更新资产" },
+              { value: "summary", label: "投资汇总" },
+              { value: "settings", label: "账本设置" },
+              { value: "help", label: "计算说明" },
+            ]}
+          />
         </div>
       </header>
       {locked && <p role="alert">当前登录或权限已变化，请重新登录后读取。</p>}
@@ -573,27 +624,44 @@ function SimpleAppEditor({
       )}
       {ledger && (
         <>
-          <WorkspaceTabs<Page>
+          <WorkspaceTabs<string>
             label="独立账本页面"
-            value={page}
-            onChange={go}
-            items={(
-              [
-                ["home", "总览"],
-                ["weather", "晴雨表"],
-                ["cashflow", "现金流"],
-                ["family", "家庭资产"],
-                ["calendar", "记账日历"],
-                ["manage", "成员管理"],
-                ["update", "更新资产"],
-                ["invest", "投资记账"],
-                ["summary", "投资汇总"],
-                ["settings", "设置"],
-                ["help", "说明"],
-              ] as [Page, string][]
-            ).map(([value, label]) => ({ value, label }))}
+            value={ledgerSection(page, text(context.account))}
+            onChange={(next) => go(next as Page)}
+            items={[
+              { value: "home", label: "总览" },
+              { value: "family", label: "家庭资产" },
+              { value: "invest", label: "投资记账" },
+              { value: "cashflow", label: "年度收支" },
+            ]}
           />
-          <fieldset disabled={disabled}>
+          {!["home", "family", "invest", "cashflow"].includes(page) && (
+            <button
+              className="simple-back"
+              onClick={() =>
+                go(
+                  page === "settings" && text(context.account)
+                    ? "account"
+                    : (ledgerSection(page, text(context.account)) as Page),
+                  page === "settings" && text(context.account)
+                    ? { account: context.account! }
+                    : {},
+                )
+              }
+            >
+              <ArrowLeft size={16} />
+              返回
+              {page === "settings" && text(context.account)
+                ? "投资账户"
+                : {
+                    family: "家庭资产",
+                    invest: "投资记账",
+                    cashflow: "年度收支",
+                    home: "总览",
+                  }[ledgerSection(page, text(context.account))] || "总览"}
+            </button>
+          )}
+          <fieldset disabled={disabled} className="simple-page-content">
             <SimplePages
               key={readGeneration}
               ledger={ledger}
@@ -607,236 +675,262 @@ function SimpleAppEditor({
             <SimpleBenchmark active={active && !locked && !document.hidden} />
           )}
 
-          <details className="simple-tools">
-            <summary>账本文件与投资候选</summary>
-            <p>
-              JSON为当前完整独立账本；XLSX导出已保存投资数据。导入仅加入明确选择的新账户，不覆盖原历史。
-            </p>
-            <button
-              disabled={disabled}
-              onClick={() =>
-                download(
-                  new Blob([encode(ledger)], { type: "application/json" }),
-                  "independent-ledger.json",
-                )
-              }
-            >
-              下载完整草稿 JSON
-            </button>
-            <label>
-              投资导出范围
-              <select
-                value={exportGroup}
-                onChange={(e) => setExportGroup(e.target.value)}
+          {filesOpen && (
+            <section className="simple-tools" aria-label="账本文件与投资候选">
+              <h3>账本文件与投资候选</h3>
+              <button
+                className="simple-code-link"
+                disabled={!ledger || disabled}
+                onClick={() => {
+                  setAdvanced(!advanced);
+                  setAdvancedDraft(ledger ? encode(ledger) : "");
+                }}
               >
-                <option value="">全部已保存投资</option>
-                {[
-                  ...new Set(
-                    rows(ledger.invest)
-                      .map((row) => text(row.group))
-                      .filter(Boolean),
-                  ),
-                ].map((group) => (
-                  <option key={group}>{group}</option>
-                ))}
-              </select>
-            </label>
-            <button
-              disabled={disabled || dirty}
-              onClick={() => void exportXlsx()}
-            >
-              导出所选投资 XLSX
-            </button>
-            <button
-              disabled={disabled}
-              onClick={() =>
-                download(
-                  new Blob(
-                    [
-                      encode({
-                        format: "independent-investment-group",
-                        group: exportGroup,
-                        invest: exportGroup
-                          ? rows(ledger.invest).filter(
-                              (row) => text(row.group) === exportGroup,
-                            )
-                          : (ledger.invest ?? []),
-                      }),
-                    ],
-                    { type: "application/json" },
-                  ),
-                  "independent-investment-group.json",
-                )
-              }
-            >
-              导出所选投资 JSON
-            </button>
-            <label>
-              打开完整 JSON 草稿
-              <input
+                <Code2 size={16} />
+                高级完整 JSON 草稿
+              </button>
+              <p>
+                JSON为当前完整独立账本；XLSX导出已保存投资数据。导入仅加入明确选择的新账户，不覆盖原历史。
+              </p>
+              <button
                 disabled={disabled}
-                type="file"
-                accept=".json,application/json"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  setCandidate([]);
-                  setSelected([]);
-                  setCandidateTargets({});
-                  setSource("");
-                  if (!file) return;
-                  if (file.size > 2 * 1024 * 1024) {
-                    setError("JSON超过2MiB");
-                    return;
-                  }
-                  const run = epoch.current;
-                  try {
-                    const raw = await file.text(),
-                      next = object(decode(raw));
-                    if (
-                      Array.isArray(next.invest) &&
-                      !Array.isArray(next.cash)
-                    ) {
-                      if (current(run)) {
-                        setCandidate(rows(next.invest));
-                        setCandidateTargets({});
-                        setSource("");
-                        setSelected([]);
-                        setNotice(
-                          "投资JSON候选仅在内存；确认加入后随账本版本留存，不宣称已保存原始上传字节",
-                        );
-                      }
+                onClick={() =>
+                  download(
+                    new Blob([encode(ledger)], { type: "application/json" }),
+                    "independent-ledger.json",
+                  )
+                }
+              >
+                下载完整草稿 JSON
+              </button>
+              <label>
+                投资导出范围
+                <select
+                  value={exportGroup}
+                  onChange={(e) => setExportGroup(e.target.value)}
+                >
+                  <option value="">全部已保存投资</option>
+                  {[
+                    ...new Set(
+                      rows(ledger.invest)
+                        .map((row) => text(row.group))
+                        .filter(Boolean),
+                    ),
+                  ].map((group) => (
+                    <option key={group}>{group}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                disabled={disabled || dirty}
+                onClick={() => void exportXlsx()}
+              >
+                导出所选投资 XLSX
+              </button>
+              <button
+                disabled={disabled}
+                onClick={() =>
+                  download(
+                    new Blob(
+                      [
+                        encode({
+                          format: "independent-investment-group",
+                          group: exportGroup,
+                          invest: exportGroup
+                            ? rows(ledger.invest).filter(
+                                (row) => text(row.group) === exportGroup,
+                              )
+                            : (ledger.invest ?? []),
+                        }),
+                      ],
+                      { type: "application/json" },
+                    ),
+                    "independent-investment-group.json",
+                  )
+                }
+              >
+                导出所选投资 JSON
+              </button>
+              <label>
+                打开完整 JSON 草稿
+                <input
+                  disabled={disabled}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    setCandidate([]);
+                    setSelected([]);
+                    setCandidateTargets({});
+                    setSource("");
+                    if (!file) return;
+                    if (file.size > 2 * 1024 * 1024) {
+                      setError("JSON超过2MiB");
                       return;
                     }
-                    if (
-                      !Array.isArray(next.invest) ||
-                      !Array.isArray(next.cash)
-                    )
-                      throw Error("文件不是完整独立账本");
-                    if (
-                      current(run) &&
-                      window.confirm("以此文件替换当前草稿？尚不会写入服务器。")
-                    )
-                      patch(next);
-                  } catch (reason) {
-                    setError(
-                      reason instanceof Error ? reason.message : "文件无效",
-                    );
-                  }
-                }}
-              />
-            </label>
-            <label>
-              解析投资 XLSX
-              <input
-                ref={fileInput}
-                disabled={disabled}
-                type="file"
-                accept=".xlsx"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void act("import", file);
-                }}
-              />
-            </label>
-            {source && (
-              <a href={base + "/originals/" + source} download>
-                下载本次保留原件
-              </a>
-            )}
-            {candidate.length > 0 && (
-              <>
-                <label>
-                  明确加入账本组（可留空）
-                  <input
-                    value={importGroup}
-                    onChange={(e) => setImportGroup(e.target.value)}
-                  />
-                </label>
-                {candidate.map((row, i) => (
-                  <div key={i}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(String(i))}
-                        onChange={(e) =>
-                          setSelected(
-                            e.target.checked
-                              ? [...selected, String(i)]
-                              : selected.filter((v) => v !== String(i)),
-                          )
+                    const run = epoch.current;
+                    try {
+                      const raw = await file.text(),
+                        next = object(decode(raw));
+                      if (
+                        Array.isArray(next.invest) &&
+                        !Array.isArray(next.cash)
+                      ) {
+                        if (current(run)) {
+                          setCandidate(rows(next.invest));
+                          setCandidateTargets({});
+                          setSource("");
+                          setSelected([]);
+                          setNotice(
+                            "投资JSON候选仅在内存；确认加入后随账本版本留存，不宣称已保存原始上传字节",
+                          );
                         }
-                      />
-                      {text(row.name) || "未命名"} ·{" "}
-                      {text(row.amount) || "金额未知"}{" "}
-                      {text(row.cur) || "币种未知"} · 原历史{" "}
-                      {rows(row.hist).length} 条
-                    </label>
-                    <label>
-                      明确处理方式
-                      <select
-                        disabled={disabled || !selected.includes(String(i))}
-                        value={candidateTargets[String(i)] || ""}
-                        onChange={(e) =>
-                          setCandidateTargets({
-                            ...candidateTargets,
-                            [String(i)]: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="">请选择</option>
-                        <option value="__new">作为新账户加入</option>
-                        {rows(ledger.invest)
-                          .filter((existing) => text(existing.id))
-                          .map((existing) => (
-                            <option
-                              key={text(existing.id)}
-                              value={text(existing.id)}
-                            >
-                              仅合并历史至：{text(existing.name)}（
-                              {text(existing.cur) || "币种未知"}）
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  </div>
-                ))}
-                <p>
-                  已有账户只合并字面相同原观察的多重集合；同日不同值保留，不按名称猜归属，不覆盖当前金额。
-                </p>
-                <button
-                  disabled={disabled || !selected.length}
-                  onClick={applyCandidates}
-                >
-                  将明确映射候选加入草稿
-                </button>
-              </>
-            )}
-          </details>
-          <aside className="simple-save">
-            <p>
-              服务器版本 {revision ?? "无法安全确认，禁止保存"} ·{" "}
-              {dirty ? "有未保存修改" : "与已保存账本一致"}
+                        return;
+                      }
+                      if (
+                        !Array.isArray(next.invest) ||
+                        !Array.isArray(next.cash)
+                      )
+                        throw Error("文件不是完整独立账本");
+                      if (
+                        current(run) &&
+                        (await ask("以此文件替换当前草稿？尚不会写入服务器。", {
+                          title: "替换当前草稿",
+                          confirmLabel: "替换草稿",
+                        })) &&
+                        current(run)
+                      )
+                        patch(next);
+                    } catch (reason) {
+                      setError(
+                        reason instanceof Error ? reason.message : "文件无效",
+                      );
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                解析投资 XLSX
+                <input
+                  ref={fileInput}
+                  disabled={disabled}
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void act("import", file);
+                  }}
+                />
+              </label>
+              {source && (
+                <a href={base + "/originals/" + source} download>
+                  下载本次保留原件
+                </a>
+              )}
+              {candidate.length > 0 && (
+                <>
+                  <label>
+                    明确加入账本组（可留空）
+                    <input
+                      value={importGroup}
+                      onChange={(e) => setImportGroup(e.target.value)}
+                    />
+                  </label>
+                  {candidate.map((row, i) => (
+                    <div key={i}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(String(i))}
+                          onChange={(e) =>
+                            setSelected(
+                              e.target.checked
+                                ? [...selected, String(i)]
+                                : selected.filter((v) => v !== String(i)),
+                            )
+                          }
+                        />
+                        {text(row.name) || "未命名"} ·{" "}
+                        {text(row.amount) || "金额未知"}{" "}
+                        {text(row.cur) || "币种未知"} · 原历史{" "}
+                        {rows(row.hist).length} 条
+                      </label>
+                      <label>
+                        明确处理方式
+                        <select
+                          disabled={disabled || !selected.includes(String(i))}
+                          value={candidateTargets[String(i)] || ""}
+                          onChange={(e) =>
+                            setCandidateTargets({
+                              ...candidateTargets,
+                              [String(i)]: e.target.value,
+                            })
+                          }
+                        >
+                          <option value="">请选择</option>
+                          <option value="__new">作为新账户加入</option>
+                          {rows(ledger.invest)
+                            .filter((existing) => text(existing.id))
+                            .map((existing) => (
+                              <option
+                                key={text(existing.id)}
+                                value={text(existing.id)}
+                              >
+                                仅合并历史至：{text(existing.name)}（
+                                {text(existing.cur) || "币种未知"}）
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    </div>
+                  ))}
+                  <p>
+                    已有账户只合并字面相同原观察的多重集合；同日不同值保留，不按名称猜归属，不覆盖当前金额。
+                  </p>
+                  <button
+                    disabled={disabled || !selected.length}
+                    onClick={applyCandidates}
+                  >
+                    将明确映射候选加入草稿
+                  </button>
+                </>
+              )}
+            </section>
+          )}
+          {dirty && (
+            <aside className="simple-save">
+              <p>
+                {revision === null
+                  ? "无法安全确认版本，禁止保存"
+                  : "草稿有未保存修改"}
+              </p>
+              <label>
+                <input
+                  disabled={disabled || !dirty}
+                  type="checkbox"
+                  checked={confirm}
+                  onChange={(e) => setConfirm(e.target.checked)}
+                />
+                已核对完整草稿，明确保存至独立账本
+              </label>
+              <button
+                disabled={disabled || revision === null || !dirty || !confirm}
+                onClick={() => void act("save")}
+              >
+                保存独立账本
+              </button>
+            </aside>
+          )}
+          {!dirty && (
+            <p className="simple-saved-state">
+              已保存
+              {revision !== null ? ` · 版本 ${revision}` : " · 版本暂不可核对"}
             </p>
-            <label>
-              <input
-                disabled={disabled || !dirty}
-                type="checkbox"
-                checked={confirm}
-                onChange={(e) => setConfirm(e.target.checked)}
-              />
-              已核对完整草稿，明确保存至独立账本
-            </label>
-            <button
-              disabled={disabled || revision === null || !dirty || !confirm}
-              onClick={() => void act("save")}
-            >
-              按当前版本保存
-            </button>
-          </aside>
-          {advanced && (
-            <details open>
-              <summary>高级完整JSON草稿（同一保存与原UUID恢复入口）</summary>
+          )}
+          {advanced && filesOpen && (
+            <section className="simple-tools">
+              <h3>高级完整 JSON 草稿</h3>
               <p>
                 此处不另发保存请求；应用后仍需上方明确确认与同版本保存。未识别数字token原样保留。
               </p>
@@ -868,10 +962,11 @@ function SimpleAppEditor({
               >
                 仅应用至同一草稿
               </button>
-            </details>
+            </section>
           )}
         </>
       )}
+      {dialog}
       {!ledger && !busy && <p>尚未读取账本；读取不会初始化资产或添加历史。</p>}
     </section>
   );

@@ -1,4 +1,26 @@
 import { useState } from "react";
+import { useConfirmationDialog } from "./confirm-dialog";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Trash2,
+  Wallet,
+} from "lucide-react";
+import { SelectMenu } from "./select-menu";
+import { WorkspaceTabs } from "./workspace-ui";
+import { SimpleOverview } from "./simple-app-overview";
+import { SimpleBudgetFlow } from "./simple-budget-flow";
+import { SimpleFamilyOverview } from "./simple-family-overview";
+import {
+  budgetSummary,
+  displayRatio,
+  ledgerMonthCells,
+  shiftLedgerMonth,
+} from "./simple-app-view-model";
 import { requestId } from "./request-id";
 import {
   add,
@@ -10,6 +32,7 @@ import {
   encode,
   labels,
   move,
+  multiply,
   negate,
   object,
   patchRow,
@@ -79,8 +102,8 @@ function Field({
   type?: string;
 }) {
   return (
-    <label>
-      {label}
+    <label className="simple-field">
+      <span>{label}</span>
       <input
         type={type}
         value={value}
@@ -94,43 +117,50 @@ function Choice({
   value,
   options,
   onChange,
+  emptyLabel = "未登记",
 }: {
   label: string;
   value: string;
   options: string[];
+  emptyLabel?: string;
   onChange: (value: string) => void;
 }) {
+  const names: Record<string, string> = {
+    month: "每月",
+    quarter: "每季度",
+    year: "每年",
+    once: "一次",
+    monthly: "每月（原记录）",
+    yearly: "每年（原记录）",
+    week: "每周（原记录）",
+    day: "每天（原记录）",
+    stable: "固定支出",
+    flexible: "弹性支出",
+    other: "其他支出",
+    value: "登记估值",
+    "period-pnl": "登记期间损益",
+    mwr: "资金加权期间收益率",
+  };
   return (
-    <label>
-      {label}
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">未登记</option>
-        {[...new Set([...options, ...(value ? [value] : [])])].map((v) => (
-          <option key={v} value={v}>
-            {(
-              {
-                month: "每月",
-                quarter: "每季度",
-                year: "每年",
-                once: "一次",
-                monthly: "每月（原记录）",
-                yearly: "每年（原记录）",
-                week: "每周（原记录）",
-                day: "每天（原记录）",
-                stable: "固定支出",
-                flexible: "弹性支出",
-                other: "其他支出",
-                value: "登记估值",
-                "period-pnl": "登记期间损益",
-                mwr: "资金加权期间收益率",
-              } as Record<string, string>
-            )[v] || v}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="simple-field">
+      <span>{label}</span>
+      <SelectMenu
+        label={label}
+        value={value}
+        variant="field"
+        onChange={onChange}
+        options={[
+          { value: "", label: emptyLabel },
+          ...[...new Set([...options, ...(value ? [value] : [])])].map((v) => ({
+            value: v,
+            label: names[v] || v,
+          })),
+        ]}
+      />
+    </div>
   );
 }
+
 function Metrics({
   values,
   currency,
@@ -173,9 +203,28 @@ function Metrics({
   );
 }
 export function SimplePages(props: Props) {
-  return <PageBody key={props.page + ":" + encode(props.context)} {...props} />;
+  const scope = props.page + ":" + encode(props.context),
+    { ask, dialog } = useConfirmationDialog(scope);
+  return (
+    <>
+      <PageBody key={scope} {...props} ask={ask} />
+      {dialog}
+    </>
+  );
 }
-function PageBody({ ledger, page, context, patch, go }: Props) {
+function PageBody({
+  ledger,
+  page,
+  context,
+  patch,
+  go,
+  ask,
+}: Props & {
+  ask: (
+    message: string,
+    options?: { title?: string; confirmLabel?: string },
+  ) => Promise<boolean>;
+}) {
   const currency = text(ledger.displayCur),
     t = totals(ledger, currency);
   const [member, setMember] = useState(""),
@@ -199,57 +248,108 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
       return false;
     }
   };
-  const remove = (row: Row, cat: Category) => {
+  const remove = async (row: Row, cat: Category) => {
     if (!text(row.id)) {
       setError("原记录缺少编号，请在高级原件工具核对，不能猜测");
       return;
     }
     if (
-      window.confirm(
-        `从独立账本草稿删除“${text(row.name)}”？请下载当前JSON留档。`,
+      await ask(
+        `从独立账本草稿移除“${text(row.name)}”？保存账本前仍可重新读取恢复。`,
+        { title: "删除草稿项", confirmLabel: "移除草稿项" },
       )
-    )
+    ) {
       patch({
         ...ledger,
         [cat]: rows(ledger[cat]).filter((r) => text(r.id) !== text(row.id)),
       });
+      if (cat === "invest" && ["account", "settings"].includes(page))
+        go("invest");
+    }
   };
   const order = (cat: Category, index: number, direction: number) =>
     patch({ ...ledger, [cat]: move(rows(ledger[cat]), index, direction) });
   function cards(cat: Category, list = rows(ledger[cat])) {
+    const all = rows(ledger[cat]);
     return (
-      <div className="simple-cards">
-        {list.map((row, i) => (
-          <article key={text(row.id) || "unidentified-" + i}>
-            <h4>{text(row.name) || "未命名"}</h4>
-            <p>
-              {ledger.hide ? "••••" : text(row.amount) || "金额未知"}{" "}
-              {text(row.cur) || "币种未知"} · {text(row.owner) || "成员未登记"}
-            </p>
-            {cat === "invest" && (
-              <p>
-                {text(row.bucket) || "类别未登记"} ·{" "}
-                {text(row.market) || "市场未登记"} ·{" "}
-                {row.archived === true ? "已归档" : "当前账户"}
-              </p>
-            )}
-            <button
-              onClick={() =>
-                go(
-                  cat === "invest" ? "account" : "editItem",
-                  cat === "invest"
-                    ? { account: row.id ?? "" }
-                    : { cat, itemId: row.id ?? "" },
-                )
-              }
+      <div className="simple-asset-list">
+        {!list.length && (
+          <div className="simple-empty">
+            <Wallet size={28} />
+            <h4>还没有{labels[cat]}</h4>
+            <p>添加本人登记的资产，保留原币与归属。</p>
+          </div>
+        )}
+        {list.map((row, i) => {
+          const index = all.indexOf(row);
+          const open = () =>
+            go(
+              cat === "invest" ? "account" : "editItem",
+              cat === "invest"
+                ? { account: row.id ?? "" }
+                : { cat, itemId: row.id ?? "" },
+            );
+          return (
+            <article
+              className="simple-asset-row"
+              key={text(row.id) || "unidentified-" + i}
             >
-              查看与编辑
-            </button>
-            <button disabled={!text(row.id)} onClick={() => remove(row, cat)}>
-              删除草稿项
-            </button>
-          </article>
-        ))}
+              <span className="simple-asset-mark" aria-hidden="true">
+                <Wallet size={19} />
+              </span>
+              <button className="simple-asset-main" onClick={open}>
+                <strong>{text(row.name) || "未命名"}</strong>
+                <small>
+                  {text(row.owner) || "成员未登记"}
+                  {cat === "invest"
+                    ? ` · ${text(row.bucket) || "类别未登记"} · ${text(row.market) || "市场未登记"}${row.archived === true ? " · 已归档" : ""}`
+                    : ""}
+                </small>
+              </button>
+              <span className="simple-asset-value">
+                {ledger.hide ? "••••" : text(row.amount) || "金额未知"}
+                <small>{text(row.cur) || "币种未知"}</small>
+              </span>
+              <div className="simple-row-actions">
+                <button
+                  className="icon-button"
+                  aria-label={`上移${text(row.name)}`}
+                  disabled={index === 0}
+                  onClick={() => order(cat, index, -1)}
+                >
+                  <ArrowUp size={16} />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`下移${text(row.name)}`}
+                  disabled={index === all.length - 1}
+                  onClick={() => order(cat, index, 1)}
+                >
+                  <ArrowDown size={16} />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`编辑${text(row.name)}`}
+                  onClick={() =>
+                    cat === "invest"
+                      ? go("settings", { account: row.id ?? "" })
+                      : open()
+                  }
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
+                  className="icon-button danger"
+                  aria-label={`删除草稿项${text(row.name)}`}
+                  disabled={!text(row.id)}
+                  onClick={() => remove(row, cat)}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     );
   }
@@ -281,48 +381,42 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
     );
   }
   if (page === "home")
-    return (
-      <>
-        <h3>独立账本总览</h3>
-        <Metrics values={t} currency={currency} hidden={ledger.hide === true} />
-        <details>
-          <summary>估算范围与精度</summary>
-          <p>
-            按本人登记汇率折算的估算值，非终止除法按18位有效数字四舍五入，可能舍入；原金额及汇率不改。缺币种、金额或正汇率时未知，不是券商已核到账值。
-          </p>
-        </details>
-        <button
-          onClick={() => patch({ ...ledger, hide: ledger.hide !== true })}
-        >
-          {ledger.hide ? "显示金额" : "隐藏金额"}
-        </button>
-        <button onClick={() => go("update")}>更新家庭资产</button>
-        <button onClick={() => go("invest")}>投资记账</button>
-        <button onClick={() => go("cashflow")}>规划年度收支</button>
-      </>
-    );
+    return <SimpleOverview ledger={ledger} patch={patch} go={go} />;
   if (page === "weather") {
-    const debtRatio = ratio(negate(t.debt), t.assets),
-      cf = object(ledger.cashflow),
-      expense = sum(rows(cf.expenseItems).map(annual)),
-      monthly = ratio(expense, "12"),
-      buffer = text(cf.currency) === currency ? ratio(t.cash, monthly) : null;
+    const debtRatio =
+        t.assets && !t.assets.startsWith("-")
+          ? multiply(ratio(negate(t.debt), t.assets), "100")
+          : null,
+      budget = budgetSummary(ledger),
+      monthly = ratio(budget.expense, "12"),
+      buffer = budget.currency === currency ? ratio(t.cash, monthly) : null;
     return (
-      <>
+      <section className="simple-editor">
         <h3>财务晴雨表</h3>
         <p>本人登记的资产、负债和预算观察，不构成评级或融资权限。</p>
-        <Metrics
-          currency={currency}
-          values={{
-            net: t.net,
-            "负债占资产比例（约，12位小数）": debtRatio,
-            "现金覆盖预估月支出（月，约）": buffer,
-          }}
-        />
+        <dl className="simple-metrics">
+          {[
+            ["净资产", t.net, currency],
+            ["负债占资产比例", debtRatio, "%"],
+            ["现金覆盖预估月支出", buffer, "个月"],
+          ].map(([label, value, unit]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>
+                {ledger.hide
+                  ? "••••"
+                  : label === "净资产"
+                    ? show(value)
+                    : displayRatio(value)}{" "}
+                {unit}
+              </dd>
+            </div>
+          ))}
+        </dl>
         <p>
-          缺少完整登记时保持未知，不使用默认月支出。预算金额币种须与展示币种一致；旧预算未声明币种时仅展示其原登记值。
+          比例按登记值估算，可能舍入。缺少完整登记时保持未知，不使用默认月支出。预算金额币种须与展示币种一致；旧预算未声明币种时仅展示其原登记值。
         </p>
-      </>
+      </section>
     );
   }
   if (page === "manage") return <Members ledger={ledger} patch={patch} />;
@@ -330,15 +424,15 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
     return (
       <>
         <h3>更新家庭资产</h3>
-        <nav>
-          {categories.map((cat) => (
-            <button key={cat} onClick={() => go("update", { cat })}>
-              {labels[cat]}
-            </button>
-          ))}
-        </nav>
+        <WorkspaceTabs<Category>
+          label="资产分类"
+          value={category}
+          onChange={(cat) => go("update", { cat })}
+          items={categories.map((value) => ({ value, label: labels[value] }))}
+        />
         <h4>{labels[category]}</h4>
         <button
+          className="button secondary"
           onClick={() =>
             go(category === "invest" ? "addInvest" : "addItem", {
               cat: category,
@@ -348,20 +442,6 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
           添加{labels[category]}
         </button>
         {cards(category)}
-        {rows(ledger[category]).map((row, i) => (
-          <div key={text(row.id) || i}>
-            {text(row.name)}
-            <button disabled={i === 0} onClick={() => order(category, i, -1)}>
-              上移
-            </button>
-            <button
-              disabled={i === rows(ledger[category]).length - 1}
-              onClick={() => order(category, i, 1)}
-            >
-              下移
-            </button>
-          </div>
-        ))}
       </>
     );
   if (page === "help")
@@ -396,21 +476,30 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
   if (page === "family")
     return (
       <>
-        <h3>家庭资产与历史</h3>
-        <Choice
-          label="成员"
+        <div className="simple-section-title">
+          <h3>家庭资产与历史</h3>
+          <div className="module-actions">
+            <button className="button secondary" onClick={() => go("manage")}>
+              家庭成员
+            </button>
+            <button className="button secondary" onClick={() => go("update")}>
+              <Pencil size={16} />
+              更新资产
+            </button>
+          </div>
+        </div>
+        <WorkspaceTabs
+          label="家庭成员筛选"
           value={member}
-          options={rows(ledger.members)
-            .filter((r) => r.show !== false)
-            .map((r) => text(r.name))
-            .filter(Boolean)}
           onChange={setMember}
+          items={[
+            { value: "", label: "全部" },
+            ...rows(ledger.members)
+              .filter((row) => row.show !== false && text(row.name))
+              .map((row) => ({ value: text(row.name), label: text(row.name) })),
+          ]}
         />
-        <Metrics
-          currency={currency}
-          values={totals(ledger, currency, member)}
-          hidden={ledger.hide === true}
-        />
+        <SimpleFamilyOverview ledger={ledger} member={member} patch={patch} />
         <p>成员历史快照若未标归属不与当前成员资产混合。</p>
         <History
           rows={rows(ledger.snaps).filter(
@@ -434,50 +523,51 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
     );
     return (
       <>
-        <h3>投资记账</h3>
-        <Choice
-          label="账本组"
-          value={text(context.group)}
-          options={[
-            ...new Set(
-              rows(ledger.invest)
-                .map((r) => text(r.group))
-                .filter(Boolean),
-            ),
-          ]}
-          onChange={(group) => go("invest", { group })}
-        />
-        <Choice
-          label="投资分类"
-          value={filter}
-          options={["活钱", "稳健", "长期"]}
-          onChange={setFilter}
-        />
-        <label>
-          <input
-            type="checkbox"
-            checked={archived}
-            onChange={(e) => setArchived(e.target.checked)}
+        <div className="simple-section-title">
+          <h3>投资记账</h3>
+          <button onClick={() => go("summary")}>
+            投资汇总
+            <ChevronRight size={16} />
+          </button>
+        </div>
+        <div className="simple-filter-bar">
+          <Choice
+            label="账本组"
+            emptyLabel="全部账本"
+            value={text(context.group)}
+            options={[
+              ...new Set(
+                rows(ledger.invest)
+                  .map((r) => text(r.group))
+                  .filter(Boolean),
+              ),
+            ]}
+            onChange={(group) => go("invest", { group })}
           />
-          查看已归档账户
-        </label>
-        <button onClick={() => go("addInvest")}>添加投资账户</button>
-        <button onClick={() => go("addSummary")}>创建自定义汇总</button>
+          <Choice
+            label="投资分类"
+            emptyLabel="全部分类"
+            value={filter}
+            options={["活钱", "稳健", "长期"]}
+            onChange={setFilter}
+          />
+          <label>
+            <input
+              type="checkbox"
+              checked={archived}
+              onChange={(e) => setArchived(e.target.checked)}
+            />
+            查看已归档账户
+          </label>
+        </div>
+        <div className="module-actions">
+          <button className="button secondary" onClick={() => go("addInvest")}>
+            <Plus size={16} />
+            添加投资账户
+          </button>
+          <button onClick={() => go("addSummary")}>创建自定义汇总</button>
+        </div>
         {cards("invest", visible)}
-        {rows(ledger.invest).map((row, i) => (
-          <div key={text(row.id) || i}>
-            {text(row.name)}
-            <button disabled={i === 0} onClick={() => order("invest", i, -1)}>
-              上移
-            </button>
-            <button
-              disabled={i === rows(ledger.invest).length - 1}
-              onClick={() => order("invest", i, 1)}
-            >
-              下移
-            </button>
-          </div>
-        ))}
       </>
     );
   }
@@ -498,6 +588,7 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
       <>
         <h3>{selected ? text(selected.name) : "全部投资汇总"}</h3>
         <Metrics
+          hidden={ledger.hide === true}
           currency={currency}
           values={{
             invest: sourceComplete
@@ -533,8 +624,13 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
               {text(row.name)}
             </button>
             <button
-              onClick={() => {
-                if (window.confirm("删除该汇总？保留原投资账户。"))
+              onClick={async () => {
+                if (
+                  await ask("删除该汇总？保留原投资账户。", {
+                    title: "删除自定义汇总",
+                    confirmLabel: "删除汇总",
+                  })
+                )
                   patch({
                     ...ledger,
                     summaries: rows(ledger.summaries).filter(
@@ -568,6 +664,7 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
           {text(investment.cur) || "币种未知"} · {text(investment.bucket)}
         </p>
         <Metrics
+          hidden={ledger.hide === true}
           currency={text(investment.cur)}
           values={{ invest: decimal(investment.amount), pnl }}
         />
@@ -636,10 +733,6 @@ function PageBody({ ledger, page, context, patch, go }: Props) {
           <button onClick={() => remove(investment, "invest")}>
             删除草稿账户
           </button>
-          <p>
-            账户所属账本组：{text(investment.group) || "未登记"}
-            ；文件工具在页面下方，可将所选候选加入明确账本组，不覆盖旧历史。
-          </p>
         </>
       );
     return <Settings ledger={ledger} patch={patch} />;
@@ -681,50 +774,54 @@ function RowEditor({
     />
   );
   return (
-    <section>
+    <section className="simple-editor">
       <h3>
         {original ? "编辑" : "添加"}
         {labels[category]}
       </h3>
-      {field("name", "名称")}
-      {field(
-        "amount",
-        category === "debt" ? "负债金额（明确输入负值）" : "登记金额（精确值）",
-      )}
-      <Choice
-        label="原币"
-        value={text(draft.cur)}
-        options={currencyOptions}
-        onChange={(value) => setDraft({ ...draft, cur: value })}
-      />
-      <Choice
-        label="成员"
-        value={text(draft.owner)}
-        options={members.map((m) => text(m.name)).filter(Boolean)}
-        onChange={(value) => setDraft({ ...draft, owner: value })}
-      />
-      {category === "invest" && (
-        <>
-          <Choice
-            label="市场（不自动推断币种）"
-            value={text(draft.market)}
-            options={markets}
-            onChange={(value) => setDraft({ ...draft, market: value })}
-          />
-          <Choice
-            label="投资分类"
-            value={text(draft.bucket)}
-            options={["活钱", "稳健", "长期"]}
-            onChange={(value) => setDraft({ ...draft, bucket: value })}
-          />
-          {field("group", "账本组")}
-          {field("inAmt", "累计投入（未知留空）")}
-          {field("outAmt", "累计转出（未知留空）")}
-          {field("expected", "预期年化 %（规划值）")}
-        </>
-      )}
-      {field("date", "登记日期（原值保留；修改请用YYYY-MM-DD）")}
-      {field("note", "备注")}
+      <div className="simple-form-grid">
+        {field("name", "名称")}
+        {field(
+          "amount",
+          category === "debt"
+            ? "负债金额（明确输入负值）"
+            : "登记金额（精确值）",
+        )}
+        <Choice
+          label="原币"
+          value={text(draft.cur)}
+          options={currencyOptions}
+          onChange={(value) => setDraft({ ...draft, cur: value })}
+        />
+        <Choice
+          label="成员"
+          value={text(draft.owner)}
+          options={members.map((m) => text(m.name)).filter(Boolean)}
+          onChange={(value) => setDraft({ ...draft, owner: value })}
+        />
+        {category === "invest" && (
+          <>
+            <Choice
+              label="市场（不自动推断币种）"
+              value={text(draft.market)}
+              options={markets}
+              onChange={(value) => setDraft({ ...draft, market: value })}
+            />
+            <Choice
+              label="投资分类"
+              value={text(draft.bucket)}
+              options={["活钱", "稳健", "长期"]}
+              onChange={(value) => setDraft({ ...draft, bucket: value })}
+            />
+            {field("group", "账本组")}
+            {field("inAmt", "累计投入（未知留空）")}
+            {field("outAmt", "累计转出（未知留空）")}
+            {field("expected", "预期年化 %（规划值）")}
+          </>
+        )}
+        {field("date", "登记日期（原值保留；修改请用YYYY-MM-DD）")}
+        {field("note", "备注")}
+      </div>
       <p>
         未编辑的额外字段和历史原样保留。金额修改不自动生成历史观察或资金流。
       </p>
@@ -782,7 +879,7 @@ function Members({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
   const [name, setName] = useState(""),
     [error, setError] = useState("");
   return (
-    <section>
+    <section className="simple-editor">
       <h3>家庭成员</h3>
       {rows(ledger.members).map((row, i) => (
         <article key={text(row.id) || i}>
@@ -889,7 +986,7 @@ function Settings({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
     [rate, setRate] = useState(""),
     [error, setError] = useState("");
   return (
-    <section>
+    <section className="simple-editor">
       <h3>独立账本设置</h3>
       <Choice
         label="展示币种"
@@ -983,7 +1080,7 @@ function SummaryEditor({
   const [name, setName] = useState(""),
     [ids, setIds] = useState<string[]>([]);
   return (
-    <section>
+    <section className="simple-editor">
       <h3>创建自定义投资汇总</h3>
       <Field label="汇总名称" value={name} onChange={setName} />
       {rows(ledger.invest).map((r, i) => (
@@ -1115,14 +1212,16 @@ function History({
           本年（1月1日起）
         </button>
       </div>
-      <p>
-        value：原估值；period-pnl：相对范围首个观察、扣明确资金流的期间损益；mwr：明确完整记录的资金加权期间收益率（近似）。缺观察不拉伸范围。
-      </p>
-      <Field label="开始日期" value={from} type="date" onChange={setFrom} />
-      <Field label="结束日期" value={to} type="date" onChange={setTo} />
-      <p>
-        仅绘已登记观察，空值断开；未补交易日、未来估值或期初。横轴为实际日期间隔；纵轴为展示近似，表格保精确原值。家庭快照缺币种或币种不同时仅保留原表，不混合绘图。
-      </p>
+      <div className="simple-date-range">
+        <Field label="开始日期" value={from} type="date" onChange={setFrom} />
+        <Field label="结束日期" value={to} type="date" onChange={setTo} />
+      </div>
+      <details className="simple-basis">
+        <summary>图表与计算口径</summary>
+        <p>
+          登记估值保留原值；期间损益扣除明确资金流；资金加权收益率仅使用明确完整的观察。仅绘已登记观察，空值断开，不补交易日、未来估值或期初，不拉伸选定范围。纵轴为展示近似，明细保留精确值；家庭快照缺币种或币种不同时不混合绘图。
+        </p>
+      </details>
       {finite.length > 0 && (
         <svg
           role="img"
@@ -1130,6 +1229,40 @@ function History({
           viewBox="0 0 600 160"
           className="simple-history-chart"
         >
+          <path d="M20 145H580" stroke="var(--edge)" fill="none" />
+          <text x="20" y="158" fontSize="10" fill="var(--muted)">
+            {from ||
+              (filtered[0] &&
+                text(filtered[0][dateField]).slice(0, 10).replaceAll("-", "/"))}
+          </text>
+          <text
+            x="580"
+            y="158"
+            textAnchor="end"
+            fontSize="10"
+            fill="var(--muted)"
+          >
+            {to ||
+              (filtered.length > 0 &&
+                text(filtered[filtered.length - 1][dateField])
+                  .slice(0, 10)
+                  .replaceAll("-", "/"))}
+          </text>
+          {finite.map((p, i) => (
+            <circle
+              key={i}
+              cx={20 + ((p.time - start) / Math.max(1, end - start)) * 560}
+              cy={
+                max === min
+                  ? 80
+                  : 140 - ((Number(p.raw) - min) / (max - min)) * 120
+              }
+              r="3"
+              fill="currentColor"
+            >
+              <title>{`${p.at} · ${p.raw}`}</title>
+            </circle>
+          ))}
           {points.map((p, i) => {
             const prior = points[i - 1];
             if (
@@ -1163,38 +1296,41 @@ function History({
           })}
         </svg>
       )}
-      <div className="workspace-table">
-        <table>
-          <thead>
-            <tr>
-              <th>原日期</th>
-              <th>原登记值</th>
-              <th>图表值</th>
-              <th>投入</th>
-              <th>转出</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r, i) => (
-              <tr key={i}>
-                <td>
-                  {text(r[dateField]) || "未登记"}
-                  {text(r[dateField]).slice(0, 10) > today()
-                    ? "（未来登记/规划）"
-                    : ""}
-                </td>
-                <td>{text(r[valueField]) || "未知"}</td>
-                <td>
-                  {show(rawFor(r, i))}
-                  {mode === "mwr" ? " %" : ""}
-                </td>
-                <td>{text(r.inn) || "未知"}</td>
-                <td>{text(r.out) || "未知"}</td>
+      <details className="simple-history-details">
+        <summary>查看登记明细</summary>
+        <div className="workspace-table">
+          <table>
+            <thead>
+              <tr>
+                <th>原日期</th>
+                <th>原登记值</th>
+                <th>图表值</th>
+                <th>投入</th>
+                <th>转出</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map((r, i) => (
+                <tr key={i}>
+                  <td>
+                    {text(r[dateField]) || "未登记"}
+                    {text(r[dateField]).slice(0, 10) > today()
+                      ? "（未来登记/规划）"
+                      : ""}
+                  </td>
+                  <td>{text(r[valueField]) || "未知"}</td>
+                  <td>
+                    {show(rawFor(r, i))}
+                    {mode === "mwr" ? " %" : ""}
+                  </td>
+                  <td>{text(r.inn) || "未知"}</td>
+                  <td>{text(r.out) || "未知"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
       {!filtered.length && <p>此范围没有已登记观察。</p>}
     </section>
   );
@@ -1355,7 +1491,8 @@ function Snapshot({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
   );
 }
 function Calendar({ ledger }: { ledger: Row }) {
-  const [month, setMonth] = useState(today().slice(0, 7));
+  const [month, setMonth] = useState(today().slice(0, 7)),
+    [selected, setSelected] = useState("");
   const events = [
     ...rows(ledger.snaps).map((r) => ({
       date: text(r.at),
@@ -1380,20 +1517,103 @@ function Calendar({ ledger }: { ledger: Row }) {
   ]
     .filter((e) => e.date.startsWith(month))
     .sort((a, b) => a.date.localeCompare(b.date));
+  const cells = ledgerMonthCells(month),
+    visible = selected
+      ? events.filter((e) => e.date.slice(0, 10) === selected)
+      : events;
   return (
-    <section>
-      <h3>记账日历</h3>
-      <Field label="月份" type="month" value={month} onChange={setMonth} />
-      {events.map((e, i) => (
-        <article key={i}>
-          <time>{e.date || "日期未知"}</time> · {e.title} ·{" "}
-          {e.amount || "金额未知"} {e.currency || "币种未登记"}
+    <section className="simple-editor">
+      <div className="simple-section-title">
+        <h3>记账日历</h3>
+        <button
+          onClick={() => {
+            setMonth(today().slice(0, 7));
+            setSelected(today());
+          }}
+        >
+          今天
+        </button>
+      </div>
+      <div className="simple-month-toolbar">
+        <button
+          className="icon-button"
+          aria-label="上一个记账月"
+          onClick={() => {
+            setMonth(shiftLedgerMonth(month, -1));
+            setSelected("");
+          }}
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <Field
+          label="月份"
+          type="month"
+          value={month}
+          onChange={(value) => {
+            if (ledgerMonthCells(value).length) {
+              setMonth(value);
+              setSelected("");
+            }
+          }}
+        />
+        <button
+          className="icon-button"
+          aria-label="下一个记账月"
+          onClick={() => {
+            setMonth(shiftLedgerMonth(month, 1));
+            setSelected("");
+          }}
+        >
+          <ChevronRight size={18} />
+        </button>
+      </div>
+      <div className="simple-month-grid" aria-label="本人登记观察月历">
+        {["一", "二", "三", "四", "五", "六", "日"].map((label) => (
+          <span className="simple-weekday" key={label}>
+            {label}
+          </span>
+        ))}
+        {cells.map((date, i) =>
+          date ? (
+            <button
+              key={date}
+              className="simple-month-day"
+              aria-label={`${date}，${events.filter((e) => e.date.slice(0, 10) === date).length}条观察`}
+              aria-pressed={selected === date}
+              data-today={date === today() || undefined}
+              onClick={() => setSelected(selected === date ? "" : date)}
+            >
+              <span>{Number(date.slice(-2))}</span>
+              {events.some((e) => e.date.slice(0, 10) === date) && (
+                <i aria-hidden="true" />
+              )}
+            </button>
+          ) : (
+            <span key={i} className="simple-month-blank" />
+          ),
+        )}
+      </div>
+      <div className="simple-section-title">
+        <h4>{selected ? selected.replaceAll("-", "/") : "本月登记"}</h4>
+        {selected && <button onClick={() => setSelected("")}>查看全月</button>}
+      </div>
+      {visible.map((e, i) => (
+        <article className="simple-calendar-event" key={i}>
+          <time>{e.date || "日期未知"}</time>
+          <strong>{e.title}</strong>
+          <span>
+            {ledger.hide ? "••••" : e.amount || "金额未知"}{" "}
+            {e.currency || "币种未登记"}
+          </span>
         </article>
       ))}
-      {!events.length && <p>本月没有已登记观察；不自动补记录。</p>}
+      {!visible.length && (
+        <p>{selected ? "当天" : "本月"}没有已登记观察；不自动补记录。</p>
+      )}
     </section>
   );
 }
+
 function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
   const cf = object(ledger.cashflow);
   const [step, setStep] = useState(
@@ -1404,26 +1624,10 @@ function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
     [error, setError] = useState("");
   const list = (k: string) =>
     rows(cf[k === "income" ? "incomeItems" : "expenseItems"]);
-  const complete = (key: string) => {
-    const value = cf[key];
-    return Array.isArray(value) && rows(value).length === value.length;
-  };
-  const income =
-      text(cf.currency).trim() &&
-      list("income").length &&
-      complete("incomeItems")
-        ? sum(list("income").map(annual))
-        : null,
-    expense =
-      text(cf.currency).trim() &&
-      list("expense").length &&
-      complete("expenseItems")
-        ? sum(list("expense").map(annual))
-        : null,
-    surplus = add(income, negate(expense));
+  const { income, expense, surplus } = budgetSummary(ledger);
   const save = (next: Row) => patch({ ...ledger, cashflow: next });
   return (
-    <section>
+    <section className="simple-editor">
       <h3>年度现金流规划</h3>
       <Choice
         label="明确预算币种"
@@ -1431,30 +1635,29 @@ function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
         options={currencyOptions}
         onChange={(currency) => save({ ...cf, currency })}
       />
-      <nav>
-        {[
-          ["intro", "开始"],
-          ["income", "收入"],
-          ["expense", "支出"],
-          ["overview", "预算追踪"],
-        ].map(([s, label]) => (
-          <button
-            key={s}
-            onClick={() => {
-              setStep(s);
-              setEditing(null);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-      <Metrics
-        currency={text(cf.currency).trim() || "币种未登记"}
-        values={{ income, expenses: expense, surplus }}
+      <WorkspaceTabs
+        label="现金流规划步骤"
+        value={step}
+        onChange={(next) => {
+          setStep(next);
+          setEditing(null);
+        }}
+        items={[
+          { value: "intro", label: "开始" },
+          { value: "income", label: "收入" },
+          { value: "expense", label: "支出" },
+          { value: "overview", label: "预算追踪" },
+        ]}
       />
+      <div className="simple-budget-summary">
+        <Metrics
+          hidden={ledger.hide === true}
+          currency={text(cf.currency).trim() || "币种未登记"}
+          values={{ income, expenses: expense, surplus }}
+        />
+      </div>
       <p>
-        预算不等于实际收支或现金余额；币种与期间未登记的原数据不推断。旧版月度实际支出固定0并非观察，新页面保持未知。
+        仅为年度预算，不代表实际收支或现金余额；未登记币种和期间时保留未知。
       </p>
       {step === "intro" ? (
         <>
@@ -1470,7 +1673,12 @@ function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
         </>
       ) : step === "overview" ? (
         <>
-          <FlowView income={income} expense={expense} />
+          <SimpleBudgetFlow
+            income={income}
+            expense={expense}
+            currency={text(cf.currency)}
+            hidden={ledger.hide === true}
+          />
           {list("expense").map((r, i) => (
             <article key={text(r.id) || i}>
               <strong>{text(r.name)}</strong>
@@ -1488,9 +1696,11 @@ function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
               </button>
             </article>
           ))}
-          <button onClick={() => save({ ...cf, completed: true })}>
-            明确完成规划并加入草稿
-          </button>
+          {cf.completed !== true && (
+            <button onClick={() => save({ ...cf, completed: true })}>
+              明确完成规划并加入草稿
+            </button>
+          )}
         </>
       ) : (
         <>
@@ -1621,46 +1831,6 @@ function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
       )}
       {error && <p role="alert">{error}</p>}
     </section>
-  );
-}
-function FlowView({
-  income,
-  expense,
-}: {
-  income: string | null;
-  expense: string | null;
-}) {
-  return (
-    <figure>
-      <svg role="img" aria-label="本人预算收支流向" viewBox="0 0 600 100">
-        <rect
-          x="15"
-          y="15"
-          width="170"
-          height="65"
-          fill="none"
-          stroke="currentColor"
-        />
-        <path d="M185 48 H390" stroke="currentColor" strokeWidth="2" />
-        <rect
-          x="395"
-          y="15"
-          width="190"
-          height="65"
-          fill="none"
-          stroke="currentColor"
-        />
-        <text x="30" y="52" fill="currentColor">
-          预估收入 {show(income)}
-        </text>
-        <text x="410" y="52" fill="currentColor">
-          预估支出 {show(expense)}
-        </text>
-      </svg>
-      <figcaption>
-        金额来自明确预算项；连接线不表示实际资金划转。可通过浏览器打印保留此图。
-      </figcaption>
-    </figure>
   );
 }
 
