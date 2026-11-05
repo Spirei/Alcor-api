@@ -1,7 +1,7 @@
 import { MaterialAccessSettings } from "./asset-library-access";
 import { Dialog } from "./dialog";
 import { PageHeader } from "./workspace-ui";
-import { RefreshCw, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -507,19 +507,6 @@ function SharedAssetSession({
             >
               <Settings2 size={18} />
             </button>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="刷新素材库"
-              disabled={busy || locked}
-              onClick={() => {
-                setError("");
-                void load();
-                catalogChanged();
-              }}
-            >
-              <RefreshCw size={17} />
-            </button>
           </div>
         }
       />
@@ -527,6 +514,10 @@ function SharedAssetSession({
         session={session}
         active={active && visible && !locked}
         revision={catalogRefresh}
+        onRefresh={() => {
+          setError("");
+          void load();
+        }}
         onChanged={() => {
           void load();
           catalogChanged();

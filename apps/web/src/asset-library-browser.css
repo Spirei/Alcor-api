@@ -115,7 +115,7 @@
   background: var(--selected);
 }
 .asset-library-meta {
-  min-height: 34px;
+  min-height: 44px;
   padding-block: 12px 8px;
   font-size: 12px;
   color: var(--muted);
@@ -206,7 +206,7 @@
 }
 .asset-library-items.list .asset-library-item {
   display: grid;
-  grid-template-columns: 28px 40px minmax(0, 1fr) 100px;
+  grid-template-columns: 28px 40px minmax(0, 1fr) 180px;
   gap: 12px;
   align-items: center;
   min-height: 66px;
@@ -261,7 +261,7 @@
 }
 .asset-library-list-head {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 127px;
+  grid-template-columns: 80px minmax(0, 1fr) 180px;
   gap: 12px;
   padding: 10px 14px;
   border: 1px solid var(--edge);
@@ -271,8 +271,7 @@
   background: var(--soft);
 }
 .asset-library-list-head span:last-child {
-  text-align: right;
-  padding-right: 27px;
+  text-align: left;
 }
 .asset-library-items[aria-busy="true"]:empty {
   min-height: 250px;
@@ -425,11 +424,11 @@
     display: none;
   }
   .asset-library-list-head {
-    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-columns: 66px minmax(0, 1fr);
     gap: 8px;
     padding-inline: 10px;
   }
-  .asset-library-list-head span:last-child {
+  .asset-library.is-stock .asset-library-list-head span:last-child {
     display: none;
   }
   .asset-library-items.list.cards .asset-library-item {
@@ -503,13 +502,16 @@
   outline: 2px solid var(--asset-accent);
   outline-offset: 3px;
 }
-.asset-library:not(.is-stock)
+.asset-library:not(.is-stock):not(.is-broker)
   .asset-library-items.list:not(.cards)
   .asset-library-item {
   grid-template-columns: 28px 40px minmax(0, 1fr);
 }
 .asset-library:not(.is-stock) .asset-library-list-head {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 80px minmax(0, 1fr);
+}
+.asset-library.is-broker:not(.is-readonly) .asset-library-list-head {
+  grid-template-columns: 112px minmax(0, 1fr);
 }
 .asset-library-items.grid .asset-library-icon-button {
   width: 72px;
@@ -555,7 +557,7 @@
 }
 
 @media (max-width: 600px) {
-  .asset-library:not(.is-stock)
+  .asset-library:not(.is-stock):not(.is-broker)
     .asset-library-items.list:not(.cards)
     .asset-library-item {
     grid-template-columns: 22px 36px minmax(0, 1fr);
@@ -723,26 +725,6 @@
 .asset-name-dialog {
   width: min(420px, calc(100vw - 32px));
 }
-.asset-name-field {
-  display: grid;
-  gap: 8px;
-  font-size: 13px;
-}
-.asset-name-field input {
-  width: 100%;
-  min-height: 42px;
-  padding: 8px 12px;
-  border: 1px solid var(--edge);
-  border-radius: 10px;
-  background: var(--bg);
-  color: var(--ink);
-}
-.asset-name-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 24px;
-}
 @media (hover: none) {
   .asset-market-edit {
     opacity: 1;
@@ -868,18 +850,17 @@
   display: none !important;
 }
 .asset-inline-name {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
   align-items: center;
   gap: 6px;
-  max-width: 100%;
+  width: min(280px, 100%);
+  min-width: 0;
 }
 .asset-inline-name input {
-  flex: 1;
-  min-width: 85px;
-  max-width: 220px;
-  width: 150px;
-  height: 38px;
+  min-width: 0;
+  width: 100%;
+  height: 34px;
   padding: 6px 10px;
   border: 1px solid var(--edge);
   border-radius: 10px;
@@ -904,7 +885,7 @@
   color: var(--ink);
 }
 .asset-inline-error {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   color: var(--bad);
   font-size: 11px;
 }
@@ -947,7 +928,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-right: 85px;
+  margin-right: 84px;
   padding-right: 0;
 }
 .asset-library-items.grid .asset-row-remove {
@@ -975,27 +956,26 @@
   gap: 6px;
   white-space: nowrap;
 }
-.asset-create-inline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--edge);
-}
-.asset-create-inline label {
+.asset-create-form {
   display: grid;
-  gap: 6px;
-  flex: 1;
-  min-width: 130px;
-  font-size: 12px;
-  color: var(--muted);
+  gap: 18px;
 }
-.asset-create-inline input {
+.asset-create-form label,
+.asset-create-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.asset-create-form input {
   width: 100%;
 }
-.asset-create-inline .asset-name-action {
-  margin-bottom: 5px;
+.asset-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
 }
 .asset-removed-feedback {
   display: flex;
@@ -1140,12 +1120,230 @@
   height: 18px;
   accent-color: var(--asset-accent);
 }
-.asset-library-meta {
-  min-height: 40px;
-}
 
 .asset-library-item[data-dragging="true"] {
   z-index: 2;
   border-color: var(--asset-accent);
   box-shadow: 0 4px 16px #0002;
+}
+
+/* Keep selection and row actions in fixed slots instead of moving the search. */
+.asset-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-height: 24px;
+  font-size: 12px;
+}
+.asset-selection-bar > span {
+  margin-right: auto;
+  white-space: nowrap;
+}
+.asset-selection-bar > .asset-selection-result {
+  flex-basis: 100%;
+  white-space: normal;
+}
+.asset-selection-bar strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.asset-selection-bar button {
+  min-height: 24px;
+  padding: 2px 0;
+}
+.asset-selection-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--bad);
+  font: inherit;
+  cursor: pointer;
+}
+.asset-selection-remove:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.asset-library-item[data-selected="true"] {
+  background: color-mix(in srgb, var(--asset-accent) 8%, var(--bg));
+}
+.asset-library.is-selecting .asset-library-items.list .asset-batch-check {
+  position: static;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+  margin: 0;
+}
+.asset-library.is-selecting .asset-library-items.list .asset-library-rank {
+  display: none;
+}
+.asset-library:is(.is-selecting, .is-deleted) .asset-broker-grip,
+.asset-library.is-selecting
+  :is(
+    .asset-market-edit,
+    .asset-row-remove,
+    .asset-card-reset,
+    .asset-library-camera
+  ) {
+  visibility: hidden;
+  pointer-events: none;
+}
+.asset-library.is-selecting .asset-broker-category {
+  pointer-events: none;
+  text-decoration: none;
+}
+.asset-library.is-stock .asset-library-items.list .asset-library-caption {
+  padding-right: 0;
+}
+.asset-library.is-readonly .asset-library-items.list .asset-library-market {
+  margin-right: 0;
+}
+.asset-confirm-dialog {
+  width: min(440px, calc(100% - 32px));
+}
+.asset-confirm-dialog .dialog-content {
+  min-height: 90px;
+  padding-bottom: 0;
+}
+.asset-confirm-dialog .dialog-content p {
+  margin: 0 0 12px;
+}
+.asset-confirm-dialog .dialog-actions {
+  flex-wrap: wrap;
+}
+.broker-edit-form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.broker-edit-form legend {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.broker-edit-form fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.broker-edit-form fieldset label:has(input:checked) {
+  background: var(--selected);
+  border-color: var(--faint);
+}
+@media (max-width: 600px) {
+  .asset-library-items.list .asset-library-market {
+    display: none;
+  }
+  .asset-selection-bar {
+    gap: 10px;
+  }
+}
+
+.asset-library-items.list
+  .asset-library-item:has(.asset-inline-name)
+  .asset-library-caption {
+  padding-right: 0;
+}
+.asset-library-item:has(.asset-inline-name) .asset-row-remove {
+  visibility: hidden;
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  .asset-library-items.list:not(.cards) .asset-library-caption {
+    padding-right: 76px;
+  }
+  .asset-library.is-broker:not(.is-readonly)
+    .asset-library-items.list
+    .asset-library-item {
+    grid-template-columns: 20px 36px minmax(0, 1fr);
+  }
+  .asset-library.is-broker:not(.is-readonly)
+    .asset-library-items.list
+    .asset-library-rank,
+  .asset-library.is-broker.is-selecting
+    .asset-library-items.list
+    .asset-broker-grip {
+    display: none;
+  }
+  .asset-library.is-stock .asset-library-items.list .asset-library-caption {
+    padding-right: 76px;
+  }
+  .asset-library-items.list
+    .asset-library-item:has(.asset-inline-name)
+    .asset-library-caption {
+    padding-right: 0;
+  }
+}
+
+.asset-library-tools .icon-button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.asset-refresh.is-refreshing svg {
+  animation: asset-refresh-turn 900ms linear infinite;
+}
+@keyframes asset-refresh-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+:root[data-reduced-motion="true"] .asset-refresh svg {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduced-motion="false"]) .asset-refresh svg {
+    animation: none;
+  }
+}
+
+.asset-library.is-deleted :is(.asset-market-edit, .asset-library-camera) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .asset-library:not(.is-stock) .asset-library-list-head {
+    grid-template-columns: 66px minmax(0, 1fr);
+  }
+  .asset-library.is-broker:not(.is-readonly) .asset-library-list-head {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+}
+
+.asset-name-dialog .broker-edit-form {
+  margin: 20px 24px 24px;
+  padding: 0;
+}
+
+.asset-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+}
+@media (max-width: 600px) {
+  .asset-library-tools {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .asset-view-toggle {
+    margin-left: auto;
+  }
+}
+
+.asset-meta-skeleton {
+  display: inline-block;
+  width: 72px;
+  height: 10px;
+  border-radius: 6px;
+  background: var(--soft);
 }

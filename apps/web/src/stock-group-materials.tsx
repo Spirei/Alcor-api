@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, RefreshCw } from "lucide-react";
 import { api, type Session } from "./api";
 import { groupListing, type GroupListing } from "./watch-groups-state";
 import { WatchGroupIcons } from "./watch-group-icons";
@@ -8,10 +8,12 @@ export function StockGroupMaterials({
   session,
   active,
   blocked,
+  onRefresh,
 }: {
   session: Session;
   active: boolean;
   blocked: boolean;
+  onRefresh?: () => void;
 }) {
   const [groups, setGroups] = useState<GroupListing | null>(null),
     [error, setError] = useState(""),
@@ -75,8 +77,31 @@ export function StockGroupMaterials({
             disabled={iconBlocked || nameBlocked}
           />
         </label>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="刷新股票分组"
+          title="刷新股票分组"
+          disabled={blocked || iconBlocked || nameBlocked}
+          onClick={() => {
+            changed();
+            onRefresh?.();
+          }}
+        >
+          <RefreshCw size={18} />
+        </button>
       </div>
-      <div className="asset-library-meta">股票分组 · {all.length} 个</div>
+      <div className="asset-library-meta">
+        {groups ? (
+          `股票分组 · ${all.length} 个`
+        ) : (
+          <span
+            className="asset-meta-skeleton"
+            role="status"
+            aria-label="正在读取股票分组"
+          />
+        )}
+      </div>
       {error && <p role="alert">{error}</p>}
       <WatchGroupIcons
         session={session}

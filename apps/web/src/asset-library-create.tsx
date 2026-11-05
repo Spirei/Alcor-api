@@ -1,5 +1,5 @@
+import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, X } from "lucide-react";
 import { api } from "./api";
 import { SelectMenu } from "./select-menu";
 import { libraryMarkets, type LibraryAsset } from "./asset-library-market";
@@ -19,7 +19,9 @@ export function MaterialCreate({
   onSave: (asset: LibraryAsset) => void;
   onCancel: () => void;
 }) {
-  const [selected, setSelected] = useState(market || "US"),
+  const [selected, setSelected] = useState(
+      market || (kind === "broker" ? "OTHER" : "US"),
+    ),
     [code, setCode] = useState(kind === "stock" ? query.toUpperCase() : ""),
     [name, setName] = useState("");
   const [candidates, setCandidates] = useState<LibraryAsset[]>([]),
@@ -121,7 +123,7 @@ export function MaterialCreate({
     );
   return (
     <form
-      className="asset-create-inline"
+      className="asset-create-form"
       onSubmit={(e) => {
         e.preventDefault();
         if (!valid || disabled) return;
@@ -142,21 +144,30 @@ export function MaterialCreate({
         }
       }}
     >
-      <SelectMenu
-        label="所属市场"
-        value={selected}
-        options={Object.entries(libraryMarkets).map(([value, label]) => ({
-          value,
-          label,
-        }))}
-        onChange={setSelected}
-        disabled={disabled}
-      />
+      <div className="asset-create-field">
+        <span>{kind === "broker" ? "市场分类" : "所属市场"}</span>
+        <SelectMenu
+          label={kind === "broker" ? "市场分类" : "所属市场"}
+          value={selected}
+          options={(kind === "broker"
+            ? [
+                ["OTHER", "未分类"],
+                ["US", "美股"],
+                ["HK", "港股"],
+                ["CN", "A股"],
+              ]
+            : Object.entries(libraryMarkets)
+          ).map(([value, label]) => ({ value, label }))}
+          onChange={setSelected}
+          disabled={disabled}
+        />
+      </div>
       {kind === "stock" && (
         <label>
           股票代码
           <input
             ref={input}
+            data-dialog-autofocus
             aria-label="新增股票代码"
             maxLength={40}
             value={code}
@@ -171,6 +182,7 @@ export function MaterialCreate({
         {kind === "broker" ? "券商名称" : "名称"}
         <input
           ref={kind === "broker" ? input : undefined}
+          data-dialog-autofocus={kind === "broker" || undefined}
           aria-label={kind === "broker" ? "新增券商名称" : "新增股票名称"}
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -179,24 +191,24 @@ export function MaterialCreate({
           placeholder={kind === "broker" ? "输入券商名称" : "选填"}
         />
       </label>
-      <button
-        className="asset-name-action"
-        title="添加"
-        aria-label="确认添加素材"
-        disabled={disabled || !valid}
-      >
-        <Check size={18} />
-      </button>
-      <button
-        type="button"
-        className="asset-name-action"
-        title="取消"
-        aria-label="取消添加素材"
-        onClick={onCancel}
-        disabled={disabled}
-      >
-        <X size={18} />
-      </button>
+      <div className="asset-form-actions">
+        <button
+          type="button"
+          className="button secondary"
+          onClick={onCancel}
+          disabled={disabled}
+        >
+          取消
+        </button>
+        <button
+          type="submit"
+          className="button"
+          aria-label="确认添加素材"
+          disabled={disabled || !valid}
+        >
+          添加
+        </button>
+      </div>
     </form>
   );
 }

@@ -13,6 +13,12 @@ type Job = {
   brokerMarkets?: string[];
   revision: number;
 };
+function materialMarkets(asset: LibraryAsset) {
+  return (
+    asset.brokerMarkets ??
+    (["US", "HK", "CN"].includes(asset.market || "") ? [asset.market!] : [])
+  );
+}
 export function useAssetNameEditor({
   session,
   active,
@@ -122,8 +128,22 @@ export function useAssetNameEditor({
     onChanged();
     setTarget(null);
   }
+  const changed =
+    !!job ||
+    (!!target &&
+      (name.trim() !== target.name ||
+        (target.type === "broker" &&
+          JSON.stringify([...brokerMarkets].sort()) !==
+            JSON.stringify([...materialMarkets(target)].sort()))));
   async function execute(check = false) {
-    if (!current() || busy || locked || (!target && !job)) return;
+    if (
+      !current() ||
+      busy ||
+      locked ||
+      (!target && !job) ||
+      (!check && !changed)
+    )
+      return;
     const expected = job || {
       requestId: requestId(),
       assetId: target!.id,
@@ -243,6 +263,7 @@ export function useAssetNameEditor({
   }, [editingId]);
   return {
     editingId,
+    changed,
     input,
     name,
     setName,
@@ -257,12 +278,7 @@ export function useAssetNameEditor({
       returnFocus.current = element;
       setTarget({ ...asset, revision });
       setName(asset.name);
-      setBrokerMarkets(
-        asset.brokerMarkets ??
-          (["US", "HK", "CN"].includes(asset.market || "")
-            ? [asset.market!]
-            : []),
-      );
+      setBrokerMarkets(materialMarkets(asset));
       setError("");
     },
     cancel: () => {
@@ -289,7 +305,10 @@ export function MaterialName({
   const editing = editor.editingId === asset.id;
   return (
     <span className="asset-library-name">
-      <strong hidden={editing && asset.type !== "broker"}>
+      <strong
+        title={asset.name || asset.code}
+        hidden={editing && asset.type !== "broker"}
+      >
         {asset.name || asset.code || "未命名素材"}
       </strong>
       <button
@@ -304,7 +323,11 @@ export function MaterialName({
         <Pencil size={15} />
       </button>
       {editing && asset.type === "broker" && (
-        <Dialog title="编辑券商" onClose={editor.cancel}>
+        <Dialog
+          title="编辑券商"
+          className="asset-name-dialog"
+          onClose={editor.cancel}
+        >
           <form
             className="broker-edit-form"
             onSubmit={(event) => {
@@ -316,6 +339,7 @@ export function MaterialName({
               名称
               <input
                 ref={editor.input}
+                data-dialog-autofocus
                 value={editor.name}
                 maxLength={120}
                 disabled={editor.busy || editor.pending}
@@ -349,12 +373,31 @@ export function MaterialName({
               ))}
             </fieldset>
             {editor.error && <p role="alert">{editor.error}</p>}
-            <button
-              className="button"
-              disabled={editor.busy || editor.locked || !editor.name.trim()}
-            >
-              {editor.pending ? "核对原操作" : "保存"}
-            </button>
+            <div className="asset-form-actions">
+              <button
+                type="button"
+                className="button secondary"
+                disabled={editor.busy || editor.pending}
+                onClick={editor.cancel}
+              >
+                取消
+              </button>
+              <button
+                className="button"
+                disabled={
+                  editor.busy ||
+                  editor.locked ||
+                  !editor.name.trim() ||
+                  !editor.changed
+                }
+              >
+                {editor.busy
+                  ? "处理中…"
+                  : editor.pending
+                    ? "核对原操作"
+                    : "保存"}
+              </button>
+            </div>
           </form>
         </Dialog>
       )}
@@ -386,7 +429,12 @@ export function MaterialName({
             className="asset-name-action"
             aria-label={editor.pending ? "核对名称修改结果" : "保存名称"}
             title={editor.pending ? "核对原操作" : "保存"}
-            disabled={editor.busy || editor.locked || !editor.name.trim()}
+            disabled={
+              editor.busy ||
+              editor.locked ||
+              !editor.name.trim() ||
+              !editor.changed
+            }
           >
             <Check size={17} />
           </button>

@@ -78,6 +78,7 @@ export function AssetLibraryBrowser({
   onReplace,
   onRestore,
   onChanged,
+  onRefresh,
   uploadDisabled = false,
   readOnly = false,
 }: {
@@ -87,6 +88,7 @@ export function AssetLibraryBrowser({
   onReplace?: (asset: AssetIconTarget, revision: number, file: File) => void;
   onRestore?: (asset: AssetIconTarget, revision: number) => void;
   onChanged?: () => void;
+  onRefresh?: () => void;
   uploadDisabled?: boolean;
   readOnly?: boolean;
 }) {
@@ -114,11 +116,13 @@ export function AssetLibraryBrowser({
     observer.observe(bar);
     return () => observer.disconnect();
   }, [type]);
+  const bulkTrigger = useRef<HTMLButtonElement>(null);
   const [selection, setSelection] = useState<string[]>([]);
   const [selecting, setSelecting] = useState(false),
     [confirmBulk, setConfirmBulk] = useState(false),
     [bulkBusy, setBulkBusy] = useState(false),
     [bulkTotal, setBulkTotal] = useState(0),
+    [bulkCompleted, setBulkCompleted] = useState(0),
     [bulkStopping, setBulkStopping] = useState(false),
     [bulkMessage, setBulkMessage] = useState("");
   const [creating, setCreating] = useState(false),
@@ -131,6 +135,7 @@ export function AssetLibraryBrowser({
   useEffect(() => {
     setSelection([]);
     setSelecting(false);
+    setBulkMessage("");
   }, [type, market, query, page, deleted]);
   const bulkEpoch = useRef(0);
   useEffect(() => {
@@ -433,6 +438,16 @@ export function AssetLibraryBrowser({
       else setRefresh((v) => v + 1);
     },
   });
+  const visibleSelection =
+    shown?.assets.map((asset) => asset.id).join("\n") || "";
+  useEffect(() => {
+    if (loading || bulkBusy || !shown) return;
+    const available = new Set(shown.assets.map((asset) => asset.id));
+    setSelection((previous) => {
+      const next = previous.filter((id) => available.has(id));
+      return next.length === previous.length ? previous : next;
+    });
+  }, [visibleSelection, loading, bulkBusy]);
   useSortMotion(
     itemRoot,
     "[data-broker-id]",
@@ -441,7 +456,7 @@ export function AssetLibraryBrowser({
   );
   return (
     <section
-      className={`asset-library${readOnly ? " is-readonly" : ""}${type === "stock" ? " is-stock" : type === "broker" ? " is-broker" : ""}`}
+      className={`asset-library${readOnly ? " is-readonly" : ""}${selecting ? " is-selecting" : ""}${deleted ? " is-deleted" : ""}${type === "stock" ? " is-stock" : type === "broker" ? " is-broker" : ""}`}
       aria-label="素材浏览"
     >
       <input
@@ -466,69 +481,92 @@ export function AssetLibraryBrowser({
             onReplace?.(target.asset, target.revision, file);
         }}
       />
-      {bulkMessage && <p role="status">{bulkMessage}</p>}
       {confirmBulk && (
         <Dialog
           title={`移除选中的 ${bulkBusy ? bulkTotal : selection.length} 项素材？`}
+          className="asset-confirm-dialog"
+          returnFocusRef={bulkTrigger}
           onClose={() => {
             if (!bulkBusy) setConfirmBulk(false);
           }}
         >
-          <p>从素材库移除，保留原文件；已删除素材可单独恢复。</p>
-          <button
-            className="button"
-            disabled={bulkBusy}
-            onClick={async () => {
-              if (!loaded || bulkBusy || command.blocked) return;
-              setBulkStopping(false);
-              setBulkTotal(selection.length);
-              setBulkBusy(true);
-              const generation = bulkEpoch.current;
-              let currentRevision = loaded.revision!,
-                completed = 0;
-              const targets =
-                shown?.assets.filter((asset) => selection.includes(asset.id)) ||
-                [];
-              try {
-                for (const asset of targets) {
-                  if (document.hidden || generation !== bulkEpoch.current)
-                    break;
-                  const result = await command.execute({
-                    action: "delete",
-                    asset,
-                    revision: currentRevision,
-                  });
-                  if (!result || typeof result.revision !== "number") break;
-                  currentRevision = result.revision;
-                  completed++;
-                  setSelection((previous) =>
-                    previous.filter((id) => id !== asset.id),
+          <div className="dialog-content">
+            <p>原文件保留，可在已移除素材中恢复。</p>
+            {bulkBusy && (
+              <p role="status">
+                已移除 {bulkCompleted} / {bulkTotal} 项
+              </p>
+            )}
+          </div>
+          <div className="dialog-actions">
+            {!bulkBusy && (
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setConfirmBulk(false)}
+              >
+                取消
+              </button>
+            )}
+            <button
+              className="button"
+              disabled={bulkBusy}
+              onClick={async () => {
+                if (!loaded || bulkBusy || command.blocked) return;
+                setBulkStopping(false);
+                setBulkTotal(selection.length);
+                setBulkCompleted(0);
+                setBulkBusy(true);
+                const generation = bulkEpoch.current;
+                let currentRevision = loaded.revision!,
+                  completed = 0;
+                const targets =
+                  shown?.assets.filter((asset) =>
+                    selection.includes(asset.id),
+                  ) || [];
+                try {
+                  for (const asset of targets) {
+                    if (document.hidden || generation !== bulkEpoch.current)
+                      break;
+                    const result = await command.execute({
+                      action: "delete",
+                      asset,
+                      revision: currentRevision,
+                    });
+                    if (!result || typeof result.revision !== "number") break;
+                    currentRevision = result.revision;
+                    completed++;
+                    setBulkCompleted(completed);
+                    setSelection((previous) =>
+                      previous.filter((id) => id !== asset.id),
+                    );
+                  }
+                } finally {
+                  command.clearLast();
+                  setBulkBusy(false);
+                  setConfirmBulk(false);
+                  if (completed === targets.length) setSelecting(false);
+                  setBulkMessage(
+                    `已移除 ${completed} / ${targets.length} 项${completed < targets.length ? "，已停止，请核对未完成操作" : ""}`,
                   );
                 }
-              } finally {
-                setBulkBusy(false);
-                setConfirmBulk(false);
-                if (completed === targets.length) setSelecting(false);
-                setBulkMessage(
-                  `已移除 ${completed} / ${targets.length} 项${completed < targets.length ? "，已停止，请核对未完成操作" : ""}`,
-                );
-              }
-            }}
-          >
-            {bulkBusy ? "正在移除…" : "确认移除"}
-          </button>
-          {bulkBusy && (
-            <button
-              className="button secondary"
-              disabled={bulkStopping}
-              onClick={() => {
-                ++bulkEpoch.current;
-                setBulkStopping(true);
               }}
             >
-              {bulkStopping ? "正在停止…" : "停止后续移除"}
+              {bulkBusy ? "正在移除…" : "确认移除"}
             </button>
-          )}
+            {bulkBusy && (
+              <button
+                className="button secondary"
+                disabled={bulkStopping}
+                onClick={() => {
+                  ++bulkEpoch.current;
+                  setBulkStopping(true);
+                }}
+              >
+                {bulkStopping ? "正在停止…" : "停止后续移除"}
+              </button>
+            )}
+          </div>
         </Dialog>
       )}
       <nav
@@ -562,6 +600,7 @@ export function AssetLibraryBrowser({
           session={session}
           active={active && visible && !retired}
           blocked={uploadDisabled || labelBlocked || command.blocked}
+          onRefresh={onRefresh}
         />
       ) : (
         <>
@@ -638,40 +677,24 @@ export function AssetLibraryBrowser({
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={bulkBusy || command.blocked}
+                    ref={bulkTrigger}
+                    disabled={
+                      uploadDisabled ||
+                      labelBlocked ||
+                      bulkBusy ||
+                      command.blocked ||
+                      loading
+                    }
                     onClick={() => {
+                      setBulkMessage("");
+                      nameEditor.cancel();
+                      setCreating(false);
                       setSelecting(!selecting);
                       setSelection([]);
                     }}
                   >
-                    {selecting ? "取消选择" : "批量选择"}
+                    {selecting ? "完成选择" : "批量选择"}
                   </button>
-                  {selecting && (
-                    <>
-                      <button
-                        type="button"
-                        className="text-button"
-                        disabled={bulkBusy}
-                        onClick={() =>
-                          setSelection(
-                            shown?.assets.map((asset) => asset.id) || [],
-                          )
-                        }
-                      >
-                        选择本页
-                      </button>
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={
-                          bulkBusy || command.blocked || !selection.length
-                        }
-                        onClick={() => setConfirmBulk(true)}
-                      >
-                        移除 {selection.length} 项
-                      </button>
-                    </>
-                  )}
                 </>
               )}
               {type === "broker" && !deleted && (
@@ -699,31 +722,41 @@ export function AssetLibraryBrowser({
                   setCreating(false);
                 }}
               >
-                <Undo2 size={18} />
+                {deleted ? <Undo2 size={18} /> : <Trash2 size={18} />}
               </button>
-              <button
-                className="icon-button"
-                aria-label="网格显示"
-                aria-pressed={view === "grid"}
-                onClick={() => setView("grid")}
+              <div
+                className="asset-view-toggle"
+                role="group"
+                aria-label="素材视图"
               >
-                <Grid2X2 size={18} />
-              </button>
+                <button
+                  className="icon-button"
+                  aria-label="网格显示"
+                  aria-pressed={view === "grid"}
+                  onClick={() => setView("grid")}
+                >
+                  <Grid2X2 size={18} />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label="列表显示"
+                  aria-pressed={view === "list"}
+                  onClick={() => setView("list")}
+                >
+                  <List size={18} />
+                </button>
+              </div>
               <button
-                className="icon-button"
-                aria-label="列表显示"
-                aria-pressed={view === "list"}
-                onClick={() => setView("list")}
-              >
-                <List size={18} />
-              </button>
-              <button
-                className="icon-button"
+                className={`icon-button asset-refresh${loading ? " is-refreshing" : ""}`}
                 aria-label="刷新素材"
+                title={loading ? "正在刷新" : "刷新素材"}
+                aria-busy={loading}
                 disabled={loading || retired}
                 onClick={() => {
                   cache.current.clear();
+                  setBulkMessage("");
                   setRefresh((v) => v + 1);
+                  onRefresh?.();
                 }}
               >
                 <RefreshCw size={18} />
@@ -732,12 +765,15 @@ export function AssetLibraryBrowser({
           </div>
           {type === "broker" && (
             <span className="asset-market-announcement" role="status">
-              {brokerOrder.message || "按住手柄拖动排序"}
+              {selecting || deleted
+                ? ""
+                : brokerOrder.message || "按住手柄拖动排序"}
             </span>
           )}
           {creating && (type === "stock" || type === "broker") && (
             <Dialog
               title={type === "broker" ? "新增券商" : "添加股票素材"}
+              className="asset-name-dialog"
               onClose={() => setCreating(false)}
             >
               <MaterialCreate
@@ -749,6 +785,7 @@ export function AssetLibraryBrowser({
                 }
                 onCancel={() => setCreating(false)}
                 onSave={(asset) => {
+                  setBulkMessage("");
                   if (loaded?.revision !== undefined)
                     void command.execute({
                       action: "create",
@@ -773,36 +810,87 @@ export function AssetLibraryBrowser({
               )}
             </div>
           )}
-          {command.last?.action === "delete" && !command.pending && (
-            <div className="asset-removed-feedback" role="status">
-              <span>已移出素材库，原文件已保留</span>
-              <button
-                type="button"
-                disabled={
-                  command.blocked || loaded?.revision === undefined || loading
-                }
-                onClick={() =>
-                  loaded?.revision !== undefined &&
-                  void command.execute({
-                    action: "restore",
-                    revision: loaded.revision,
-                    asset: command.last!.asset,
-                  })
-                }
-              >
-                撤销
-              </button>
-            </div>
-          )}
+          {command.last?.action === "delete" &&
+            !command.pending &&
+            !bulkBusy &&
+            !deleted && (
+              <div className="asset-removed-feedback" role="status">
+                <span>已移出素材库，原文件已保留</span>
+                <button
+                  type="button"
+                  disabled={
+                    command.blocked || loaded?.revision === undefined || loading
+                  }
+                  onClick={() =>
+                    loaded?.revision !== undefined &&
+                    void command.execute({
+                      action: "restore",
+                      revision: loaded.revision,
+                      asset: command.last!.asset,
+                    })
+                  }
+                >
+                  撤销
+                </button>
+              </div>
+            )}
           <div className="asset-library-meta" aria-live="polite">
             {retired ? (
               "登录状态已变化，请重新打开素材库"
             ) : error ? (
               <span role="alert">{error}</span>
+            ) : bulkMessage && !selecting ? (
+              <span role="status">{bulkMessage}</span>
+            ) : selecting ? (
+              <div
+                className="asset-selection-bar"
+                role="group"
+                aria-label="批量素材操作"
+              >
+                <span>
+                  已选 <strong>{selection.length}</strong> 项
+                </span>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={bulkBusy || loading || !shown?.assets.length}
+                  onClick={() => {
+                    const ids = shown?.assets.map((asset) => asset.id) || [];
+                    setSelection(
+                      ids.length && ids.every((id) => selection.includes(id))
+                        ? []
+                        : ids,
+                    );
+                  }}
+                >
+                  {shown?.assets.length &&
+                  shown.assets.every((asset) => selection.includes(asset.id))
+                    ? "取消全选"
+                    : "全选本页"}
+                </button>
+                <button
+                  type="button"
+                  className="asset-selection-remove"
+                  disabled={bulkBusy || command.blocked || !selection.length}
+                  onClick={() => setConfirmBulk(true)}
+                >
+                  <Trash2 size={14} />
+                  移除
+                </button>
+                {bulkMessage && (
+                  <span className="asset-selection-result" role="status">
+                    {bulkMessage}
+                  </span>
+                )}
+              </div>
             ) : shown ? (
-              `${type === "card" ? "卡片素材 · " : type === "flag" ? "国家/地区旗帜 · " : type === "broker" ? "券商图标 · " : ""}${shown.total} ${type === "market" ? "个市场" : type === "card" ? "张" : type === "flag" || type === "broker" ? "个" : "项素材"}`
+              `${deleted ? "已移除 · " : ""}${type === "card" ? "卡片素材 · " : type === "flag" ? "国家/地区旗帜 · " : type === "broker" ? "券商图标 · " : ""}${shown.total} ${type === "market" ? "个市场" : type === "card" ? "张" : type === "flag" || type === "broker" ? "个" : "项素材"}`
             ) : loading ? (
-              "正在读取素材…"
+              <span
+                className="asset-meta-skeleton"
+                role="status"
+                aria-label="正在读取素材"
+              />
             ) : (
               ""
             )}
@@ -812,7 +900,9 @@ export function AssetLibraryBrowser({
             shown &&
             shown.assets.length > 0 && (
               <div className="asset-library-list-head" aria-hidden="true">
-                <span>序号</span>
+                <span>
+                  {selecting ? "选择" : type === "broker" ? "排序" : "序号"}
+                </span>
                 <span>
                   {type === "market"
                     ? "市场"
@@ -836,6 +926,9 @@ export function AssetLibraryBrowser({
                 key={asset.id}
                 data-broker-id={type === "broker" ? asset.id : undefined}
                 data-dragging={brokerOrder.dragging === asset.id || undefined}
+                data-selected={
+                  (selecting && selection.includes(asset.id)) || undefined
+                }
               >
                 {selecting && (
                   <input
@@ -861,6 +954,7 @@ export function AssetLibraryBrowser({
                     id={asset.id}
                     order={brokerOrder}
                     disabled={
+                      selecting ||
                       uploadDisabled ||
                       labelBlocked ||
                       command.blocked ||
@@ -885,6 +979,7 @@ export function AssetLibraryBrowser({
                         : "点击上传/更换图标"
                   }
                   disabled={
+                    selecting ||
                     uploadDisabled ||
                     labelBlocked ||
                     command.blocked ||
@@ -924,6 +1019,7 @@ export function AssetLibraryBrowser({
                     revision={loaded?.revision || 0}
                     editor={nameEditor}
                     disabled={
+                      selecting ||
                       uploadDisabled ||
                       labelBlocked ||
                       command.blocked ||
@@ -955,6 +1051,7 @@ export function AssetLibraryBrowser({
                         type="button"
                         disabled={
                           readOnly ||
+                          selecting ||
                           uploadDisabled ||
                           labelBlocked ||
                           command.blocked ||
@@ -985,13 +1082,18 @@ export function AssetLibraryBrowser({
                   </small>
                 </span>
                 {type === "card" &&
+                  !deleted &&
                   asset.customized &&
                   assetImageUrl(asset.originalImageUrl) && (
                     <button
                       type="button"
                       className="asset-card-reset"
                       disabled={
-                        uploadDisabled || labelBlocked || loading || !onRestore
+                        selecting ||
+                        uploadDisabled ||
+                        labelBlocked ||
+                        loading ||
+                        !onRestore
                       }
                       onClick={() => {
                         if (loaded?.revision !== undefined)
@@ -1007,20 +1109,22 @@ export function AssetLibraryBrowser({
                   aria-label={`${deleted ? "恢复" : "移除"} ${asset.name}`}
                   title={deleted ? "恢复素材" : "移出素材库，保留原文件"}
                   disabled={
+                    selecting ||
                     uploadDisabled ||
                     labelBlocked ||
                     command.blocked ||
                     loading ||
                     loaded?.revision === undefined
                   }
-                  onClick={() =>
-                    loaded?.revision !== undefined &&
-                    void command.execute({
-                      action: deleted ? "restore" : "delete",
-                      asset,
-                      revision: loaded.revision,
-                    })
-                  }
+                  onClick={() => {
+                    setBulkMessage("");
+                    if (loaded?.revision !== undefined)
+                      void command.execute({
+                        action: deleted ? "restore" : "delete",
+                        asset,
+                        revision: loaded.revision,
+                      });
+                  }}
                 >
                   {deleted ? <Undo2 size={17} /> : <Trash2 size={17} />}
                 </button>
@@ -1072,7 +1176,7 @@ export function AssetLibraryBrowser({
                     ? "移除后的素材可以在这里恢复"
                     : type === "broker"
                       ? "添加券商，管理图标与市场分类"
-                      : "添加素材或从来源清单导入"}
+                      : "当前分类还没有素材"}
               </p>
               {type === "stock" && query && !deleted && !creating ? (
                 <button
