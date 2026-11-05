@@ -1,0 +1,224 @@
+.public-people-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 26px 0;
+}
+.public-people-filter {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+  overflow-x: auto;
+  min-width: 0;
+  padding: 3px;
+}
+.public-people-filter > button {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 0;
+  min-width: 64px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.public-person-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 16px;
+}
+.public-people-filter .public-person-avatar {
+  width: 58px;
+  height: 58px;
+}
+.public-people-filter button[aria-pressed="true"] {
+  color: var(--accent);
+}
+.public-people-filter button[aria-pressed="true"] .public-person-avatar {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+  color: var(--accent);
+}
+.public-people-toolbar > .feed-header-actions {
+  padding-top: 14px;
+}
+.public-people-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-block: 10px 20px;
+}
+.public-people-loading {
+  display: grid;
+  gap: 22px;
+  margin-block: 30px;
+}
+.public-people-loading i {
+  height: 72px;
+  border-radius: 14px;
+  background: var(--soft);
+}
+.public-original-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  justify-content: space-between;
+}
+.public-original-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 4px 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  line-height: 1.7;
+}
+.public-original-heading span,
+.public-original-heading time {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.public-original-heading time {
+  white-space: nowrap;
+}
+.public-original-post .public-original-context {
+  color: var(--muted);
+  font-size: 12px;
+}
+.public-original-post p {
+  margin-block: 10px 0;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.public-original-post .feed-quote {
+  margin-block: 16px;
+}
+.public-original-links,
+.public-media-links {
+  display: flex;
+  align-items: center;
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.public-original-links :is(a, button),
+.public-original-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.public-original-links a,
+.public-original-link {
+  color: var(--accent);
+}
+.public-media-links {
+  gap: 8px;
+}
+.public-media-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.public-original-comments {
+  font-size: 13px;
+}
+.public-original-comments summary {
+  min-height: 36px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.public-original-comment {
+  border-top: 1px solid var(--edge);
+  padding: 14px 0;
+}
+.public-original-comment > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.public-original-comment time,
+.public-original-comment small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.public-source-proof {
+  margin: 0;
+  font-size: 13px;
+}
+.public-source-proof dt {
+  color: var(--muted);
+  margin-top: 14px;
+}
+.public-source-proof dd {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+}
+.public-proof-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.public-people-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
+}
+@media (max-width: 640px) {
+  .public-people-toolbar {
+    gap: 8px;
+  }
+  .public-people-filter {
+    gap: 12px;
+  }
+  .public-people-filter > button {
+    min-width: 52px;
+    font-size: 12px;
+  }
+  .public-people-filter .public-person-avatar {
+    width: 48px;
+    height: 48px;
+  }
+  .public-people-toolbar > .feed-header-actions {
+    gap: 0;
+    padding-top: 9px;
+  }
+  .public-original-post {
+    gap: 10px;
+  }
+  .public-original-post > .public-person-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+}
+.public-people-pagination {
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.public-people-pagination > span {
+  font-size: 12px;
+}
