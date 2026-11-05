@@ -664,14 +664,16 @@ function PortfolioSession({ session }: { session: Session }) {
           <h1>资产记录</h1>
           <AmountVisibilityControl />
         </div>
-        <button
-          className="icon-button"
-          aria-label="刷新资产记录"
-          onClick={refresh}
-          disabled={busy}
-        >
-          <RefreshCw size={18} />
-        </button>
+        {section !== "analysis" && (
+          <button
+            className="icon-button"
+            aria-label="刷新资产记录"
+            onClick={refresh}
+            disabled={busy}
+          >
+            <RefreshCw size={18} />
+          </button>
+        )}
       </div>
       <WorkspaceTabs
         label="资产视图"

@@ -1,15 +1,11 @@
 .portfolio-analysis {
   margin-block: 12px;
+  min-width: 0;
 }
 .portfolio-analysis label {
   display: grid;
-  gap: 6px;
-}
-.portfolio-analysis .analysis-totals {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
-  margin-block: 20px;
+  gap: 8px;
+  min-width: 0;
 }
 .portfolio-analysis dl > div {
   min-width: 0;
@@ -40,36 +36,340 @@
   width: 100%;
   max-width: 720px;
   height: auto;
-  color: var(--text-primary, #4b5563);
 }
 .portfolio-analysis figcaption {
   font-size: 12px;
 }
-.portfolio-analysis > h2 {
-  font-size: 18px;
+.analysis-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
   margin-bottom: 20px;
 }
-.portfolio-analysis .analysis-totals {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-}
-.analysis-totals > div {
-  padding: 20px;
-  background: var(--soft);
-  border: 1px solid var(--edge);
-  border-radius: 16px;
-}
-.analysis-totals dt {
-  font-size: 12px;
-  color: var(--muted);
-}
-.analysis-totals dd {
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1.6;
-  font-variant-numeric: tabular-nums;
+.analysis-heading h2 {
+  font-size: 20px;
+  margin: 0;
   letter-spacing: -0.025em;
 }
-.analysis-totals > div:last-child {
-  background: color-mix(in srgb, var(--accent, #3478f6) 8%, var(--bg));
+.analysis-heading p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 7px 0 0;
+}
+.analysis-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.analysis-asof,
+.analysis-scope {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+.analysis-loading {
+  padding-block: 40px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.analysis-dashboard {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  gap: 18px;
+  margin-top: 20px;
+  align-items: start;
+}
+.analysis-summary-card,
+.analysis-account-card,
+.analysis-distribution-card {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  background: var(--surface);
+}
+.portfolio-analysis .analysis-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 23px 18px;
+  margin: 0;
+}
+.analysis-totals dt {
+  font-size: 11px;
+  color: var(--muted);
+}
+.analysis-totals dd > small {
+  font-size: 11px;
+  color: var(--muted);
+  margin-inline-start: 5px;
+  font-weight: 400;
+}
+.portfolio-analysis .analysis-totals > div {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.portfolio-analysis .analysis-totals > div:last-child {
+  order: -1;
+  grid-column: 1/-1;
+  padding-bottom: 23px;
+  border-bottom: 1px solid var(--edge);
+}
+.portfolio-analysis .analysis-totals > div:last-child dd {
+  font-size: 28px;
+}
+.portfolio-analysis .analysis-totals dd {
+  font-size: 16px;
+  line-height: 1.55;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.analysis-summary-card > p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 24px 0 0;
+}
+.analysis-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.analysis-card-heading h3,
+.portfolio-analysis .analysis-card-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.analysis-card-heading > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.analysis-account-card > label {
+  margin-bottom: 17px;
+}
+.analysis-account-card .portfolio-table {
+  margin-bottom: 0;
+}
+.analysis-account-card .portfolio-table td,
+.analysis-account-card .portfolio-table th {
+  padding: 13px 12px;
+}
+.analysis-distribution-card,
+.analysis-position-details {
+  grid-column: 1/-1;
+}
+.analysis-distribution-card > h3:first-child {
+  margin-top: 0;
+}
+.analysis-distribution-card > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.analysis-ranking-list {
+  display: inline-block;
+  vertical-align: top;
+  width: 50%;
+  min-width: 0;
+  padding: 10px 20px 0 0;
+}
+.analysis-ranking-list > strong {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.analysis-ranking-list ol {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+}
+.analysis-ranking-list li {
+  padding: 12px 0;
+  border-top: 1px solid var(--edge);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.analysis-position-details {
+  border: 1px solid var(--edge);
+  border-radius: 15px;
+  padding: 16px 20px;
+}
+.analysis-position-details > summary {
+  font-size: 13px;
+  font-weight: 550;
+}
+.analysis-history {
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  padding: 22px;
+  margin-top: 22px;
+}
+.analysis-history > .workspace-tabs-shell {
+  margin-block: 14px;
+}
+.analysis-history > .workspace-tabs-shell .workspace-tabs button {
+  font-size: 12px;
+}
+.analysis-trend-state {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.analysis-trend-state .workspace-empty {
+  padding: 28px 16px;
+}
+.analysis-history-counts {
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.analysis-period-value {
+  display: grid;
+  gap: 7px;
+  text-align: center;
+  margin-top: 20px;
+}
+.analysis-period-value > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.analysis-period-value > strong {
+  font-size: 24px;
+}
+.analysis-date-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-block: 20px;
+}
+.analysis-date-range input {
+  min-width: 0;
+  width: 100%;
+}
+.analysis-evidence {
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.analysis-evidence > p[role="status"] {
+  font-weight: 550;
+}
+.analysis-evidence details {
+  border-top: 1px solid var(--edge);
+  padding-top: 15px;
+  margin-top: 20px;
+}
+.analysis-evidence table {
+  min-width: 580px;
+}
+.analysis-evidence details:has(> table) {
+  overflow-x: auto;
+}
+.analysis-settings {
+  display: grid;
+  gap: 22px;
+}
+.analysis-settings label {
+  display: grid;
+  gap: 9px;
+  font-size: 12px;
+}
+.analysis-settings > details {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.analysis-settings dl {
+  display: grid;
+  gap: 12px;
+}
+.analysis-settings dd {
+  margin: 5px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.portfolio-analysis .analysis-observed-prices svg {
+  color: var(--muted);
+}
+.portfolio-analysis .analysis-observed-prices figcaption {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+@media (max-width: 1050px) {
+  .analysis-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .portfolio-analysis .analysis-totals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .analysis-heading {
+    align-items: flex-start;
+  }
+  .analysis-toolbar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px 32px;
+    gap: 6px;
+  }
+  .analysis-toolbar > .select-menu-trigger {
+    min-width: 0;
+    width: 100%;
+    gap: 8px;
+    padding-inline: 11px;
+  }
+  .analysis-toolbar > .icon-button {
+    width: 32px;
+    min-width: 32px;
+    height: 36px;
+    padding: 6px;
+  }
+  .analysis-toolbar > .icon-button:first-of-type {
+    margin-inline-start: auto;
+  }
+  .analysis-summary-card,
+  .analysis-account-card,
+  .analysis-distribution-card,
+  .analysis-history {
+    padding: 17px;
+    border-radius: 16px;
+  }
+  .portfolio-analysis .analysis-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 15px;
+  }
+  .portfolio-analysis .analysis-totals > div:last-child dd {
+    font-size: 25px;
+  }
+  .analysis-date-range {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 13px;
+  }
+  .analysis-date-range .button {
+    grid-column: 1/-1;
+    justify-self: end;
+  }
+  .analysis-date-range input {
+    font-size: 16px;
+  }
+  .analysis-ranking-list {
+    width: 100%;
+    padding-right: 0;
+  }
+  .analysis-history > .workspace-tabs-shell .workspace-tabs button {
+    padding-inline: 13px;
+  }
 }
