@@ -454,4 +454,19 @@ async def build_receipt(request_id: UUID, request: Request, who: Admin):
         ).fetchone()
     if not row:
         raise HTTPException(404, "未查到此构建请求")
+    if row["status"] in {"unknown", "dispatching"}:
+        from .deployment_config import effective
+        from .deployment_build_receipts import find_run
+
+        settings = await effective(request)
+        try:
+            matched = await asyncio.to_thread(find_run, settings, github_json, request_id)
+        except (OSError, ValueError, KeyError, TypeError):
+            matched = False
+        if matched:
+            async with request.app.state.db.connection() as conn:
+                row = await (await conn.execute(
+                    "UPDATE deployment_builds SET status='submitted' WHERE owner_id=%s AND request_id=%s AND status IN ('unknown','dispatching') RETURNING request_id,status,created_at",
+                    (who.id, request_id),
+                )).fetchone() or row
     return row
