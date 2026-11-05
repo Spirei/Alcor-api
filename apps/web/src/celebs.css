@@ -1,22 +1,8 @@
-.celebs-page {
-  max-width: 1100px;
-  margin-inline: auto;
-}
 .celebs-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-}
-.celebs-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-}
-.celebs-list > article {
-  padding: 20px;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 14px;
 }
 .celebs-person-heading {
   display: flex;
@@ -70,7 +56,7 @@
 .celebs-page figure {
   margin: 16px 0;
 }
-.celebs-page svg {
+.celebs-page figure svg {
   max-width: 720px;
   width: 100%;
   height: auto;
@@ -95,13 +81,6 @@
   font-size: 12px;
   color: var(--muted);
 }
-.celebs-list > article {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 24px;
-  background: var(--bg);
-}
 .celebs-person-heading {
   gap: 16px;
 }
@@ -116,15 +95,6 @@
   width: 56px;
   height: 56px;
 }
-.celebs-list > article > p {
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--muted);
-}
-.celebs-list > article > button {
-  margin-top: auto;
-  align-self: flex-start;
-}
 .celebs-holdings-preview {
   display: flex;
   gap: 6px;
@@ -135,4 +105,367 @@
   padding: 5px 9px;
   background: var(--soft);
   font-size: 11px;
+}
+.celeb-manage-dialog {
+  width: min(980px, calc(100% - 32px));
+}
+.celebs-page {
+  max-width: 800px;
+}
+.celebs-page .celebs-filter {
+  margin: 0 0 20px;
+}
+.celebs-page .celebs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.celeb-empty-list {
+  border: 1px solid var(--edge);
+  border-radius: var(--panel-radius);
+}
+.celeb-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  text-align: left;
+  padding: 22px;
+  border: 1px solid var(--edge);
+  border-radius: var(--panel-radius);
+  background: var(--surface);
+}
+.celeb-summary-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.celeb-summary-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.celeb-summary-title > strong {
+  font-size: 15px;
+}
+.celeb-source-badge {
+  padding: 3px 7px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.celeb-summary-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+}
+.celeb-return {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.celeb-return strong {
+  font-size: 26px;
+  line-height: 1;
+}
+.celeb-return > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.celeb-details-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.celeb-details-link svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+.celeb-summary-aside {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  flex: 0 0 112px;
+}
+.celeb-summary-aside :is(.celebs-image, .celebs-image-placeholder) {
+  width: 84px;
+  height: 84px;
+  font-size: 26px;
+  border: 6px solid var(--soft);
+}
+.celeb-summary-aside > small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.celebs-page .icon-button svg {
+  width: 17px;
+  height: 17px;
+}
+@media (max-width: 640px) {
+  .celeb-summary-card {
+    padding: 16px;
+    gap: 12px;
+  }
+}
+@media (max-width: 640px) {
+  .celeb-summary-aside {
+    flex-basis: 80px;
+  }
+}
+@media (max-width: 640px) {
+  .celeb-summary-aside :is(.celebs-image, .celebs-image-placeholder) {
+    width: 64px;
+    height: 64px;
+    border-width: 4px;
+  }
+}
+
+/* 旧版名人卡片与独立详情，共用设置和表格基础样式。 */
+.celebs-image-placeholder {
+  background: var(--soft);
+  color: var(--ink);
+}
+.celeb-summary-card {
+  width: 100%;
+}
+.celeb-summary-card:hover {
+  background: var(--soft);
+}
+.celeb-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  flex: 0 0 auto;
+}
+.celeb-ring > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.celeb-ring-avatar {
+  display: grid;
+  place-items: center;
+}
+.celeb-ring .celeb-ring-avatar :is(.celebs-image, .celebs-image-placeholder) {
+  width: 78px;
+  height: 78px;
+  border: 0;
+  font-size: 26px;
+}
+.celeb-return strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(18px, 2.5vw, 26px);
+}
+.celeb-detail-summary {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border: 1px solid var(--edge);
+  border-radius: var(--panel-radius);
+  padding: 22px;
+  margin-bottom: 20px;
+}
+.celeb-detail-summary h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.celeb-detail-summary p {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.celeb-detail > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.celeb-detail > .workspace-tabs {
+  margin-top: 24px;
+}
+.celeb-detail-section {
+  padding: 18px 0;
+}
+.celeb-holdings-table td:first-child {
+  min-width: 180px;
+}
+.celeb-holdings-table .celebs-image,
+.celeb-holdings-table .celebs-image-placeholder {
+  width: 32px;
+  height: 32px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.celeb-editor-dialog {
+  width: min(940px, calc(100vw - 32px));
+}
+.celebs-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.celebs-fields
+  > :is(p, h3, fieldset, section, details, button, .workspace-form-actions) {
+  grid-column: 1 / -1;
+}
+.celebs-fields input:not([type="checkbox"]),
+.celebs-fields select {
+  width: 100%;
+  min-height: 44px;
+}
+.celebs-fields .celeb-enabled-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.celebs-fields .celeb-enabled-row input {
+  margin: 0;
+  min-height: 0;
+}
+.celebs-fields fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  padding: 18px;
+  min-width: 0;
+}
+.celebs-fields fieldset legend {
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.celebs-fields fieldset > button {
+  justify-self: start;
+  grid-column: 1 / -1;
+}
+.celeb-editor-section {
+  margin-top: 18px;
+  padding-top: 22px;
+  border-top: 1px solid var(--edge);
+}
+.celeb-editor-section > h3 {
+  margin: 0 0 10px;
+}
+.celeb-editor-section > p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.celeb-editor-section > fieldset {
+  margin-top: 16px;
+}
+.celeb-editor-raw {
+  border-top: 1px solid var(--edge);
+  padding-top: 20px;
+  font-size: 12px;
+}
+.celeb-editor-raw > label {
+  margin-top: 18px;
+}
+@media (max-width: 640px) {
+  .celeb-ring {
+    width: 80px;
+    height: 80px;
+  }
+  .celeb-ring .celeb-ring-avatar :is(.celebs-image, .celebs-image-placeholder) {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+  }
+  .celeb-return {
+    flex-wrap: wrap;
+  }
+  .celeb-detail-summary {
+    gap: 16px;
+    padding: 16px;
+  }
+  .celeb-detail-summary h2 {
+    font-size: 17px;
+  }
+  .celebs-fields,
+  .celebs-fields fieldset,
+  .celeb-editor-section .workspace-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .celeb-editor-dialog :is(input, select, textarea) {
+    font-size: 16px;
+  }
+}
+.celeb-source-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.celebs-summary > div {
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 16px;
+}
+.celebs-summary dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.celebs-summary dd {
+  margin-top: 10px;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.celeb-source-summary {
+  display: grid;
+  gap: 18px;
+  margin: 24px 0;
+}
+.celeb-source-summary > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 18px;
+  font-size: 13px;
+}
+.celeb-source-summary dt {
+  color: var(--muted);
+}
+.celeb-source-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.celeb-source-original {
+  border-top: 1px solid var(--edge);
+  padding-top: 18px;
+  font-size: 12px;
+}
+.celeb-source-original pre {
+  max-width: 100%;
+  overflow: auto;
+  max-height: 360px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--soft);
+}
+.celeb-management-table td {
+  vertical-align: middle;
+}
+.celeb-management-table td strong {
+  display: block;
+  font-size: 13px;
+}
+.celeb-management-table td small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.celeb-management-table .celebs-actions {
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+.celeb-management-table .icon-button {
+  width: 30px;
+  height: 30px;
 }

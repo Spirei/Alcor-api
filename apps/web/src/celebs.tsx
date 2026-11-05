@@ -1,13 +1,28 @@
-import { WorkspaceEmpty } from "./workspace-ui";
-import { useEffect, useRef, useState } from "react";
+import { WorkspaceEmpty, PageHeader, WorkspaceTabs } from "./workspace-ui";
+import {
+  RefreshCw,
+  Settings2,
+  ChevronRight,
+  ChevronLeft,
+  Search,
+  Pencil,
+  ChevronUp,
+  ChevronDown,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
 import { Dialog } from "./dialog";
+import { SettingsSurface, FormActions, ToggleSwitch } from "./workspace-forms";
 import {
   disclosedExact as exact,
   disclosedText,
   disclosureChart,
   disclosureScope,
+  disclosureReturnSummary,
+  disclosedWeightSegments,
+  disclosureReasonText,
 } from "./celebs-display";
 import "./celebs.css";
 type DecimalValue = string | null;
@@ -142,25 +157,75 @@ const returnsAllowed = (value: Returns) =>
     "state" in value.provenance.sourceIntegrity &&
     value.provenance.sourceIntegrity.state === "retained_unavailable"
   );
-function SourceDetails({ value }: { value: unknown }) {
+function SourceDetails({
+  value,
+  expanded = false,
+}: {
+  value: unknown;
+  expanded?: boolean;
+}) {
+  const object = (item: unknown): Record<string, unknown> =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? (item as Record<string, unknown>)
+      : {};
+  const row = object(value),
+    evidence = object(row.sourceEvidence || row.provenance || value),
+    integrity = object(row.sourceIntegrity || evidence.sourceIntegrity);
+  const revision = row.revision ?? evidence.revision;
   return (
-    <details>
-      <summary>来源依据</summary>
-      {value && typeof value === "object" ? (
-        Object.entries(value).map(([key, item]) => (
-          <p key={key}>
-            {key} ·{" "}
-            {item === null
-              ? "未知"
-              : typeof item === "object"
-                ? JSON.stringify(item)
-                : String(item)}
-          </p>
-        ))
-      ) : (
-        <p>{value === null || value === undefined ? "未知" : String(value)}</p>
-      )}
-    </details>
+    <SettingsSurface title="来源依据" expanded={expanded} open={false}>
+      <dl className="celeb-source-summary">
+        <div>
+          <dt>资料范围</dt>
+          <dd>公开披露与登记，未关联本人账户</dd>
+        </div>
+        <div>
+          <dt>登记修订</dt>
+          <dd>
+            {typeof revision === "number" || typeof revision === "string"
+              ? String(revision)
+              : "未提供"}
+          </dd>
+        </div>
+        <div>
+          <dt>原件核对</dt>
+          <dd>
+            {integrity.state === "retained_unavailable"
+              ? "当前不可核对"
+              : integrity.state === "verified" ||
+                  integrity.state === "verified_original"
+                ? "本次原件可核对"
+                : "未附独立原件核对结果"}
+          </dd>
+        </div>
+        {typeof evidence.source === "string" && (
+          <div>
+            <dt>来源说明</dt>
+            <dd>{evidence.source}</dd>
+          </div>
+        )}
+        {Array.isArray(row.reportedHoldings) && (
+          <div>
+            <dt>登记内容</dt>
+            <dd>
+              {row.reportedHoldings.length}项持仓 ·{" "}
+              {Array.isArray(row.reportedTrades)
+                ? row.reportedTrades.length
+                : "未知"}
+              项操作
+            </dd>
+          </div>
+        )}
+      </dl>
+      <details className="celeb-source-original">
+        <summary>原始来源字段</summary>
+        <pre>
+          {value === null || value === undefined
+            ? "未知"
+            : JSON.stringify(value, null, 2)}
+        </pre>
+      </details>
+    </SettingsSurface>
   );
 }
 export function ReturnsView({ value }: { value: Returns }) {
@@ -179,9 +244,7 @@ export function ReturnsView({ value }: { value: Returns }) {
         }
       </p>
       {value.portfolioPerformanceKnown === false && (
-        <p>
-          公开来源观察，不作为本人或该人物完整账户的实际收益证明；原声明收益未经独立核验
-        </p>
+        <p>原声明收益未经独立核验，不代表完整账户收益。</p>
       )}
       <dl className="celebs-summary">
         {[
@@ -198,15 +261,24 @@ export function ReturnsView({ value }: { value: Returns }) {
                   key as keyof Returns["disclosedSummary"]
                 ],
               )}
+              {exact(
+                value.disclosedSummary[
+                  key as keyof Returns["disclosedSummary"]
+                ],
+              ) !== "未知"
+                ? " %"
+                : ""}
             </dd>
           </div>
         ))}
       </dl>
-      {value.unknownReasons.map((reason, index) => (
-        <p key={index}>
-          {typeof reason === "string" ? reason : JSON.stringify(reason)}
+      {!!value.unknownReasons.length && (
+        <p className="celeb-source-note">
+          {[...new Set(value.unknownReasons.map(disclosureReasonText))].join(
+            "；",
+          )}
         </p>
-      ))}
+      )}
       {returnsAllowed(value) && value.dates.length > 0 && (
         <>
           <ObservedReturns
@@ -229,34 +301,41 @@ export function ReturnsView({ value }: { value: Returns }) {
           ))}
           <details>
             <summary>精确日期观察</summary>
-            <div className="workspace-table"><table>
-              <thead>
-                <tr>
-                  <th>日期</th>
-                  <th>来源序列值</th>
-                  {value.benchmarks.map((benchmark) => (
-                    <th key={benchmark.code}>{benchmark.name}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {value.dates.map((date, index) => (
-                  <tr key={date + ":" + index}>
-                    <td>{date}</td>
-                    <td>{exact(value.values[index])}</td>
+            <div className="workspace-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>来源序列值</th>
                     {value.benchmarks.map((benchmark) => (
-                      <td key={benchmark.code}>
-                        {exact(benchmark.values[index])}
-                      </td>
+                      <th key={benchmark.code}>{benchmark.name}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table></div>
+                </thead>
+                <tbody>
+                  {value.dates.map((date, index) => (
+                    <tr key={date + ":" + index}>
+                      <td>{date}</td>
+                      <td>{exact(value.values[index])}</td>
+                      {value.benchmarks.map((benchmark) => (
+                        <td key={benchmark.code}>
+                          {exact(benchmark.values[index])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </details>
         </>
       )}
-      <SourceDetails value={value.provenance} />
+      <SourceDetails
+        value={{
+          provenance: value.provenance,
+          unknownReasons: value.unknownReasons,
+        }}
+      />
     </section>
   );
 }
@@ -415,7 +494,7 @@ export function CelebsPage({
   );
 }
 function Page({ session, active }: { session: Session; active: boolean }) {
-  const [personFilter,setPersonFilter]=useState("");
+  const [personFilter, setPersonFilter] = useState("");
   const storage =
     "celebs-operation:" +
     JSON.stringify([
@@ -428,6 +507,7 @@ function Page({ session, active }: { session: Session; active: boolean }) {
     [selected, setSelected] = useState<Celeb | null>(null),
     [detail, setDetail] = useState<unknown>(null),
     [returns, setReturns] = useState<Returns | null>(null),
+    [detailView, setDetailView] = useState("holdings"),
     [manage, setManage] = useState<Listing | null>(null),
     [adminOpen, setAdminOpen] = useState(false),
     [editing, setEditing] = useState(false),
@@ -456,6 +536,29 @@ function Page({ session, active }: { session: Session; active: boolean }) {
       return null;
     }
   });
+  const tradeFields = useMemo(() => {
+    try {
+      const value: unknown = JSON.parse(tradesJson);
+      return Array.isArray(value) &&
+        value.every(
+          (row) => row && typeof row === "object" && !Array.isArray(row),
+        )
+        ? (value as Record<string, unknown>[])
+        : null;
+    } catch {
+      return null;
+    }
+  }, [tradesJson]);
+  const returnFields = useMemo(() => {
+    try {
+      const value: unknown = JSON.parse(returnsJson);
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }, [returnsJson]);
   const epoch = useRef(0),
     live = useRef(true),
     reads = useRef(0),
@@ -541,6 +644,7 @@ function Page({ session, active }: { session: Session; active: boolean }) {
   }
   async function open(person: Celeb) {
     if (busy) return;
+    setDetailView("holdings");
     setSelected(person);
     setDetail(null);
     setReturns(null);
@@ -692,6 +796,7 @@ function Page({ session, active }: { session: Session; active: boolean }) {
           )
         : {},
     );
+    if (!person) next.id = requestId();
     next.refreshHours = String(person?.refreshHours ?? 0);
     setDraft(next);
     setTradesJson(JSON.stringify(next.trades, null, 2));
@@ -739,28 +844,51 @@ function Page({ session, active }: { session: Session; active: boolean }) {
     (person) => person.id === mediaPerson,
   );
   return (
-    <section className="celebs-page">
-      <div className="page-heading">
-        <h1>名人与公开持仓</h1>
-        <div className="celebs-actions">
-          <button
-            className="button"
-            disabled={busy}
-            onClick={() => void read()}
-          >
-            读取公开目录
-          </button>
-          {session.user.role === "admin" && (
+    <section className="celebs-page workspace-ui">
+      <PageHeader
+        title={selected ? `${selected.name}持仓` : "名人持仓"}
+        tools={
+          session.user.role === "admin" ? (
             <button
-              className="button"
+              type="button"
+              className="icon-button"
+              aria-label="名人管理"
               disabled={disabled}
               onClick={() => void read(true)}
             >
-              管理公开目录
+              <Settings2 size={17} />
             </button>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+        actions={
+          selected ? (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => {
+                reads.current++;
+                setSelected(null);
+                setReturns(null);
+                setDetail(null);
+                setBusy(false);
+              }}
+            >
+              <ChevronLeft size={15} />
+              返回
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="刷新名人持仓"
+              disabled={busy}
+              onClick={() => void read()}
+            >
+              <RefreshCw size={17} />
+            </button>
+          )
+        }
+      />
       {error && (
         <p role="alert" className="error">
           {error}
@@ -777,278 +905,396 @@ function Page({ session, active }: { session: Session; active: boolean }) {
         </div>
       )}
       {!listing && !error && <p role="status">正在读取…</p>}
-      {listing && (
+      {listing && !selected && (
         <>
-          <p>公开披露目录 · 与本人资产及金融账本分开</p>
-          <div className="celebs-filter"><input type="search" aria-label="查找公开人物" placeholder="查找人物、机构或持仓证券" value={personFilter} onChange={event=>setPersonFilter(event.target.value)}/><span>{listing.celebs.length} 位已登记</span></div>
+          {!!listing.celebs.length && (
+            <div className="celebs-filter">
+              <label className="input-search">
+                <Search size={16} />
+                <input
+                  type="search"
+                  aria-label="查找公开人物"
+                  placeholder="搜索人物或持仓证券"
+                  value={personFilter}
+                  onChange={(e) => setPersonFilter(e.target.value)}
+                />
+              </label>
+              <span>{listing.celebs.length} 位人物</span>
+            </div>
+          )}
           {!listing.celebs.length && (
-            <WorkspaceEmpty title="暂无公开人物资料" description="登记并核对披露来源后，人物与持仓会显示在这里。"/>
+            <div className="celeb-empty-list">
+              <WorkspaceEmpty
+                title="暂无人物持仓"
+                description={
+                  session.user.role === "admin"
+                    ? "可在名人管理中添加人物及披露来源。"
+                    : "公开人物持仓将在这里显示。"
+                }
+                actions={
+                  session.user.role === "admin" ? (
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => void read(true)}
+                    >
+                      添加人物
+                    </button>
+                  ) : undefined
+                }
+              />
+            </div>
           )}
           <div className="celebs-list">
-            {listing.celebs.filter(person=>JSON.stringify([person.name,person.title,person.holdings]).toLocaleLowerCase().includes(personFilter.trim().toLocaleLowerCase())).map((person) => (
-              <article key={person.id}>
-                <div className="celebs-person-heading">
-                  <PublicImage path={person.avatar} label={person.name} />
-                  <div>
-                    <h2>{person.name}</h2>
-                    <p>{person.title}</p>
-                  </div>
-                </div>
-                <p>
-                  {person.dataAuthority === "example_data"
-                    ? "示例数据"
-                    : person.dataAuthority === "verified_disclosure_original"
-                      ? "保留披露原件"
-                      : person.dataAuthority ===
-                          "registered_disclosure_source_retained_unavailable"
-                        ? "披露来源当前不可核对"
-                        : "管理员登记的公开资料"}
-                </p>
-                <div className="celebs-holdings-preview">{person.holdings.slice(0,3).map((holding,index)=><span key={index}>{typeof holding==="object"&&holding!==null?String((holding as Record<string,unknown>).name||(holding as Record<string,unknown>).symbol||(holding as Record<string,unknown>).code||"持仓声明"):"持仓声明"}</span>)}</div>
-                <DisclosureNotice
-                  authority={person.dataAuthority}
-                  detail={listing.detail?.[person.id]}
-                />
-                <p>
-                  记录更新 {person.updatedAt || "未知"} · 已登记披露持仓{" "}
-                  {person.holdings.length} 项
-                </p>
-                <button
-                  className="button"
-                  onClick={() => void open(person)}
-                  disabled={busy}
-                >
-                  查看披露与来源收益
-                </button>
-              </article>
-            ))}
+            {listing.celebs
+              .filter((person) =>
+                JSON.stringify([person.name, person.title, person.holdings])
+                  .toLocaleLowerCase()
+                  .includes(personFilter.trim().toLocaleLowerCase()),
+              )
+              .map((person) => {
+                const scope = disclosureScope(
+                  person.dataAuthority,
+                  listing.detail?.[person.id],
+                );
+                const summary = disclosureReturnSummary(
+                  listing.detail?.[person.id]?.reportedReturns ??
+                    person.returns,
+                  scope.state === "unavailable",
+                );
+                return (
+                  <button
+                    type="button"
+                    className="celeb-summary-card"
+                    key={person.id}
+                    disabled={busy}
+                    aria-label={`${person.name}：查看公开持仓`}
+                    onClick={() => void open(person)}
+                  >
+                    <span className="celeb-summary-main">
+                      <span className="celeb-summary-title">
+                        <strong>{person.name}持仓</strong>
+                        <span
+                          className="celeb-source-badge"
+                          title={scope.label}
+                        >
+                          {scope.state === "sample"
+                            ? "示例"
+                            : scope.state === "unavailable"
+                              ? "历史登记"
+                              : scope.state === "partial"
+                                ? "部分披露"
+                                : person.sourceLabel || "公开目录"}
+                        </span>
+                      </span>
+                      <span className="celeb-summary-subtitle">
+                        {person.title}
+                      </span>
+                      <span className="celeb-return">
+                        <strong>
+                          {summary.value === null ? "—" : `${summary.value}%`}
+                        </strong>
+                        <span>{summary.label}</span>
+                      </span>
+                      <span className="celebs-holdings-preview">
+                        {person.holdings.slice(0, 3).map((holding, index) => (
+                          <span key={index}>
+                            {typeof holding === "object" && holding !== null
+                              ? String(
+                                  (holding as Record<string, unknown>).name ||
+                                    (holding as Record<string, unknown>)
+                                      .symbol ||
+                                    (holding as Record<string, unknown>).code ||
+                                    "持仓声明",
+                                )
+                              : "持仓声明"}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="celeb-details-link">
+                        查看明细
+                        <ChevronRight size={13} />
+                      </span>
+                    </span>
+                    <span className="celeb-summary-aside">
+                      <DisclosureRing person={person} />
+                      <small>已披露 {person.holdings.length} 项</small>
+                    </span>
+                  </button>
+                );
+              })}
           </div>
-          {!!personFilter.trim()&&!listing.celebs.some(person=>JSON.stringify([person.name,person.title,person.holdings]).toLocaleLowerCase().includes(personFilter.trim().toLocaleLowerCase()))&&<p role="status">当前已读目录中没有匹配的人物</p>}
+          {!!personFilter.trim() &&
+            !listing.celebs.some((person) =>
+              JSON.stringify([person.name, person.title, person.holdings])
+                .toLocaleLowerCase()
+                .includes(personFilter.trim().toLocaleLowerCase()),
+            ) && <p role="status">当前已读目录中没有匹配的人物</p>}
         </>
       )}
       {adminOpen && manage && session.user.role === "admin" && (
-        <details open>
-          <summary>公开目录管理</summary>
-          <button className="button" disabled={disabled} onClick={() => edit()}>
-            新建人物
-          </button>
-          <div className="portfolio-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>人物</th>
-                  <th>状态</th>
-                  <th>来源登记</th>
-                  <th>版本</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {manage.celebs.map((person, index) => (
-                  <tr key={person.id}>
-                    <td>
-                      {person.name} · {person.id}
-                    </td>
-                    <td>{person.enabled ? "公开显示" : "未公开"}</td>
-                    <td>
-                      {person.sourceKind} · {person.sourceLabel || "未填写"}
-                    </td>
-                    <td>{person.revision}</td>
-                    <td>
-                      <div className="celebs-actions">
-                        <button
+        <Dialog
+          title="名人管理"
+          className="celeb-manage-dialog"
+          onClose={() => {
+            if (!busy) setAdminOpen(false);
+          }}
+        >
+          <div className="dialog-content">
+            <button
+              className="button"
+              disabled={disabled}
+              onClick={() => edit()}
+            >
+              新建人物
+            </button>
+            <div className="portfolio-table celeb-management-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>人物</th>
+                    <th>来源登记</th>
+                    <th>公开</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {manage.celebs.map((person, index) => (
+                    <tr key={person.id}>
+                      <td title={`登记修订 ${person.revision}`}>
+                        <strong>{person.name}</strong>
+                        <small>{person.title}</small>
+                      </td>
+                      <td>
+                        {(
+                          {
+                            none: "手动声明",
+                            sample: "示例资料",
+                            "13f": "13F 披露",
+                            form4: "Form 4 披露",
+                            sec13f: "13F 原件",
+                            secform4: "Form 4 原件",
+                          } as Record<string, string>
+                        )[person.sourceKind] || "未分类来源"}
+                        <small>{person.sourceLabel || "未填写来源说明"}</small>
+                      </td>
+                      <td>
+                        <ToggleSwitch
+                          label={`${person.name}公开显示`}
+                          checked={person.enabled}
                           disabled={disabled}
-                          onClick={() => edit(person)}
-                        >
-                          编辑人物与披露
-                        </button>
-                        <button
-                          disabled={disabled}
-                          onClick={() =>
+                          onChange={(enabled) =>
                             void mutate("/celebs", "PUT", {
                               id: person.id,
-                              enabled: !person.enabled,
+                              enabled,
                               expectedRevision: person.revision,
                             })
                           }
-                        >
-                          {person.enabled ? "停止公开" : "公开显示"}
-                        </button>
-                        <button
-                          disabled={disabled || index === 0}
-                          onClick={() => reorder(person, -1)}
-                        >
-                          上移
-                        </button>
-                        <button
-                          disabled={
-                            disabled || index === manage.celebs.length - 1
-                          }
-                          onClick={() => reorder(person, 1)}
-                        >
-                          下移
-                        </button>
-                        <button
-                          disabled={disabled}
-                          onClick={() => setConfirmDelete(person)}
-                        >
-                          删除目录项
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <CelebSourceControls
-            session={session}
-            people={manage.celebs}
-            blocked={disabled}
-            active={active}
-            onChanged={() => {
-              void read(true).then(() => read());
-            }}
-          />
-          <details>
-            <summary>头像与人物专属证券图标</summary>
-            <div className="celebs-fields">
-              <label>
-                人物
-                <select
-                  value={mediaPerson}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    setMediaPerson(event.target.value);
-                    setFile(null);
-                    if (input.current) input.current.value = "";
+                        />
+                      </td>
+                      <td>
+                        <div className="celebs-actions">
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={`编辑${person.name}`}
+                            title="编辑"
+                            disabled={disabled}
+                            onClick={() => edit(person)}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={`上移${person.name}`}
+                            title="上移"
+                            disabled={disabled || index === 0}
+                            onClick={() => reorder(person, -1)}
+                          >
+                            <ChevronUp size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={`下移${person.name}`}
+                            title="下移"
+                            disabled={
+                              disabled || index === manage.celebs.length - 1
+                            }
+                            onClick={() => reorder(person, 1)}
+                          >
+                            <ChevronDown size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={`删除${person.name}`}
+                            title="删除"
+                            disabled={disabled}
+                            onClick={() => setConfirmDelete(person)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <CelebSourceControls
+              session={session}
+              people={manage.celebs}
+              blocked={disabled}
+              active={active}
+              onChanged={() => {
+                void read(true).then(() => read());
+              }}
+            />
+            <details>
+              <summary>头像与人物专属证券图标</summary>
+              <div className="celebs-fields">
+                <label>
+                  人物
+                  <select
+                    value={mediaPerson}
+                    disabled={disabled}
+                    onChange={(event) => {
+                      setMediaPerson(event.target.value);
+                      setFile(null);
+                      if (input.current) input.current.value = "";
+                    }}
+                  >
+                    <option value="">选择人物</option>
+                    {manage.celebs.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  人物或证券原图
+                  <input
+                    ref={input}
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    disabled={disabled || !mediaRecord}
+                    onChange={(event) => {
+                      const next = event.target.files?.[0];
+                      if (next && (!next.size || next.size > 2 * 1024 * 1024)) {
+                        setFile(null);
+                        event.target.value = "";
+                        setError("请选择1字节至2MiB的头像原图");
+                        return;
+                      }
+                      setFile(next || null);
+                    }}
+                  />
+                </label>
+                <button
+                  disabled={disabled || !mediaRecord || !file}
+                  onClick={() => {
+                    const form = new FormData();
+                    form.set("file", file!);
+                    form.set("id", mediaRecord!.id);
+                    form.set("expectedRevision", String(mediaRecord!.revision));
+                    void mutate("/celebs/avatar", "POST", form);
                   }}
                 >
-                  <option value="">选择人物</option>
-                  {manage.celebs.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                人物或证券原图
-                <input
-                  ref={input}
-                  type="file"
-                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  上传头像原件
+                </button>
+                <button
                   disabled={disabled || !mediaRecord}
-                  onChange={(event) => {
-                    const next = event.target.files?.[0];
-                    if (next && (!next.size || next.size > 2 * 1024 * 1024)) {
-                      setFile(null);
-                      event.target.value = "";
-                      setError("请选择1字节至2MiB的头像原图");
+                  onClick={() =>
+                    void mutate("/celebs", "PUT", {
+                      id: mediaRecord!.id,
+                      avatar: "",
+                      expectedRevision: mediaRecord!.revision,
+                    })
+                  }
+                >
+                  清空人物头像引用
+                </button>
+                <label>
+                  证券代码
+                  <input
+                    value={iconCode}
+                    disabled={disabled}
+                    maxLength={40}
+                    onChange={(event) => setIconCode(event.target.value)}
+                  />
+                </label>
+                <label>
+                  已登记公开素材版本URL
+                  <input
+                    value={iconUrl}
+                    disabled={disabled}
+                    onChange={(event) => setIconUrl(event.target.value)}
+                    placeholder="/uploads/asset/…?sha256=…"
+                  />
+                </label>
+                <button
+                  disabled={
+                    disabled ||
+                    !mediaRecord ||
+                    !iconCode.trim() ||
+                    !iconUrl.trim()
+                  }
+                  onClick={() =>
+                    void mutate("/celebs/stock-icon", "POST", {
+                      id: mediaRecord!.id,
+                      code: iconCode,
+                      url: iconUrl,
+                      expectedRevision: mediaRecord!.revision,
+                    })
+                  }
+                >
+                  保存人物专属证券图标
+                </button>
+                <button
+                  disabled={
+                    disabled || !mediaRecord || !iconCode.trim() || !file
+                  }
+                  onClick={() => {
+                    const form = new FormData();
+                    form.set("file", file!);
+                    form.set("id", mediaRecord!.id);
+                    form.set("code", iconCode);
+                    form.set("revision", String(mediaRecord!.revision));
+                    void mutate("/celebs/stock-icon", "POST", form);
+                  }}
+                >
+                  上传人物专属证券图标原件
+                </button>
+                <button
+                  disabled={disabled || !mediaRecord || !iconCode.trim()}
+                  onClick={() => {
+                    const stockIcons = { ...mediaRecord!.stockIcons };
+                    if (!(iconCode in stockIcons)) {
+                      setError("请填写已登记图标的准确证券代码");
                       return;
                     }
-                    setFile(next || null);
+                    delete stockIcons[iconCode];
+                    void mutate("/celebs", "PUT", {
+                      id: mediaRecord!.id,
+                      stockIcons,
+                      expectedRevision: mediaRecord!.revision,
+                    });
                   }}
-                />
-              </label>
-              <button
-                disabled={disabled || !mediaRecord || !file}
-                onClick={() => {
-                  const form = new FormData();
-                  form.set("file", file!);
-                  form.set("id", mediaRecord!.id);
-                  form.set("expectedRevision", String(mediaRecord!.revision));
-                  void mutate("/celebs/avatar", "POST", form);
-                }}
-              >
-                上传头像原件
-              </button>
-              <button
-                disabled={disabled || !mediaRecord}
-                onClick={() =>
-                  void mutate("/celebs", "PUT", {
-                    id: mediaRecord!.id,
-                    avatar: "",
-                    expectedRevision: mediaRecord!.revision,
-                  })
-                }
-              >
-                清空人物头像引用
-              </button>
-              <label>
-                证券代码
-                <input
-                  value={iconCode}
-                  disabled={disabled}
-                  maxLength={40}
-                  onChange={(event) => setIconCode(event.target.value)}
-                />
-              </label>
-              <label>
-                已登记公开素材版本URL
-                <input
-                  value={iconUrl}
-                  disabled={disabled}
-                  onChange={(event) => setIconUrl(event.target.value)}
-                  placeholder="/uploads/asset/…?sha256=…"
-                />
-              </label>
-              <button
-                disabled={
-                  disabled ||
-                  !mediaRecord ||
-                  !iconCode.trim() ||
-                  !iconUrl.trim()
-                }
-                onClick={() =>
-                  void mutate("/celebs/stock-icon", "POST", {
-                    id: mediaRecord!.id,
-                    code: iconCode,
-                    url: iconUrl,
-                    expectedRevision: mediaRecord!.revision,
-                  })
-                }
-              >
-                保存人物专属证券图标
-              </button>
-              <button
-                disabled={disabled || !mediaRecord || !iconCode.trim() || !file}
-                onClick={() => {
-                  const form = new FormData();
-                  form.set("file", file!);
-                  form.set("id", mediaRecord!.id);
-                  form.set("code", iconCode);
-                  form.set("revision", String(mediaRecord!.revision));
-                  void mutate("/celebs/stock-icon", "POST", form);
-                }}
-              >
-                上传人物专属证券图标原件
-              </button>
-              <button
-                disabled={disabled || !mediaRecord || !iconCode.trim()}
-                onClick={() => {
-                  const stockIcons = { ...mediaRecord!.stockIcons };
-                  if (!(iconCode in stockIcons)) {
-                    setError("请填写已登记图标的准确证券代码");
-                    return;
-                  }
-                  delete stockIcons[iconCode];
-                  void mutate("/celebs", "PUT", {
-                    id: mediaRecord!.id,
-                    stockIcons,
-                    expectedRevision: mediaRecord!.revision,
-                  });
-                }}
-              >
-                清空该证券图标引用
-              </button>
-            </div>
-          </details>
-        </details>
+                >
+                  清空该证券图标引用
+                </button>
+              </div>
+            </details>
+          </div>
+        </Dialog>
       )}
       {editing && (
         <Dialog
           title={edited ? "编辑公开人物与披露" : "新建公开人物"}
+          className="celeb-editor-dialog"
           onClose={() => {
             if (!busy) {
               setEditing(false);
@@ -1057,33 +1303,33 @@ function Page({ session, active }: { session: Session; active: boolean }) {
             }
           }}
         >
-          <div className="celebs-fields">
-            {(
-              ["id", "name", "title", "cik", "entity", "sourceLabel"] as const
-            ).map((key) => (
-              <label key={key}>
-                {
-                  (
-                    {
-                      id: "稳定人物编号",
-                      name: "名称",
-                      title: "身份说明",
-                      cik: "SEC CIK（如有）",
-                      entity: "披露实体",
-                      sourceLabel: "来源说明",
-                    } as Record<string, string>
-                  )[key]
-                }
-                <input
-                  value={draft[key]}
-                  disabled={disabled || (key === "id" && !!edited)}
-                  onChange={(event) =>
-                    setDraft({ ...draft, [key]: event.target.value })
+          <div className="dialog-content celebs-fields">
+            {(["name", "title", "cik", "entity", "sourceLabel"] as const).map(
+              (key) => (
+                <label key={key}>
+                  {
+                    (
+                      {
+                        id: "稳定人物编号",
+                        name: "名称",
+                        title: "身份说明",
+                        cik: "SEC CIK（如有）",
+                        entity: "披露实体",
+                        sourceLabel: "来源说明",
+                      } as Record<string, string>
+                    )[key]
                   }
-                />
-              </label>
-            ))}
-            <label>
+                  <input
+                    value={draft[key]}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      setDraft({ ...draft, [key]: event.target.value })
+                    }
+                  />
+                </label>
+              ),
+            )}
+            <label className="celeb-enabled-row">
               <input
                 type="checkbox"
                 checked={draft.enabled}
@@ -1253,66 +1499,207 @@ function Page({ session, active }: { session: Session; active: boolean }) {
                 </button>
               </fieldset>
             ))}
-            <label>
-              公开操作披露JSON（数值为精确字符串，未知null）
-              <textarea
-                value={tradesJson}
-                disabled={disabled}
-                onChange={(event) => setTradesJson(event.target.value)}
-              />
-            </label>
-            <label>
-              原声明收益与真实日期观察JSON（不补缺失日期）
-              <textarea
-                value={returnsJson}
-                disabled={disabled}
-                onChange={(event) => setReturnsJson(event.target.value)}
-              />
-            </label>
-            <button
-              className="button primary"
-              disabled={disabled || !draft.id.trim() || !draft.name.trim()}
-              onClick={save}
-            >
-              保存公开资料与披露
-            </button>
+            <section className="celeb-editor-section">
+              <div className="workspace-section-heading">
+                <h3>公开操作披露</h3>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={
+                    disabled || !tradeFields || tradeFields.length >= 2000
+                  }
+                  onClick={() =>
+                    setTradesJson(
+                      JSON.stringify([
+                        ...(tradeFields || []),
+                        { code: "", name: "", action: "", changePct: null },
+                      ]),
+                    )
+                  }
+                >
+                  添加操作
+                </button>
+              </div>
+              {!tradeFields && (
+                <p role="alert">操作原文格式无效，请在原始字段中核对。</p>
+              )}
+              {tradeFields?.map((row, index) => (
+                <fieldset key={index} disabled={disabled}>
+                  <legend>操作 {index + 1}</legend>
+                  {(
+                    [
+                      ["code", "证券代码"],
+                      ["name", "证券名称"],
+                      ["action", "披露操作"],
+                      ["changePct", "原声明变动 %"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key}>
+                      {label}
+                      <input
+                        inputMode={key === "changePct" ? "decimal" : undefined}
+                        placeholder={key === "changePct" ? "未知" : undefined}
+                        value={
+                          typeof row[key] === "string"
+                            ? (row[key] as string)
+                            : ""
+                        }
+                        onChange={(event) =>
+                          setTradesJson(
+                            JSON.stringify(
+                              tradeFields.map((item, i) =>
+                                i === index
+                                  ? {
+                                      ...item,
+                                      [key]:
+                                        key === "changePct"
+                                          ? event.target.value || null
+                                          : event.target.value,
+                                    }
+                                  : item,
+                              ),
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                  ))}
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() =>
+                      setTradesJson(
+                        JSON.stringify(
+                          tradeFields.filter((_, i) => i !== index),
+                        ),
+                      )
+                    }
+                  >
+                    移除此操作
+                  </button>
+                </fieldset>
+              ))}
+              {tradeFields?.length === 0 && (
+                <p className="muted">暂无已登记操作</p>
+              )}
+            </section>
+            <section className="celeb-editor-section">
+              <h3>原声明收益</h3>
+              <p>仅登记来源明示的比例，未知留空。</p>
+              <div className="workspace-form-grid">
+                {(
+                  [
+                    ["y1", "近1年 %"],
+                    ["y3", "近3年 %"],
+                    ["y5", "近5年 %"],
+                    ["spxY1", "标普近1年 %"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key}>
+                    {label}
+                    <input
+                      inputMode="decimal"
+                      placeholder="未知"
+                      disabled={disabled || !returnFields}
+                      value={
+                        typeof returnFields?.[key] === "string"
+                          ? (returnFields[key] as string)
+                          : ""
+                      }
+                      onChange={(event) =>
+                        setReturnsJson(
+                          JSON.stringify({
+                            ...returnFields,
+                            [key]: event.target.value || null,
+                          }),
+                        )
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </section>
+            <details className="celeb-editor-raw">
+              <summary>原始字段与日期观察</summary>
+              <label>
+                登记编号
+                <input
+                  value={draft.id}
+                  disabled={disabled || !!edited}
+                  onChange={(event) =>
+                    setDraft({ ...draft, id: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                公开操作披露JSON（数值为精确字符串，未知null）
+                <textarea
+                  value={tradesJson}
+                  disabled={disabled}
+                  onChange={(event) => setTradesJson(event.target.value)}
+                />
+              </label>
+              <label>
+                原声明收益与真实日期观察JSON（不补缺失日期）
+                <textarea
+                  value={returnsJson}
+                  disabled={disabled}
+                  onChange={(event) => setReturnsJson(event.target.value)}
+                />
+              </label>
+            </details>
+            <FormActions>
+              <button
+                className="button primary"
+                disabled={disabled || !draft.id.trim() || !draft.name.trim()}
+                onClick={save}
+              >
+                保存公开资料与披露
+              </button>
+            </FormActions>
           </div>
         </Dialog>
       )}
       {confirmDelete && (
         <Dialog title="确认删除目录项" onClose={() => setConfirmDelete(null)}>
-          <p>
-            {confirmDelete.name} · {confirmDelete.id} · 修订{" "}
-            {confirmDelete.revision}
-          </p>
+          <p>{confirmDelete.name}</p>
           <p>停止此目录项展示，保留原披露修订与回执</p>
-          <button
-            disabled={disabled}
-            onClick={() =>
-              void mutate("/celebs", "DELETE", {
-                id: confirmDelete.id,
-                expectedRevision: confirmDelete.revision,
-              })
-            }
-          >
-            确认删除目录项
-          </button>
+          <FormActions>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={disabled}
+              onClick={() => setConfirmDelete(null)}
+            >
+              取消
+            </button>
+            <button
+              className="button secondary"
+              disabled={disabled}
+              onClick={() =>
+                void mutate("/celebs", "DELETE", {
+                  id: confirmDelete.id,
+                  expectedRevision: confirmDelete.revision,
+                })
+              }
+            >
+              确认删除目录项
+            </button>
+          </FormActions>
         </Dialog>
       )}
       {selected && (
-        <Dialog
-          title={selected.name}
-          onClose={() => {
-            reads.current++;
-            setSelected(null);
-            setReturns(null);
-            setDetail(null);
-          }}
-        >
-          <div>{error && <p role="alert">{error}</p>}</div>
-          <div className="celebs-person-heading">
-            <PublicImage path={selected.avatar} label={selected.name} />
-            <p>{selected.title}</p>
+        <section className="celeb-detail">
+          <div className="celeb-detail-summary">
+            <DisclosureRing person={selected} />
+            <div>
+              <h2>{selected.name}</h2>
+              <p>{selected.title}</p>
+              <p>
+                {selected.reportDate || "报告日期未知"}{" "}
+                {selected.reportQuarter || ""}
+              </p>
+            </div>
           </div>
           <p>
             {selected.dataAuthority === "example_data"
@@ -1330,8 +1717,17 @@ function Page({ session, active }: { session: Session; active: boolean }) {
             detail={detail}
           />
           <p>
-            目录记录更新 {selected.updatedAt || "未知"} · 披露报告{" "}
-            {selected.reportDate || "日期未知"} {selected.reportQuarter || ""}
+            目录记录更新{" "}
+            {selected.updatedAt &&
+            Number.isFinite(Date.parse(selected.updatedAt)) ? (
+              <time dateTime={selected.updatedAt} title={selected.updatedAt}>
+                {new Date(selected.updatedAt).toLocaleString("zh-CN")}
+              </time>
+            ) : (
+              "未知"
+            )}{" "}
+            · 披露报告 {selected.reportDate || "日期未知"}{" "}
+            {selected.reportQuarter || ""}
           </p>
           {selected.sourceUrl && url(selected.sourceUrl) && (
             <a
@@ -1342,30 +1738,62 @@ function Page({ session, active }: { session: Session; active: boolean }) {
               打开披露来源
             </a>
           )}
-          <DisclosedHoldings person={selected} />
-          <details>
-            <summary>公开操作披露 {selected.trades.length} 项</summary>
-            {selected.trades.map((trade, index) => (
-              <p key={index}>
-                {trade.name} · {trade.code} · {trade.action} · 原声明变动{" "}
-                {exact(trade.changePct)} %
-              </p>
-            ))}
-          </details>
-          {returns ? (
-            <ReturnsView value={returns} />
-          ) : (
-            <p>收益来源未读取成功或暂无可核对观察</p>
+          <WorkspaceTabs
+            label="公开持仓详情"
+            value={detailView}
+            onChange={setDetailView}
+            items={[
+              {
+                value: "holdings",
+                label: `披露持仓 · ${selected.holdings.length}`,
+              },
+              {
+                value: "trades",
+                label: `操作披露 · ${selected.trades.length}`,
+              },
+              { value: "returns", label: "收益观察" },
+              { value: "source", label: "来源依据" },
+            ]}
+          />
+          {detailView === "holdings" && <DisclosedHoldings person={selected} />}
+          {detailView === "trades" && (
+            <section className="celeb-detail-section">
+              {!selected.trades.length && (
+                <WorkspaceEmpty
+                  title="暂无操作披露"
+                  description="未登记的交易继续保持未知。"
+                />
+              )}
+              {selected.trades.map((trade, index) => (
+                <p key={index}>
+                  {trade.name} · {trade.code} · {trade.action} · 原声明变动{" "}
+                  {exact(trade.changePct)} %
+                </p>
+              ))}
+            </section>
           )}
-          <SourceDetails value={detail} />
-        </Dialog>
+          {detailView === "returns" &&
+            (returns ? (
+              <ReturnsView value={returns} />
+            ) : (
+              <p>收益来源未读取成功或暂无可核对观察</p>
+            ))}
+          {detailView === "source" && <SourceDetails value={detail} expanded />}
+        </section>
       )}
     </section>
   );
 }
 export function DisclosedHoldings({ person }: { person: Celeb }) {
+  if (!person.holdings.length)
+    return (
+      <WorkspaceEmpty
+        title="暂无已登记披露持仓"
+        description="未登记的持仓继续保持未知。"
+      />
+    );
   return (
-    <div className="portfolio-table">
+    <div className="portfolio-table celeb-holdings-table">
       <table>
         <thead>
           <tr>
@@ -1427,6 +1855,62 @@ export function DisclosedHoldings({ person }: { person: Celeb }) {
     </div>
   );
 }
+function DisclosureRing({ person }: { person: Celeb }) {
+  const ring = useMemo(
+    () => disclosedWeightSegments(person.holdings),
+    [person.holdings],
+  );
+  const colors = [
+    "#5689e8",
+    "#d99344",
+    "#57a98d",
+    "#a87bc8",
+    "#d86e84",
+    "#6c9cae",
+  ];
+  return (
+    <span
+      className="celeb-ring"
+      title={
+        ring.invalid
+          ? "披露权重无法绘制，原值保留在明细"
+          : ring.segments.length > 12
+            ? "前12项披露权重，未显示部分留空"
+            : "公开披露权重，未注明部分留空"
+      }
+    >
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle
+          cx="50"
+          cy="50"
+          r="44"
+          pathLength="100"
+          fill="none"
+          stroke="var(--edge)"
+          strokeWidth="6"
+        />
+        {ring.segments.slice(0, 12).map((row) => (
+          <circle
+            key={row.index}
+            cx="50"
+            cy="50"
+            r="44"
+            pathLength="100"
+            fill="none"
+            stroke={colors[row.index % colors.length]}
+            strokeWidth="6"
+            strokeDasharray={`${row.weight} ${100 - row.weight}`}
+            strokeDashoffset={-row.offset}
+            transform="rotate(-90 50 50)"
+          />
+        ))}
+      </svg>
+      <span className="celeb-ring-avatar">
+        <PublicImage path={person.avatar} label={person.name} />
+      </span>
+    </span>
+  );
+}
 function PublicImage({
   path,
   label,
@@ -1442,6 +1926,8 @@ function PublicImage({
       className="celebs-image"
       src={src}
       alt={label}
+      loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
     />
   ) : (
