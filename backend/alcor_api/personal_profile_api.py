@@ -21,10 +21,7 @@ def mount_personal_profiles(app, settings, db, rate_limit):
     app.state.personal_profiles = service
 
     async def execute(request, action, requestId=None, version=None, platform=False):
-        if not platform:
-            assert_native_origin(request, settings)
-        elif request.headers.get("origin") not in (None, settings.public_origin) or request.headers.get("sec-fetch-site") == "cross-site":
-            raise HTTPException(403, "请求来源不受信任")
+        assert_native_origin(request, settings)
         if platform:
             if "authorization" in request.headers:
                 raise HTTPException(403, "请使用当前网页登录会话")

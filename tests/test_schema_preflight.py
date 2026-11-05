@@ -89,7 +89,7 @@ def test_proxy_origin_exception_requires_exact_web_session_binding():
     import pytest
     from alcor_api.security import COOKIE, csrf_token
     from alcor_api.legacy_identity import assert_native_origin, LegacyError
-    settings = SimpleNamespace(public_origin="https://public.example.invalid")
+    settings = SimpleNamespace(public_origin="https://public.example.invalid", trusted_proxy_ips=[])
     def request(extra):
         headers = [(b"host", b"proxy.internal"), (b"cookie", (COOKIE + "=synthetic-only").encode())] + extra
         return Request({"type":"http", "method":"GET", "scheme":"http", "path":"/api/account/resource-library", "headers":headers, "query_string":b"", "server":("proxy.internal",80)})
@@ -97,6 +97,9 @@ def test_proxy_origin_exception_requires_exact_web_session_binding():
     with pytest.raises(LegacyError): assert_native_origin(request([(b"x-csrf-token",b"wrong")]), settings)
     bound=[(b"x-csrf-token", csrf_token("synthetic-only").encode())]
     assert_native_origin(request(bound), settings)
+    settings.trusted_proxy_ips = ["192.0.2.10"]
+    with pytest.raises(LegacyError): assert_native_origin(request(bound), settings)
+    settings.trusted_proxy_ips = []
     with pytest.raises(LegacyError): assert_native_origin(request(bound + [(b"sec-fetch-site",b"cross-site")]), settings)
     with pytest.raises(LegacyError): assert_native_origin(request(bound + [(b"authorization",b"Bearer synthetic")]), settings)
 
