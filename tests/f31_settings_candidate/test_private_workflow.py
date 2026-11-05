@@ -114,3 +114,33 @@ async def test_old_person_interval_save_enrolls_existing_enabled_group_without_i
         assert any(j['inputs'].get('scheduled')is True for j in jobs)
         assert not await(await conn.execute('SELECT 1 FROM feed_source_admissions WHERE owner_id=%s',(admin,))).fetchone()
     assert (await client.put('/api/settings',json=command)).json()==saved.json()
+
+
+async def test_notification_encrypt_key_uses_explicit_secret_actions_and_never_readback(client, db, admin):
+    from alcor_api.private_runtime_settings import PrivateRuntimeSettings
+
+    path = '/api/admin/private-runtime-settings'
+    secret = 'synthetic-event-encryption-key'
+    command = {'requestId': str(uuid4()), 'expectedRevision': 0, 'group': 'notifications',
+               'patch': {'legacyChannelSettings': {'feishuEnabled': False, 'feishuName': '合成飞书'}},
+               'secretActions': {'legacyChannelSettings.feishuEncryptKey': {'action': 'set', 'value': secret}}}
+    saved = await client.post(path, json=command)
+    assert saved.status_code == 200, saved.text
+    head = (await client.get(path)).json()
+    assert secret not in json.dumps(head)
+    assert 'feishuEncryptKey' not in head['groups']['notifications']['values']['legacyChannelSettings']
+    assert head['groups']['notifications']['secretState']['legacyChannelSettings.feishuEncryptKey'] == 'configured'
+    denied = await client.post(path, json={**command, 'requestId': str(uuid4()), 'expectedRevision': 1,
+        'patch': {'legacyChannelSettings': {'feishuEncryptKey': 'must-not-write'}}, 'secretActions': {}})
+    assert denied.status_code == 422, denied.text
+    async with db.connection() as conn:
+        revision, raw = await PrivateRuntimeSettings(db).private_on_connection(conn)
+        assert revision == 1 and raw['legacyChannelSettings']['feishuEncryptKey'] == secret
+        assert not await (await conn.execute('SELECT 1 FROM business_notification_provider_revisions')).fetchone()
+        assert not await (await conn.execute('SELECT 1 FROM business_notification_bindings')).fetchone()
+        assert not await (await conn.execute('SELECT 1 FROM business_notification_deliveries')).fetchone()
+    cleared = await client.post(path, json={**command, 'requestId': str(uuid4()), 'expectedRevision': 1,
+        'patch': head['groups']['notifications']['values'],
+        'secretActions': {'legacyChannelSettings.feishuEncryptKey': {'action': 'clear'}}})
+    assert cleared.status_code == 200, cleared.text
+    assert (await client.get(path)).json()['groups']['notifications']['secretState']['legacyChannelSettings.feishuEncryptKey'] == 'unset'

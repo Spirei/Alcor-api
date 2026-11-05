@@ -240,6 +240,11 @@ const MailTemplateSettings = lazy(() =>
     default: module.MailTemplateSettings,
   })),
 );
+const PrivateServiceSettings = lazy(() =>
+  import("./private-service-settings").then((module) => ({
+    default: module.PrivateServiceSettings,
+  })),
+);
 const SiteSettings = lazy(() =>
   import("./site-settings").then((module) => ({
     default: module.SiteSettings,
@@ -1750,6 +1755,7 @@ function SettingsPage({
           ...(session.user.role === "admin"
             ? [
                 { value: "site", label: "站点外观" },
+                { value: "services", label: "接口与服务" },
                 { value: "mail", label: "邮件模板" },
                 { value: "reference", label: "API 参考" },
               ]
@@ -1808,6 +1814,13 @@ function SettingsPage({
               expanded
               session={session}
               active={active && view === "site"}
+            />
+          </WorkspaceView>
+          <WorkspaceView active={view === "services"} label="接口与服务">
+            <PrivateServiceSettings
+              session={session}
+              active={active && view === "services"}
+              expanded
             />
           </WorkspaceView>
           <WorkspaceView active={view === "mail"} label="邮件模板">

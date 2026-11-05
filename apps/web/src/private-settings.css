@@ -1,0 +1,181 @@
+.private-settings {
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+}
+.private-settings-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.private-settings-toolbar h3 {
+  font-size: 14px;
+  font-weight: 550;
+  margin: 0;
+}
+.private-settings .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  min-width: 0;
+}
+.private-settings :is(fieldset, details) {
+  min-width: 0;
+}
+.private-settings fieldset {
+  padding: 18px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  margin: 18px 0 0;
+}
+.private-settings legend {
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.private-settings :is(label, input, textarea, select) {
+  min-width: 0;
+  max-width: 100%;
+}
+.private-settings label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  align-content: start;
+}
+.private-settings label > input:not([type="checkbox"]),
+.private-settings label > textarea {
+  width: 100%;
+}
+.private-settings textarea {
+  min-height: 100px;
+  resize: vertical;
+  line-height: 1.7;
+}
+.private-settings details {
+  border-top: 1px solid var(--edge);
+  padding-top: 16px;
+  margin-top: 18px;
+  font-size: 12px;
+  grid-column: 1/-1;
+}
+.private-settings details[open] > summary {
+  margin-bottom: 16px;
+}
+.private-settings fieldset > .form-grid {
+  margin-top: 6px;
+}
+.private-secret-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.private-secret-label > span {
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.private-secret-label > label {
+  font-weight: 500;
+}
+.private-secret-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.private-secret-input > .password-field {
+  flex: 1;
+  min-width: 0;
+}
+.private-secret-input > .icon-button {
+  flex-shrink: 0;
+}
+.private-boolean-field {
+  align-self: end;
+  min-width: 0;
+}
+.private-boolean-field .workspace-setting-row {
+  min-height: 58px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  gap: 12px;
+  padding: 8px 12px;
+}
+.private-boolean-field .workspace-setting-label > span {
+  font-size: 12px;
+}
+.private-group-status {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.private-settings-pending {
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.private-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--edge);
+  margin-top: 22px;
+  padding-top: 18px;
+}
+.private-target-add {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  grid-column: 1/-1;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.private-source-editor,
+.private-notification-editor,
+.private-notification-proof {
+  margin-top: 22px;
+  min-width: 0;
+}
+.private-source-editor > h3,
+.private-notification-proof > h3 {
+  font-size: 13px;
+  font-weight: 550;
+  margin: 0 0 16px;
+}
+.private-source-selector {
+  max-width: 360px;
+  margin-top: 20px;
+}
+.private-notification-editor > .private-settings-toolbar {
+  margin-bottom: 20px;
+}
+.private-source-editor > button {
+  margin-top: 18px;
+}
+.private-model-icon {
+  margin-top: 22px;
+}
+.private-settings-advanced {
+  margin-top: 20px;
+}
+@media (max-width: 640px) {
+  .private-settings .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .private-settings fieldset {
+    padding: 14px;
+  }
+  .private-settings-toolbar {
+    flex-wrap: wrap;
+  }
+  .private-secret-input .icon-button {
+    width: 36px;
+    height: 36px;
+  }
+}

@@ -24,7 +24,7 @@ MODEL_FIELDS=('modelServices','activeModelServiceId')
 GROUP_FIELDS={'smtp':SMTP_FIELDS,'models':MODEL_FIELDS,'sources':SOURCE_FIELDS+('quoteSource','peopleRefreshIntervals','translationEnabled','translationProvider','translationApiUrl','translationApproval'),
               'notifications':('business_notification_targets','legacyChannelSettings'),'scheduling':('worker_poll_seconds','lease_seconds'),
               'cookies':('xueqiuCookieTargetId','xueqiuCookie','_xueqiuCredentialCiphertext')}
-SECRET_WORDS=re.compile(r'password|secret|token|credential|cookie|api_?key|aeskey|webhook',re.IGNORECASE)
+SECRET_WORDS=re.compile(r'password|secret|token|credential|cookie|api_?key|aeskey|encryptkey|webhook',re.IGNORECASE)
 SMTP_MAP={'smtpEnabled':'mail_enabled','smtpHost':'mail_host','smtpPort':'mail_port','smtpSecure':'mail_tls','smtpUser':'mail_username','smtpPassword':'mail_password','smtpFromEmail':'mail_sender','smtpFromName':'mail_from_name','emailLinkOrigin':'email_link_origin','mailTimeout':'mail_timeout','smtpApproval':'mail_delivery_policy'}
 
 
