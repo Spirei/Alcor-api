@@ -1,6 +1,6 @@
 import { MaterialAccessSettings } from "./asset-library-access";
 import { Dialog } from "./dialog";
-import { WorkspaceTabs, PageHeader } from "./workspace-ui";
+import { PageHeader } from "./workspace-ui";
 import { RefreshCw, Settings2 } from "lucide-react";
 import {
   useCallback,
@@ -15,7 +15,6 @@ import { requestId } from "./request-id";
 import { resourceSize } from "./resource-state";
 import { sharedAssetOriginal } from "./shared-asset-original";
 import { PngClipboardActions } from "./png-clipboard";
-import { AssetLookupCatalogPanel } from "./asset-lookup-catalog";
 import {
   AssetLibraryBrowser,
   type AssetIconTarget,
@@ -74,7 +73,6 @@ function SharedAssetSession({
     [journalReady, setJournalReady] = useState(false);
   const [config, setConfig] = useState<AssetConfig | null>(null);
   const [assetPanel, setAssetPanel] = useState<"settings" | null>(null);
-  const [settingsTab, setSettingsTab] = useState("access");
   const [catalogRefresh, setCatalogRefresh] = useState(0);
   const [accessBlocked, setAccessBlocked] = useState(false);
   const catalogChanged = useCallback(
@@ -88,7 +86,6 @@ function SharedAssetSession({
   >(null);
   const [busy, setBusy] = useState(false),
     [pending, setPending] = useState<string | null>(null),
-    [lookup, setLookup] = useState(""),
     [receipt, setReceipt] = useState<AssetReceipt | null>(null),
     [error, setError] = useState(""),
     [imageError, setImageError] = useState(false),
@@ -134,7 +131,6 @@ function SharedAssetSession({
       ) {
         pause();
         setLocked(true);
-        setLookup("");
         setNotice("");
         original.current = null;
         setPending(null);
@@ -264,7 +260,6 @@ function SharedAssetSession({
       lastCatalogReceipt.current = value.version;
       catalogChanged();
     }
-    setLookup(id);
     setImageError(false);
     setError(value.state === "failed" ? value.message : "");
     if (targeted && value.state === "failed") catalogChanged();
@@ -281,7 +276,7 @@ function SharedAssetSession({
     setNotice("上次操作未受理，请重新核对素材");
     void load();
   }
-  async function check(id = original.current ?? lookup.trim()) {
+  async function check(id = original.current ?? "") {
     if (
       !live.current ||
       !displayed() ||
@@ -544,12 +539,12 @@ function SharedAssetSession({
           void upload(chosen, { ...asset, catalogRevision: revision });
         }}
       />
-      {!assetPanel && error && (
+      {error && (
         <p role="alert" className="notice error">
           {error}
         </p>
       )}
-      {!assetPanel && notice && <p role="status">{notice}</p>}
+      {notice && <p role="status">{notice}</p>}
       {pending && (
         <div className="notice">
           <span>素材操作结果待确认</span>
@@ -562,6 +557,82 @@ function SharedAssetSession({
           </button>
         </div>
       )}
+      {receipt && (
+        <details className="shared-asset-upload-details">
+          <summary>查看本次上传详情</summary>
+          <section className="shared-asset-result" aria-label="素材操作结果">
+            <p role="status">
+              {receipt.state === "completed" ? "素材已保存" : receipt.message}
+            </p>
+            <p className="shared-asset-id">{receipt.requestId}</p>
+            {receipt.state === "completed" && (
+              <>
+                <div className="shared-asset-preview">
+                  {!imageError && (
+                    <img
+                      ref={preview}
+                      src={receipt.url}
+                      alt={
+                        assetKinds.find((v) => v.value === receipt.kind)
+                          ?.label ?? "素材库"
+                      }
+                      onError={() => {
+                        if (live.current) setImageError(true);
+                      }}
+                    />
+                  )}
+                  {imageError && <p>图片无法显示</p>}
+                </div>
+                <p>
+                  原件 {resourceSize(receipt.originalSize!)} · 展示{" "}
+                  {resourceSize(receipt.size!)}
+                </p>
+                <p>
+                  {receipt.originalSha256 === receipt.sha256
+                    ? "原件与展示图一致"
+                    : "SVG 安全展示版"}
+                </p>
+                <div className="shared-asset-actions">
+                  <a
+                    className="button secondary"
+                    href={receipt.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    打开固定展示图
+                  </a>
+                  <button
+                    className="button secondary"
+                    disabled={busy || locked}
+                    onClick={() => void download()}
+                  >
+                    下载原件
+                  </button>
+                </div>
+                <PngClipboardActions
+                  key={receipt.version}
+                  session={session}
+                  active={active && visible && !locked && !busy}
+                  image={preview}
+                  version={receipt.version!}
+                  onDenied={fail}
+                />
+                <details>
+                  <summary>文件详情</summary>
+                  <dl>
+                    <dt>展示地址</dt>
+                    <dd>{receipt.url}</dd>
+                    <dt>原件摘要</dt>
+                    <dd>{receipt.originalSha256}</dd>
+                    <dt>展示摘要</dt>
+                    <dd>{receipt.sha256}</dd>
+                  </dl>
+                </details>
+              </>
+            )}
+          </section>
+        </details>
+      )}
       {assetPanel === "settings" && (
         <Dialog
           title="素材库设置"
@@ -570,159 +641,12 @@ function SharedAssetSession({
             if (!busy && !accessBlocked) setAssetPanel(null);
           }}
         >
-          <div className="dialog-content shared-assets-page">
-            {error && <p role="alert">{error}</p>}
-            <WorkspaceTabs
-              label="素材库设置"
-              value={settingsTab}
-              onChange={setSettingsTab}
-              items={[
-                { value: "access", label: "权限开放" },
-                { value: "catalog", label: "来源维护" },
-                { value: "import", label: "导入素材" },
-                { value: "create", label: "新增素材" },
-                { value: "deleted", label: "已删除素材" },
-                { value: "history", label: "操作记录" },
-              ]}
-            />
-            {settingsTab === "access" && (
-              <MaterialAccessSettings
-                session={session}
-                active={active && visible && !locked}
-                onBlocked={setAccessBlocked}
-              />
-            )}
-            {settingsTab === "history" && (
-              <section aria-label="操作记录">
-                <form
-                  className="shared-asset-lookup"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void check(lookup.trim());
-                  }}
-                >
-                  <label>
-                    操作编号
-                    <input
-                      value={lookup}
-                      disabled={locked}
-                      onChange={(event) => setLookup(event.target.value)}
-                    />
-                  </label>
-                  <button
-                    className="button secondary"
-                    disabled={
-                      busy || locked || !validAssetOperation(lookup.trim())
-                    }
-                  >
-                    查询回执
-                  </button>
-                </form>
-                {receipt && (
-                  <section
-                    className="shared-asset-result"
-                    aria-label="素材操作结果"
-                  >
-                    <p role="status">
-                      {receipt.state === "completed"
-                        ? "素材已保存"
-                        : receipt.message}
-                    </p>
-                    <p className="shared-asset-id">{receipt.requestId}</p>
-                    {receipt.state === "completed" && (
-                      <>
-                        <div className="shared-asset-preview">
-                          {!imageError && (
-                            <img
-                              ref={preview}
-                              src={receipt.url}
-                              alt={
-                                assetKinds.find((v) => v.value === receipt.kind)
-                                  ?.label ?? "素材库"
-                              }
-                              onError={() => {
-                                if (live.current) setImageError(true);
-                              }}
-                            />
-                          )}
-                          {imageError && <p>图片无法显示</p>}
-                        </div>
-                        <p>
-                          原件 {resourceSize(receipt.originalSize!)} · 展示{" "}
-                          {resourceSize(receipt.size!)}
-                        </p>
-                        <p>
-                          {receipt.originalSha256 === receipt.sha256
-                            ? "原件与展示图一致"
-                            : "SVG 安全展示版"}
-                        </p>
-                        <div className="shared-asset-actions">
-                          <a
-                            className="button secondary"
-                            href={receipt.url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            打开固定展示图
-                          </a>
-                          <button
-                            className="button secondary"
-                            disabled={busy || locked}
-                            onClick={() => void download()}
-                          >
-                            下载原件
-                          </button>
-                        </div>
-                        <PngClipboardActions
-                          key={receipt.version}
-                          session={session}
-                          active={active && visible && !locked && !busy}
-                          image={preview}
-                          version={receipt.version!}
-                          onDenied={fail}
-                        />
-                        <details>
-                          <summary>文件详情</summary>
-                          <dl>
-                            <dt>展示地址</dt>
-                            <dd>{receipt.url}</dd>
-                            <dt>原件摘要</dt>
-                            <dd>{receipt.originalSha256}</dd>
-                            <dt>展示摘要</dt>
-                            <dd>{receipt.sha256}</dd>
-                          </dl>
-                        </details>
-                      </>
-                    )}
-                  </section>
-                )}
-              </section>
-            )}
-            {["catalog", "import", "create", "deleted"].includes(
-              settingsTab,
-            ) && (
-              <section aria-label="素材管理">
-                <AssetLookupCatalogPanel
-                  session={session}
-                  tool={
-                    settingsTab === "catalog"
-                      ? "maintenance"
-                      : (settingsTab as "import" | "create" | "deleted")
-                  }
-                  active={
-                    active &&
-                    visible &&
-                    !locked &&
-                    assetPanel === "settings" &&
-                    ["catalog", "import", "create", "deleted"].includes(
-                      settingsTab,
-                    )
-                  }
-                  onChanged={catalogChanged}
-                />
-              </section>
-            )}
-          </div>
+          <MaterialAccessSettings
+            session={session}
+            active={active && visible && !locked}
+            onBlocked={setAccessBlocked}
+            onCancel={() => setAssetPanel(null)}
+          />
         </Dialog>
       )}
     </section>

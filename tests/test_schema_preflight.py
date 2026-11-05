@@ -137,3 +137,23 @@ def test_read_only_vault_does_not_initialize_a_missing_key(tmp_path):
     with pytest.raises(FileNotFoundError):
         Vault(tmp_path, read_only=True).key()
     assert not list(tmp_path.iterdir())
+
+
+def test_schema_preflight_cli_preserves_fail_closed_exit_code(monkeypatch, capsys):
+    import json
+    import pytest
+    from alcor_api import cli, schema_preflight
+    for compatible in (True, False):
+        result = {"compatible": compatible, "missing": [] if compatible else ["9999_pending.sql"], "changed": [], "extra": []}
+        async def checked(settings):
+            return result
+        monkeypatch.setattr(schema_preflight, "check", checked)
+        monkeypatch.setattr(cli, "Settings", lambda: None)
+        monkeypatch.setattr("sys.argv", ["alcor", "check-schema"])
+        if compatible:
+            cli.main()
+        else:
+            with pytest.raises(SystemExit) as stopped:
+                cli.main()
+            assert stopped.value.code == 2
+        assert json.loads(capsys.readouterr().out) == result

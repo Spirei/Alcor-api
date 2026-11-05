@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Check } from "lucide-react";
 import { api, ApiError, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
 import { requestId } from "./request-id";
@@ -22,10 +21,12 @@ export function MaterialAccessSettings({
   session,
   active,
   onBlocked,
+  onCancel,
 }: {
   session: Session;
   active: boolean;
   onBlocked: (value: boolean) => void;
+  onCancel: () => void;
 }) {
   const [value, setValue] = useState<Access | null>(null),
     [draft, setDraft] = useState({ registered: true, guest: true }),
@@ -48,6 +49,10 @@ export function MaterialAccessSettings({
   useEffect(() => {
     live.current = active;
     ++epoch.current;
+    if (!active) {
+      abort.current?.abort();
+      setBusy(false);
+    }
     return () => {
       live.current = false;
       ++epoch.current;
@@ -73,9 +78,9 @@ export function MaterialAccessSettings({
     }
   }, [storage]);
   useEffect(() => {
-    onBlocked(busy || !!job || locked);
+    onBlocked(busy);
     return () => onBlocked(false);
-  }, [busy, job, locked, onBlocked]);
+  }, [busy, onBlocked]);
   useEffect(() => {
     if (!active || job) return;
     const controller = new AbortController();
@@ -188,27 +193,17 @@ export function MaterialAccessSettings({
   }
   const disabled = busy || !!job || locked || !value;
   return (
-    <section className="asset-access-settings" aria-label="权限开放">
-      <div className="asset-access-table">
-        <div className="asset-access-row heading">
-          <span>身份</span>
-          <span>公共素材浏览</span>
-          <span>修改与管理</span>
-        </div>
-        <div className="asset-access-row">
-          <strong>管理员</strong>
-          <span>
-            <Check size={17} />
-            全部开放
-          </span>
-          <span>
-            <Check size={17} />
-            全部权限
-          </span>
-        </div>
+    <section
+      className="asset-access-settings dialog-content"
+      aria-label="访问权限"
+      aria-busy={!value && !error}
+    >
+      <div className="asset-access-options">
         {(["registered", "guest"] as const).map((key) => (
           <div className="asset-access-row" key={key}>
-            <strong>{key === "registered" ? "注册用户" : "游客"}</strong>
+            <span>
+              {key === "registered" ? "注册用户可浏览" : "游客可浏览"}
+            </span>
             <button
               type="button"
               role="switch"
@@ -219,6 +214,7 @@ export function MaterialAccessSettings({
                   : "允许游客浏览素材"
               }
               aria-checked={draft[key]}
+              data-loading={!value || undefined}
               disabled={disabled || (key === "guest" && !draft.registered)}
               onClick={() =>
                 setDraft((v) =>
@@ -233,13 +229,21 @@ export function MaterialAccessSettings({
             >
               <span />
             </button>
-            <span className="muted">仅管理员</span>
           </div>
         ))}
       </div>
+      <p className="asset-access-note">素材编辑与删除仅限管理员。</p>
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
       <div className="asset-access-actions">
+        <button
+          type="button"
+          className="button secondary"
+          disabled={busy}
+          onClick={onCancel}
+        >
+          取消
+        </button>
         <button
           type="button"
           className="button"
@@ -253,7 +257,7 @@ export function MaterialAccessSettings({
           }
           onClick={() => void save(!!job)}
         >
-          {busy ? "处理中…" : job ? "核对原权限操作" : "保存权限"}
+          {busy ? "处理中…" : job ? "核对原权限操作" : "保存"}
         </button>
       </div>
     </section>

@@ -157,7 +157,6 @@ def main():
             asyncio.run(enroll())
             print("Isolated empty target enrolled; no data restored.")
         elif args.command == "check-schema":
-            import json
             from .schema_preflight import check
             result = asyncio.run(check(Settings()))
             print(json.dumps(result, ensure_ascii=False))
