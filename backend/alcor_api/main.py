@@ -909,4 +909,7 @@ def create_app(settings: Settings | None = None):
 
     app.add_middleware(ObserveRequests, observations=observations, routes=app.routes)
     app.add_middleware(CountAccountRequests, activity=request_activity)
+    if settings.trusted_proxy_ips:
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_ips)
     return app

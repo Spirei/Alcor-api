@@ -1,10 +1,11 @@
 import os
+import ipaddress
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(os.environ.get("ALCOR_ROOT", Path(__file__).resolve().parents[2]))
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     redis_url: SecretStr | None = None
     instance_id: UUID | None = None
     public_origin: str = "http://127.0.0.1:8088"
+    trusted_proxy_ips: list[str] = Field(default_factory=list, max_length=16)
     web_dist: Path = ROOT / "apps/web/dist"
     migration_dir: Path = ROOT / "migrations"
     inventory_file: Path = ROOT / "contracts/migration-register.json"
@@ -107,6 +109,12 @@ class Settings(BaseSettings):
     deployment_running_image: str = Field(default='', pattern=r'^(?:ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64})?$')
     source_revision: str = Field(default="", pattern=r"^(?:[a-f0-9]{40})?$")
     deployment_updater_url: str = ""
+
+    @field_validator("trusted_proxy_ips")
+    @classmethod
+    def exact_proxy_addresses(cls, values):
+        # No wildcard, network range, host name, or implicit trust in private networks.
+        return list(dict.fromkeys(str(ipaddress.ip_address(value)) for value in values))
 
     @model_validator(mode="after")
     def validate_target(self):
