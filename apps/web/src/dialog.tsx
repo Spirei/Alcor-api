@@ -50,6 +50,7 @@ export function Dialog({
       className={className}
       onCancel={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
       }}
       onPointerDown={(event) => {
