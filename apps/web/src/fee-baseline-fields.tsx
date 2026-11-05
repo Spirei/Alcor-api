@@ -15,6 +15,7 @@ export function BaselineFeeFields({
   onEdit,
   onPreview,
   onEstimate,
+  expanded = false,
 }: {
   source: BaselineSource | null;
   targets: BaselineTarget[];
@@ -23,8 +24,9 @@ export function BaselineFeeFields({
   loading: boolean;
   onRead: () => void;
   onEdit: (value: Partial<BaselineDraft>) => void;
-  onPreview: () => void;
-  onEstimate?: () => void;
+  onPreview: (trigger?: HTMLButtonElement) => void;
+  onEstimate?: (trigger?: HTMLButtonElement) => void;
+  expanded?: boolean;
 }) {
   const [page, setPage] = useState(0);
   useEffect(() => setPage(0), [source?.manifestId]);
@@ -33,9 +35,10 @@ export function BaselineFeeFields({
     setPage(next);
     onEdit({ originalId: "", targetId: "", registeredConfirmed: false });
   };
+  const Surface = expanded ? "section" : "details";
   return (
-    <details className="fees-baseline">
-      <summary>核对原订单基线</summary>
+    <Surface className="fees-baseline">
+      {expanded ? <h2>核对原订单基线</h2> : <summary>核对原订单基线</summary>}
       <button
         className="button"
         onClick={onRead}
@@ -160,7 +163,7 @@ export function BaselineFeeFields({
                   !draft.targetId ||
                   !draft.registeredConfirmed
                 }
-                onClick={onPreview}
+                onClick={(event) => onPreview(event.currentTarget)}
               >
                 预览原登记基线
               </button>
@@ -203,7 +206,7 @@ export function BaselineFeeFields({
                       !draft.estimatedOnly ||
                       draft.instrumentKind === "unknown"
                     }
-                    onClick={onEstimate}
+                    onClick={(event) => onEstimate?.(event.currentTarget)}
                   >
                     预览费率估算
                   </button>
@@ -218,6 +221,6 @@ export function BaselineFeeFields({
           冻结来源尚未读取 · <a href="/legacy-import">旧数据导入</a>
         </p>
       )}
-    </details>
+    </Surface>
   );
 }

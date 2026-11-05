@@ -89,6 +89,15 @@ test("baseline UI keeps original/target separate, explicit metadata consent and 
     );
     assert.ok(!html.includes("确认实际记账"));
     assert.ok(!html.includes("<h1>"));
+    const direct = renderToStaticMarkup(
+      React.createElement(BaselineFeeFields, { ...props, expanded: true }),
+    );
+    assert.ok(direct.includes("<h2>核对原订单基线</h2>"));
+    assert.ok(!direct.includes("<summary>核对原订单基线</summary>"));
+    assert.ok(
+      direct.includes("original-199") && !direct.includes("original-200"),
+    );
+    assert.ok(!direct.includes("确认实际记账"));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

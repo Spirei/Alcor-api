@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { X } from "lucide-react";
 
 export function Dialog({
@@ -7,11 +7,13 @@ export function Dialog({
   onClose,
   children,
   className,
+  returnFocusRef,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const backdropPress = useRef(false);
@@ -24,12 +26,13 @@ export function Dialog({
   };
   useEffect(() => {
     const previous =
-      document.activeElement === document.body
+      returnFocusRef?.current ??
+      (document.activeElement === document.body
         ? document.querySelector<HTMLElement>(
             '[data-module-active="true"] [data-dialog-return]',
           ) ||
           document.querySelector<HTMLElement>("[data-global-search-trigger]")
-        : document.activeElement;
+        : document.activeElement);
     const dialog = ref.current;
     dialog?.showModal();
     dialog?.querySelector<HTMLElement>("[data-dialog-autofocus]")?.focus();

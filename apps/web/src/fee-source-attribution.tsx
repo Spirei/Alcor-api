@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
+import { SettingsSurface } from "./workspace-forms";
+import { RefreshCw } from "lucide-react";
 
 type Account = {
   id: string;
@@ -103,6 +105,7 @@ function value(input: unknown) {
 export function FeeSourceAttributionPanel(props: {
   session: Session;
   active?: boolean;
+  direct?: boolean;
 }) {
   const s = props.session;
   return (
@@ -122,9 +125,11 @@ export function FeeSourceAttributionPanel(props: {
 function Content({
   session,
   active = true,
+  direct = false,
 }: {
   session: Session;
   active?: boolean;
+  direct?: boolean;
 }) {
   const scope =
     "alcor.fee-source-attribution:" +
@@ -263,6 +268,9 @@ function Content({
       },
     );
   }
+  useEffect(() => {
+    if (direct && active && visible && !pending) void read();
+  }, [direct, active, visible]);
   const original = listing?.orders.find((row) => row.orderId === orderId);
   const accounts =
     listing?.accounts.filter(
@@ -427,284 +435,319 @@ function Content({
     }
   }
   return (
-    <details
-      className="fees-plan"
-      open={expanded}
-      onToggle={(event) => {
-        const open = event.currentTarget.open;
-        setExpanded(open);
-        if (!open) invalidate();
-      }}
-    >
-      <summary>原订单账户归属</summary>
-      {expanded && (
-        <>
-          {error && <p role="alert">{error}</p>}
-          {storageError && <p role="alert">{storageError}</p>}
-          {pending && <p role="status">待核对原操作 {pending}</p>}
-          <div className="fees-plan-fields">
-            <label>
-              原操作编号
-              <input
-                value={queryId}
-                disabled={busy || !!pending}
-                onChange={(event) => setQueryId(event.target.value)}
-              />
-            </label>
-            <button
-              className="button"
-              disabled={busy || !uuid.test(pending ?? queryId.trim())}
-              onClick={query}
-            >
-              查询回执
-            </button>
-          </div>
-          {receipt && (
-            <p role="status">
-              {receipt.state === "completed"
-                ? "归属已登记；未修改现金或成交账本"
-                : receipt.state === "failed"
-                  ? (receipt.message ?? "归属未登记")
-                  : "结果未知，请查询原编号"}
-            </p>
-          )}
+    <div className="fees-plan fees-source-panel">
+      {direct && (
+        <header className="fees-source-heading">
+          <h2>原订单账户归属</h2>
           <button
-            className="button"
+            type="button"
+            className="icon-button"
+            aria-label="刷新原订单"
             disabled={busy || !!pending}
             onClick={() => void read()}
           >
-            读取原订单
+            <RefreshCw size={17} />
           </button>
-          {listing && (
-            <>
-              {listing.state === "unavailable" ? (
-                <p role="status">原订单来源尚不可用</p>
-              ) : (
-                <>
-                  {!listing.sourceVerified && (
-                    <p role="status">
-                      来源许可未生效或已撤销，保留原件不可新增归属
-                    </p>
-                  )}
-                  <details>
-                    <summary>来源</summary>
-                    <p>
-                      {listing.sourceOwner} · {listing.sourceInstance}
-                    </p>
-                    <p>
-                      版本 {listing.sourceRevision} · {listing.sourceDigest}
-                    </p>
-                    <p>
-                      原范围{" "}
-                      {listing.sourceComplete ? "已登记完整" : "未确认完整"}
-                    </p>
-                  </details>
-                  <div className="fees-plan-fields">
-                    <label>
-                      原订单
-                      <select
-                        value={orderId}
-                        disabled={disabled}
-                        onChange={(event) =>
-                          edit(() => {
-                            setOrderId(event.target.value);
-                            setAccountId("");
-                            setRecordId("");
-                            setHistorical(false);
-                            setComplete(false);
-                          })
-                        }
-                      >
-                        <option value="">选择原订单</option>
-                        {listing.orders.map((row) => (
-                          <option key={row.orderId} value={row.orderId}>
-                            {value(row.input.market)} {value(row.input.code)} ·{" "}
-                            {row.orderId}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      本人账户
-                      <select
-                        value={accountId}
-                        disabled={disabled || !original}
-                        onChange={(event) =>
-                          edit(() => {
-                            setAccountId(event.target.value);
-                            setRecordId("");
-                            setHistorical(false);
-                          })
-                        }
-                      >
-                        <option value="">选择账户</option>
-                        {accounts.map((row) => (
-                          <option key={row.id} value={row.id}>
-                            {row.name} ·{" "}
-                            {row.accountKind === "real" ? "真实" : "模拟"}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      本人证券
-                      <select
-                        value={recordId}
-                        disabled={disabled || !selectedAccount}
-                        onChange={(event) =>
-                          edit(() => setRecordId(event.target.value))
-                        }
-                      >
-                        <option value="">选择证券</option>
-                        {records.map((row) => (
-                          <option key={row.id} value={row.id}>
-                            {row.market} {row.code} · {row.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  {original && (
-                    <>
+        </header>
+      )}
+      <SettingsSurface
+        title="原订单账户归属"
+        expanded={direct}
+        open={expanded}
+        onOpenChange={(open) => {
+          setExpanded(open);
+          if (!open) invalidate();
+        }}
+      >
+        {(direct || expanded) && (
+          <>
+            {error && <p role="alert">{error}</p>}
+            {storageError && <p role="alert">{storageError}</p>}
+            {pending && (
+              <>
+                <p role="status">待核对原操作 {pending}</p>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={query}
+                >
+                  查询原回执
+                </button>
+              </>
+            )}
+
+            {receipt && (
+              <p role="status">
+                {receipt.state === "completed"
+                  ? "归属已登记；未修改现金或成交账本"
+                  : receipt.state === "failed"
+                    ? (receipt.message ?? "归属未登记")
+                    : "结果未知，请查询原编号"}
+              </p>
+            )}
+            {!direct && (
+              <>
+                <button
+                  className="button"
+                  disabled={busy || !!pending}
+                  onClick={() => void read()}
+                >
+                  读取原订单
+                </button>
+              </>
+            )}
+            {listing && (
+              <>
+                {listing.state === "unavailable" ? (
+                  <p role="status">原订单来源尚不可用</p>
+                ) : (
+                  <>
+                    {!listing.sourceVerified && (
+                      <p role="status">
+                        来源许可未生效或已撤销，保留原件不可新增归属
+                      </p>
+                    )}
+                    <details>
+                      <summary>来源</summary>
                       <p>
-                        {original.input.side} · 数量{" "}
-                        {value(original.input.quantity)} · 价格{" "}
-                        {value(original.input.price)} · 费用{" "}
-                        {value(original.input.fees)}{" "}
-                        {value(original.input.currency)}
+                        {listing.sourceOwner} · {listing.sourceInstance}
                       </p>
                       <p>
-                        原账户性质{" "}
-                        {original.input.accountKind === null
-                          ? "未知"
-                          : original.input.accountKind === "real"
-                            ? "真实"
-                            : "模拟"}{" "}
-                        · {value(original.input.occurredAt)}
+                        版本 {listing.sourceRevision} · {listing.sourceDigest}
                       </p>
-                    </>
-                  )}
-                  <div className="fees-plan-fields">
+                      <p>
+                        原范围{" "}
+                        {listing.sourceComplete ? "已登记完整" : "未确认完整"}
+                      </p>
+                    </details>
+                    <div className="fees-plan-fields">
+                      <label>
+                        原订单
+                        <select
+                          value={orderId}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            edit(() => {
+                              setOrderId(event.target.value);
+                              setAccountId("");
+                              setRecordId("");
+                              setHistorical(false);
+                              setComplete(false);
+                            })
+                          }
+                        >
+                          <option value="">选择原订单</option>
+                          {listing.orders.map((row) => (
+                            <option key={row.orderId} value={row.orderId}>
+                              {value(row.input.market)} {value(row.input.code)}{" "}
+                              · {row.orderId}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        本人账户
+                        <select
+                          value={accountId}
+                          disabled={disabled || !original}
+                          onChange={(event) =>
+                            edit(() => {
+                              setAccountId(event.target.value);
+                              setRecordId("");
+                              setHistorical(false);
+                            })
+                          }
+                        >
+                          <option value="">选择账户</option>
+                          {accounts.map((row) => (
+                            <option key={row.id} value={row.id}>
+                              {row.name} ·{" "}
+                              {row.accountKind === "real" ? "真实" : "模拟"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        本人证券
+                        <select
+                          value={recordId}
+                          disabled={disabled || !selectedAccount}
+                          onChange={(event) =>
+                            edit(() => setRecordId(event.target.value))
+                          }
+                        >
+                          <option value="">选择证券</option>
+                          {records.map((row) => (
+                            <option key={row.id} value={row.id}>
+                              {row.market} {row.code} · {row.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    {original && (
+                      <>
+                        <p>
+                          {original.input.side} · 数量{" "}
+                          {value(original.input.quantity)} · 价格{" "}
+                          {value(original.input.price)} · 费用{" "}
+                          {value(original.input.fees)}{" "}
+                          {value(original.input.currency)}
+                        </p>
+                        <p>
+                          原账户性质{" "}
+                          {original.input.accountKind === null
+                            ? "未知"
+                            : original.input.accountKind === "real"
+                              ? "真实"
+                              : "模拟"}{" "}
+                          · {value(original.input.occurredAt)}
+                        </p>
+                      </>
+                    )}
+                    <div className="fees-plan-fields">
+                      <label>
+                        材料文件
+                        <input
+                          type="file"
+                          disabled={disabled}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0] ?? null;
+                            event.target.value = "";
+                            void material(file);
+                          }}
+                        />
+                      </label>
+                      <label>
+                        材料 SHA-256
+                        <input
+                          value={documentDigest}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            edit(() =>
+                              setDocumentDigest(
+                                event.target.value.trim().toLowerCase(),
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
                     <label>
-                      材料文件
                       <input
-                        type="file"
+                        type="checkbox"
+                        checked={historical}
                         disabled={disabled}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0] ?? null;
-                          event.target.value = "";
-                          void material(file);
-                        }}
+                        onChange={(event) =>
+                          edit(() => setHistorical(event.target.checked))
+                        }
                       />
+                      本人已核对材料中的历史账户归属
                     </label>
                     <label>
-                      材料 SHA-256
                       <input
-                        value={documentDigest}
+                        type="checkbox"
+                        checked={complete}
                         disabled={disabled}
                         onChange={(event) =>
-                          edit(() =>
-                            setDocumentDigest(
-                              event.target.value.trim().toLowerCase(),
+                          edit(() => setComplete(event.target.checked))
+                        }
+                      />
+                      本人已核对该订单的完整历史范围
+                    </label>
+                    <div className="record-actions">
+                      <button
+                        className="button"
+                        disabled={!canPreview}
+                        onClick={preview}
+                      >
+                        预览归属
+                      </button>
+                    </div>
+                    <div className="record-actions">
+                      <button
+                        className="button"
+                        disabled={
+                          busy || !!pending || listing.pagination.offset === 0
+                        }
+                        onClick={() =>
+                          void read(
+                            Math.max(
+                              0,
+                              listing.pagination.offset -
+                                listing.pagination.limit,
                             ),
                           )
                         }
-                      />
-                    </label>
-                  </div>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={historical}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        edit(() => setHistorical(event.target.checked))
-                      }
-                    />
-                    本人已核对材料中的历史账户归属
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={complete}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        edit(() => setComplete(event.target.checked))
-                      }
-                    />
-                    本人已核对该订单的完整历史范围
-                  </label>
-                  <div className="record-actions">
-                    <button
-                      className="button"
-                      disabled={!canPreview}
-                      onClick={preview}
-                    >
-                      预览归属
-                    </button>
-                  </div>
-                  <div className="record-actions">
-                    <button
-                      className="button"
-                      disabled={
-                        busy || !!pending || listing.pagination.offset === 0
-                      }
-                      onClick={() =>
-                        void read(
-                          Math.max(
-                            0,
-                            listing.pagination.offset -
-                              listing.pagination.limit,
-                          ),
-                        )
-                      }
-                    >
-                      上一批
-                    </button>
-                    <span>
-                      {listing.pagination.total === null
-                        ? "范围未知"
-                        : `${listing.pagination.offset + listing.orders.length} / ${listing.pagination.total}`}
-                    </span>
-                    <button
-                      className="button"
-                      disabled={
-                        busy ||
-                        !!pending ||
-                        listing.pagination.nextOffset === null
-                      }
-                      onClick={() =>
-                        void read(listing.pagination.nextOffset ?? 0)
-                      }
-                    >
-                      下一批
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-          {proof && (
-            <div className="fee-proof">
-              <p>原订单 {proof.result.orderId}</p>
-              <p>
-                目标账户 {proof.result.proposedBrokerAccountId} · 证券{" "}
-                {proof.result.recordId}
-              </p>
-              <p>仅登记本人确认的归属；现金和成交账本不变</p>
-              <button
-                className="button"
-                disabled={
-                  disabled || Date.parse(proof.result.expiresAt) <= Date.now()
-                }
-                onClick={() => void submit()}
-              >
-                确认归属
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </details>
+                      >
+                        上一批
+                      </button>
+                      <span>
+                        {listing.pagination.total === null
+                          ? "范围未知"
+                          : `${listing.pagination.offset + listing.orders.length} / ${listing.pagination.total}`}
+                      </span>
+                      <button
+                        className="button"
+                        disabled={
+                          busy ||
+                          !!pending ||
+                          listing.pagination.nextOffset === null
+                        }
+                        onClick={() =>
+                          void read(listing.pagination.nextOffset ?? 0)
+                        }
+                      >
+                        下一批
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+            {proof && (
+              <div className="fee-proof">
+                <p>原订单 {proof.result.orderId}</p>
+                <p>
+                  目标账户 {proof.result.proposedBrokerAccountId} · 证券{" "}
+                  {proof.result.recordId}
+                </p>
+                <p>仅登记本人确认的归属；现金和成交账本不变</p>
+                <button
+                  className="button"
+                  disabled={
+                    disabled || Date.parse(proof.result.expiresAt) <= Date.now()
+                  }
+                  onClick={() => void submit()}
+                >
+                  确认归属
+                </button>
+              </div>
+            )}
+            <details className="fees-source-receipts">
+              <summary>归属操作回执</summary>
+              <div className="fees-plan-fields">
+                <label>
+                  原操作编号
+                  <input
+                    value={queryId}
+                    disabled={busy || !!pending}
+                    onChange={(event) => setQueryId(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="button"
+                  disabled={busy || !uuid.test(pending ?? queryId.trim())}
+                  onClick={query}
+                >
+                  查询回执
+                </button>
+              </div>
+            </details>
+          </>
+        )}
+      </SettingsSurface>
+    </div>
   );
 }

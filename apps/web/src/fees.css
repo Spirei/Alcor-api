@@ -80,3 +80,214 @@
 .fees-baseline > button {
   margin-block: 16px;
 }
+
+.fees-page {
+  max-width: 1080px;
+  margin-inline: auto;
+  min-width: 0;
+}
+.fees-account-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-block: 25px;
+}
+.fees-account-toolbar > label {
+  display: grid;
+  gap: 8px;
+  min-width: min(100%, 360px);
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+}
+.fees-account-toolbar .select-menu-trigger {
+  width: 100%;
+}
+.fees-period-card,
+.fees-plan,
+.fees-actual,
+.fees-baseline {
+  border: 1px solid var(--edge);
+  border-radius: 17px;
+  padding: 22px;
+  background: var(--surface);
+  margin-block: 20px;
+  min-width: 0;
+}
+.fees-page .fees-period-card h2,
+.fees-page .fees-plan h2,
+.fees-page .fees-actual h2,
+.fees-page .fees-baseline h2 {
+  font-size: 15px;
+  margin: 0 0 20px;
+  font-weight: 600;
+}
+.fees-period-card .fees-period {
+  margin-block: 0;
+}
+.fees-plan-fields {
+  margin-bottom: 0;
+}
+.fees-page .workspace-tabs-shell:has([aria-label="费用核对类型"]) {
+  margin-top: 24px;
+}
+.fees-plan-fields > fieldset {
+  grid-column: 1/-1;
+}
+.fees-rule-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+  min-width: 0;
+  border: 0;
+  border-top: 1px solid var(--edge);
+  padding: 23px 0 0;
+  margin: 0;
+}
+.fees-rule-fields legend {
+  font-size: 13px;
+  font-weight: 550;
+  padding: 0 12px 0 0;
+  margin-bottom: 5px;
+}
+.fees-rule-fields > label {
+  display: grid;
+  gap: 8px;
+}
+.fees-plan-fields label,
+.fees-period label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.fees-page label:has(input[type="checkbox"]) {
+  line-height: 1.6;
+  font-size: 12px;
+  color: var(--ink);
+}
+.fees-original-tools,
+.fees-plan-fields > details {
+  grid-column: 1/-1;
+  padding: 14px 0;
+  border-top: 1px solid var(--edge);
+  font-size: 12px;
+}
+.fees-original-tools pre {
+  max-height: 300px;
+  max-width: 100%;
+  overflow: auto;
+  font-size: 11px;
+}
+.fees-original-tools > div {
+  margin-top: 16px;
+}
+.fees-original-tools p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.fees-receipt-tools {
+  border-top: 1px solid var(--edge);
+  padding-top: 18px;
+  margin-top: 30px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.fees-receipt-tools > label {
+  display: grid;
+  gap: 8px;
+  max-width: 520px;
+  margin-block: 20px;
+}
+.fees-page > .workspace-view[aria-label="历史费用核对"] > section {
+  border: 1px solid var(--edge);
+  border-radius: 17px;
+  padding: 22px;
+  margin-top: 22px;
+}
+.fees-page article {
+  padding: 16px;
+  border: 1px solid var(--edge);
+  border-radius: 13px;
+  line-height: 1.65;
+}
+.fees-page article > div {
+  margin-top: 16px;
+}
+.fees-page article small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.fees-source-panel .workspace-settings-surface {
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+.fees-source-panel > .workspace-settings-surface > button {
+  margin-block: 14px;
+}
+.fees-source-panel .fees-plan-fields {
+  margin-top: 16px;
+}
+.fees-proof {
+  line-height: 1.7;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.fees-proof > p,
+.fees-proof > div > p {
+  margin: 12px 0;
+}
+.fees-proof .workspace-form-actions {
+  margin-top: 24px;
+}
+dialog:has(.fees-proof) {
+  width: min(760px, calc(100% - 32px));
+}
+@media (max-width: 640px) {
+  .fees-period-card,
+  .fees-plan,
+  .fees-actual,
+  .fees-baseline,
+  .fees-page > .workspace-view[aria-label="历史费用核对"] > section {
+    padding: 17px;
+    border-radius: 16px;
+  }
+  .fees-rule-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .fees-account-toolbar > label {
+    width: 100%;
+    min-width: 0;
+  }
+  .fees-page input:not([type="checkbox"]),
+  .fees-page select,
+  .fees-page textarea {
+    font-size: 16px;
+  }
+  .fees-page .fees-plan-fields {
+    gap: 18px;
+  }
+  .fees-proof .workspace-form-actions .button {
+    flex: 1;
+  }
+}
+.fees-source-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.fees-page .fees-source-heading h2 {
+  margin: 0;
+}
+.fees-source-receipts {
+  border-top: 1px solid var(--edge);
+  margin-top: 24px;
+  padding-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
