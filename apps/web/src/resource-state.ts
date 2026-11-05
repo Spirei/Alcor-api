@@ -86,3 +86,96 @@ export function resourceSize(bytes: number): string {
     units[unit]
   );
 }
+
+export type ResourceSelection = {
+  category: "components" | "media";
+  folder: string | null;
+  kind: string;
+  sort: "name" | "createdAt";
+  direction: "asc" | "desc";
+  cursors: string[];
+  page: number;
+};
+const fileKinds = ["image", "video", "audio", "document", "archive", "other"];
+/** Route state describes a view only; it never changes the authenticated owner. */
+export function resourceSelection(search: string): ResourceSelection {
+  const query = new URLSearchParams(search),
+    folder = query.get("rFolder"),
+    rawCursor = query.get("rCursor"),
+    cursor = rawCursor && rawCursor.length <= 2048 ? rawCursor : null;
+  return {
+    category: query.get("rCategory") === "media" ? "media" : "components",
+    folder: folder && /^rld_[a-f0-9]{32}$/.test(folder) ? folder : null,
+    kind: fileKinds.includes(query.get("rKind") || "")
+      ? query.get("rKind")!
+      : "",
+    sort: query.get("rSort") === "name" ? "name" : "createdAt",
+    direction: query.get("rDirection") === "asc" ? "asc" : "desc",
+    cursors: cursor ? [cursor] : [],
+    page:
+      cursor && /^[1-9][0-9]{0,2}$/.test(query.get("rPage") || "")
+        ? Math.min(167, Number(query.get("rPage")))
+        : 1,
+  };
+}
+export function resourceSearch(
+  search: string,
+  value: ResourceSelection,
+): string {
+  const query = new URLSearchParams(search);
+  for (const key of [
+    "rCategory",
+    "rFolder",
+    "rKind",
+    "rSort",
+    "rDirection",
+    "rCursor",
+    "rPage",
+  ])
+    query.delete(key);
+  if (value.category !== "components") query.set("rCategory", value.category);
+  if (value.folder) query.set("rFolder", value.folder);
+  if (value.kind) query.set("rKind", value.kind);
+  if (value.sort !== "createdAt") query.set("rSort", value.sort);
+  if (value.direction !== "desc") query.set("rDirection", value.direction);
+  const cursor = value.cursors.at(-1);
+  if (cursor) {
+    query.set("rCursor", cursor);
+    query.set("rPage", String(value.page));
+  }
+  const result = query.toString();
+  return result ? "?" + result : "";
+}
+export function resourceAncestors<
+  T extends { id: string; parentId: string | null },
+>(folders: T[], current: string | null): T[] {
+  const result: T[] = [],
+    seen = new Set<string>();
+  while (current) {
+    if (seen.has(current)) break;
+    seen.add(current);
+    const folder = folders.find((row) => row.id === current);
+    if (!folder) break;
+    result.unshift(folder);
+    current = folder.parentId;
+  }
+  return result;
+}
+
+/** Keep the backward trail in this history entry, not an ever-growing request URL. */
+export function resourceCursorHistory(
+  value: unknown,
+  current: string | undefined,
+): string[] {
+  if (!current) return [];
+  if (
+    Array.isArray(value) &&
+    value.length <= 167 &&
+    value.every(
+      (row) => typeof row === "string" && row.length > 0 && row.length <= 2048,
+    ) &&
+    value.at(-1) === current
+  )
+    return value;
+  return [current];
+}

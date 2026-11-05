@@ -1,4 +1,25 @@
-import { WorkspaceEmpty } from "./workspace-ui";
+import { WorkspaceEmpty, WorkspaceTabs, usePageReveal } from "./workspace-ui";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  Folder,
+  FolderPlus,
+  Upload,
+  RefreshCw,
+  Pencil,
+  Trash2,
+  ChevronRight,
+  Download,
+  FileText,
+  FileImage,
+  FileVideo,
+  FileAudio,
+  FileArchive,
+  File,
+} from "lucide-react";
+import { Dialog } from "./dialog";
+import { useConfirmationDialog } from "./confirm-dialog";
+import { FormActions } from "./workspace-forms";
+import { feedDateTime } from "./feed-display";
 import {
   useCallback,
   useEffect,
@@ -15,12 +36,17 @@ import {
   readResourceRequest,
   retainResourceRequest,
   releaseResourceRequest,
+  resourceCursorHistory,
+  resourceSelection,
+  resourceSearch,
+  resourceAncestors,
+  type ResourceSelection,
 } from "./resource-state";
 import "./resources.css";
 import { SelectMenu } from "./select-menu";
 import { resourceSize as size } from "./resource-state";
 
-type Folder = {
+type ResourceFolder = {
   id: string;
   name: string;
   category: string;
@@ -36,6 +62,7 @@ type Resource = {
   revision: number;
   sizeBytes: number;
   sha256: string;
+  createdAt: string;
   downloadPath: string;
 };
 type Usage = { usedBytes: number; fileCount: number; quotaBytes: number };
@@ -81,13 +108,42 @@ function ResourceSession({
 }) {
   const [visible, setVisible] = useState(!document.hidden),
     [locked, setLocked] = useState(false);
-  const [category, setCategory] = useState("components"),
-    [folder, setFolder] = useState<string | null>(null),
-    [kind, setKind] = useState("");
-  const [sort, setSort] = useState("createdAt"),
-    [direction, setDirection] = useState("desc"),
-    [cursors, setCursors] = useState<string[]>([]);
-  const [folders, setFolders] = useState<Folder[]>([]),
+  const location = useLocation(),
+    navigate = useNavigate();
+  const routeSelection = resourceSelection(location.search);
+  const selection = {
+    ...routeSelection,
+    cursors: resourceCursorHistory(
+      location.state?.resourceCursors,
+      routeSelection.cursors.at(-1),
+    ),
+  };
+  const { category, folder, kind, sort, direction, cursors } = selection;
+  const selectionKey = JSON.stringify(selection);
+  const reveal = usePageReveal(selection.page);
+  const changeView = (patch: Partial<ResourceSelection>) => {
+    if (patch.page !== undefined && patch.page !== selection.page)
+      reveal.request();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: resourceSearch(location.search, {
+          ...selection,
+          cursors: [],
+          page: 1,
+          ...patch,
+        }),
+      },
+      { state: { resourceCursors: patch.cursors || [] } },
+    );
+  };
+  const [uploadOpen, setUploadOpen] = useState(false),
+    [folderOpen, setFolderOpen] = useState(false),
+    [refreshing, setRefreshing] = useState(false);
+  const confirmation = useConfirmationDialog(
+    JSON.stringify([scope, active, visible, locked, selectionKey]),
+  );
+  const [folders, setFolders] = useState<ResourceFolder[]>([]),
     [page, setPage] = useState<Page | null>(null),
     [ready, setReady] = useState(false);
   const [error, setError] = useState(""),
@@ -107,7 +163,8 @@ function ResourceSession({
     epoch = useRef(0),
     reads = useRef(0),
     fileInput = useRef<HTMLInputElement>(null),
-    operation = useRef<ResourceRequest | null>(null);
+    operation = useRef<ResourceRequest | null>(null),
+    readController = useRef<AbortController | null>(null);
   const request = useRef<{ id: string; controller: AbortController } | null>(
       null,
     ),
@@ -128,6 +185,8 @@ function ResourceSession({
         setFolders([]);
         setPage(null);
         setEdit(null);
+        setUploadOpen(false);
+        setFolderOpen(false);
         setNewFolder("");
         clearFile();
       }
@@ -145,12 +204,29 @@ function ResourceSession({
   useLayoutEffect(() => {
     live.current = active && visible && !locked;
     ++epoch.current;
-    if (!live.current) clearFile();
+    if (!live.current) {
+      clearFile();
+      setEdit(null);
+      setUploadOpen(false);
+      setFolderOpen(false);
+      setPage(null);
+      setFolders([]);
+      setReady(false);
+      setRefreshing(false);
+    }
     return () => {
       live.current = false;
       ++epoch.current;
       ++reads.current;
+      readController.current?.abort();
       setBusy(false);
+      setRefreshing(false);
+      setPage(null);
+      setFolders([]);
+      setReady(false);
+      setEdit(null);
+      setUploadOpen(false);
+      setFolderOpen(false);
       clearFile();
     };
   }, [active, visible, locked, clearFile]);
@@ -164,20 +240,35 @@ function ResourceSession({
       fail(reason);
     }
   }, [scope, fail]);
+  useLayoutEffect(() => {
+    ++epoch.current;
+    ++reads.current;
+    readController.current?.abort();
+    setPage(null);
+    setBusy(false);
+    setReady(false);
+    setEdit(null);
+    setUploadOpen(false);
+    setFolderOpen(false);
+    setResult("");
+    clearFile();
+  }, [selectionKey, clearFile]);
   const load = useCallback(async () => {
     if (!live.current) return;
     const generation = epoch.current,
       read = ++reads.current;
+    readController.current?.abort();
+    const controller = new AbortController();
+    readController.current = controller;
     setReady(false);
-    setPage(null);
+    setRefreshing(true);
+    setError("");
     const current = () =>
-      live.current && generation === epoch.current && read === reads.current;
+      live.current &&
+      !controller.signal.aborted &&
+      generation === epoch.current &&
+      read === reads.current;
     try {
-      const tree = await api<{ items: Folder[] }>(
-        base + "/folder-tree?" + new URLSearchParams({ category }),
-      );
-      if (!current()) return;
-      const all = tree.items;
       const q = new URLSearchParams({
         category,
         folderId: folder ?? "root",
@@ -187,45 +278,34 @@ function ResourceSession({
       });
       if (kind) q.set("kind", kind);
       if (cursors.length) q.set("cursor", cursors[cursors.length - 1]);
-      const files = await api<Page>(base + "/files?" + q);
+      const [tree, files] = await Promise.all([
+        api<{ items: ResourceFolder[] }>(
+          base + "/folder-tree?" + new URLSearchParams({ category }),
+          { signal: controller.signal },
+        ),
+        api<Page>(base + "/files?" + q, { signal: controller.signal }),
+      ]);
       if (!current()) return;
-      setFolders(all);
+      setFolders(tree.items);
       setPage(files);
       setReady(true);
-      setError("");
     } catch (reason) {
-      if (
-        generation === epoch.current &&
-        ((reason instanceof ApiError && [401, 403].includes(reason.status)) ||
-          read === reads.current)
-      )
-        fail(reason);
+      if (current()) fail(reason);
+    } finally {
+      if (current()) setRefreshing(false);
     }
-  }, [category, folder, kind, sort, direction, cursors, fail]);
+  }, [selectionKey, fail]);
   useEffect(() => {
     if (active && visible && !locked) void load();
+    return () => readController.current?.abort();
   }, [active, visible, locked, load]);
   function changeFolder(id: string | null) {
-    ++epoch.current;
-    ++reads.current;
-    setFolder(id);
-    setCursors([]);
-    setEdit(null);
-    clearFile();
-    setPage(null);
+    changeView({ folder: id });
   }
-  function path(item: Folder): string {
-    const names = [item.name];
-    let parent = item.parentId;
-    const seen = new Set([item.id]);
-    while (parent) {
-      const p = folders.find((f) => f.id === parent);
-      if (!p || seen.has(p.id)) return names.join(" / ");
-      seen.add(p.id);
-      names.unshift(p.name);
-      parent = p.parentId;
-    }
-    return names.join(" / ");
+  function path(item: ResourceFolder): string {
+    return resourceAncestors(folders, item.id)
+      .map((row) => row.name)
+      .join(" / ");
   }
   function known(receipt: Receipt, id: string) {
     if (
@@ -251,6 +331,9 @@ function ResourceSession({
     );
     clearFile();
     setEdit(null);
+    setUploadOpen(false);
+    setFolderOpen(false);
+    setNewFolder("");
     void load();
   }
   async function check() {
@@ -363,371 +446,583 @@ function ResourceSession({
   const parent = folders.find((f) => f.id === folder),
     children = folders.filter((f) => f.parentId === folder),
     blocked = busy || !!pending || !ready || locked;
+  function manage(item: Resource | ResourceFolder, isFolder: boolean) {
+    setEdit({
+      id: item.id,
+      revision: item.revision,
+      name: item.name,
+      target:
+        (isFolder
+          ? (item as ResourceFolder).parentId
+          : (item as Resource).folderId) ?? "",
+      folder: isFolder,
+    });
+  }
+  async function remove(item: Resource | ResourceFolder, isFolder: boolean) {
+    if (blocked || !live.current) return;
+    const current = epoch.current;
+    if (
+      !(await confirmation.ask(
+        isFolder
+          ? `删除空文件夹「${item.name}」？有文件或子目录时不会删除。`
+          : `永久删除「${item.name}」？删除后不能从资源库恢复，历史操作记录继续保留。`,
+        {
+          title: isFolder ? "删除空文件夹" : "永久删除文件",
+          confirmLabel: "删除",
+        },
+      ))
+    )
+      return;
+    if (current === epoch.current && live.current)
+      void mutate(`/${isFolder ? "folders" : "files"}/${item.id}`, "DELETE", {
+        revision: item.revision,
+      });
+  }
   return (
-    <section className="resource-page">
+    <section className="resource-page" ref={reveal.ref} tabIndex={-1}>
       <header className="page-heading">
         <h1>资源库</h1>
-        <button
-          className="button"
-          disabled={busy || locked}
-          onClick={() => void load()}
-        >
-          重新读取
-        </button>
+        <div className="resource-heading-actions">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="新建文件夹"
+            disabled={blocked}
+            onClick={() => {
+              setNewFolder("");
+              setFolderOpen(true);
+            }}
+          >
+            <FolderPlus size={19} />
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={blocked}
+            onClick={() => fileInput.current?.click()}
+          >
+            <Upload size={17} />
+            上传文件
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="刷新资源库"
+            disabled={busy || refreshing || locked}
+            onClick={() => void load()}
+          >
+            <RefreshCw size={19} />
+          </button>
+        </div>
       </header>
-      {error && <p role="alert">{error}</p>}
+      <input
+        ref={fileInput}
+        type="file"
+        className="resource-file-input"
+        aria-label="选择个人资源文件"
+        disabled={blocked}
+        onChange={(e) => {
+          const value = e.target.files?.[0] ?? null;
+          if (value && (!value.size || value.size > 50 * 1024 * 1024)) {
+            clearFile();
+            setError("文件须为1字节至50MiB");
+            return;
+          }
+          setFile(value);
+          setUploadOpen(Boolean(value));
+        }}
+      />
+      <WorkspaceTabs
+        label="资源分类"
+        value={category}
+        disabled={busy}
+        onChange={(value) =>
+          changeView({ category: value, folder: null, kind: "" })
+        }
+        items={[
+          { value: "components", label: "构建" },
+          { value: "media", label: "影音内容" },
+        ]}
+      />
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       {result && <p role="status">{result}</p>}
       {pending && (
-        <div role="status">
-          <p>等待原操作结果 · {pending.id}</p>
-          <button
-            className="button"
-            disabled={busy || locked}
-            onClick={() => void check()}
-          >
-            查询原回执
-          </button>
-          {pending.kind && (
+        <div className="resource-pending" role="status">
+          <div>
+            <strong>原操作待核对</strong>
+            <code>{pending.id}</code>
+          </div>
+          <div>
             <button
               className="button secondary"
-              disabled={locked || cancelling}
-              onClick={() => void cancelOriginal()}
+              disabled={busy || locked}
+              onClick={() => void check()}
             >
-              {cancelling ? "正在核对…" : "取消原操作"}
+              查询原回执
             </button>
-          )}
+            {pending.kind && (
+              <button
+                className="button secondary"
+                disabled={locked || cancelling}
+                onClick={() => void cancelOriginal()}
+              >
+                {cancelling ? "正在核对…" : "取消原操作"}
+              </button>
+            )}
+          </div>
         </div>
       )}
-      <div className="resource-filters">
-        <label>
-          分类
+      <div className="resource-toolbar">
+        <nav className="resource-breadcrumbs" aria-label="资源目录">
+          <button
+            type="button"
+            disabled={!folder || busy}
+            onClick={() => changeFolder(null)}
+          >
+            {category === "media" ? "影音内容" : "构建"}
+          </button>
+          {resourceAncestors(folders, folder).map((item, index, rows) => (
+            <span key={item.id}>
+              <ChevronRight size={14} aria-hidden="true" />
+              <button
+                type="button"
+                aria-current={
+                  index === rows.length - 1 ? "location" : undefined
+                }
+                disabled={busy}
+                onClick={() => changeFolder(item.id)}
+              >
+                {item.name}
+              </button>
+            </span>
+          ))}
+        </nav>
+        <div className="resource-filters">
           <SelectMenu
-            label="分类"
-            variant="field"
-            value={category}
-            disabled={busy}
-            onChange={(value) => {
-              ++epoch.current;
-              setCategory(value);
-              changeFolder(null);
-            }}
-            options={[
-              { value: "components", label: "构建" },
-              { value: "media", label: "影音内容" },
-            ]}
-          />
-        </label>
-        <label>
-          类型
-          <SelectMenu
-            label="类型"
-            variant="field"
+            label="文件类型"
             value={kind}
-            onChange={(value) => {
-              ++epoch.current;
-              setKind(value);
-              setCursors([]);
-            }}
+            disabled={busy}
+            onChange={(value) => changeView({ kind: value })}
             options={[
-              { value: "", label: "全部" },
+              { value: "", label: "全部类型" },
               ...Object.entries(types).map(([value, label]) => ({
                 value,
                 label,
               })),
             ]}
           />
-        </label>
-        <label>
-          排序
           <SelectMenu
-            label="排序"
-            variant="field"
-            value={sort}
+            label="文件排序"
+            value={sort + ":" + direction}
+            disabled={busy}
             onChange={(value) => {
-              ++epoch.current;
-              setSort(value);
-              setCursors([]);
+              const [sort, direction] = value.split(":") as [
+                ResourceSelection["sort"],
+                ResourceSelection["direction"],
+              ];
+              changeView({ sort, direction });
             }}
             options={[
-              { value: "createdAt", label: "上传时间" },
-              { value: "name", label: "名称" },
+              { value: "createdAt:desc", label: "最新上传" },
+              { value: "createdAt:asc", label: "最早上传" },
+              { value: "name:asc", label: "名称升序" },
+              { value: "name:desc", label: "名称降序" },
             ]}
           />
-        </label>
-        <label>
-          顺序
-          <SelectMenu
-            label="顺序"
-            variant="field"
-            value={direction}
-            onChange={(value) => {
-              ++epoch.current;
-              setDirection(value);
-              setCursors([]);
-            }}
-            options={[
-              { value: "desc", label: "降序" },
-              { value: "asc", label: "升序" },
-            ]}
-          />
-        </label>
+        </div>
       </div>
-      <nav aria-label="资源目录">
-        <button className="button secondary" onClick={() => changeFolder(null)}>
-          根目录
-        </button>
-        {parent && (
-          <>
-            <button
-              className="button secondary"
-              onClick={() => changeFolder(parent.parentId)}
-            >
-              上一级
-            </button>
-            <span>{path(parent)}</span>
-          </>
-        )}
-      </nav>
-      {page && (
-        <p>
-          总用量 {size(page.usage.usedBytes)} / {size(page.usage.quotaBytes)} ·{" "}
-          {page.usage.fileCount} 个文件
+      {!page && !error && (
+        <p className="resource-loading" role="status">
+          正在读取…
         </p>
       )}
-      {!ready && !error && <p role="status">正在读取…</p>}
-      <details className="workspace-tools">
-        <summary>上传文件与新建文件夹</summary>
-        <div className="resource-upload">
-          <label>
-            上传文件
-            <input
-              ref={fileInput}
-              type="file"
-              disabled={blocked}
-              onChange={(e) => {
-                const value = e.target.files?.[0] ?? null;
-                if (value && (!value.size || value.size > 50 * 1024 * 1024)) {
-                  clearFile();
-                  setError("文件须为1字节至50MiB");
-                  return;
+      {page && (
+        <>
+          <ResourceRows
+            folders={children}
+            items={page.items}
+            blocked={blocked}
+            onFolder={changeFolder}
+            onManage={manage}
+            onDelete={(item, isFolder) => void remove(item, isFolder)}
+          />
+          {!page.items.length && !children.length && (
+            <WorkspaceEmpty
+              title={kind ? "当前类型没有文件" : "此文件夹为空"}
+              description={
+                kind
+                  ? "切换类型查看其他文件。"
+                  : "上传文件或新建文件夹，整理你的个人资源。"
+              }
+            />
+          )}
+          <footer className="resource-footer">
+            <p>
+              {page.usage.fileCount} 个文件 · 已用 {size(page.usage.usedBytes)}{" "}
+              / {size(page.usage.quotaBytes)}
+            </p>
+            <div className="workspace-pagination">
+              <button
+                disabled={busy || !cursors.length}
+                onClick={() =>
+                  changeView(
+                    cursors.length === 1 && selection.page > 2
+                      ? {}
+                      : {
+                          cursors: cursors.slice(0, -1),
+                          page: selection.page - 1,
+                        },
+                  )
                 }
-                setFile(value);
-              }}
-            />
-          </label>
-          <button
-            className="button"
-            disabled={blocked || !file}
-            onClick={() => {
-              if (!file) return;
-              const data = new FormData();
-              data.set("file", file);
-              data.set("name", file.name);
-              data.set("category", category);
-              if (parent) {
-                data.set("folderId", parent.id);
-                data.set("folderRevision", String(parent.revision));
-              }
-              void mutate("/files", "POST", data);
-            }}
-          >
-            上传
-          </button>
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void mutate("/folders", "POST", {
-              category,
-              name: newFolder,
-              ...(parent
-                ? { parentId: parent.id, parentRevision: parent.revision }
-                : {}),
-            });
-          }}
-          className="resource-upload"
-        >
-          <label>
-            新建目录
-            <input
-              value={newFolder}
-              disabled={blocked}
-              onChange={(e) => setNewFolder(e.target.value)}
-            />
-          </label>
-          <button className="button" disabled={blocked || !newFolder}>
-            创建
-          </button>
-        </form>
-      </details>
-      {ready &&
-        children.map((item) => (
-          <article className="resource-row" key={item.id}>
-            <button
-              className="button secondary"
-              onClick={() => changeFolder(item.id)}
-            >
-              {item.name}
-            </button>
-            <span>目录</span>
-            <button
-              className="button secondary"
-              disabled={blocked}
-              onClick={() =>
-                setEdit({
-                  id: item.id,
-                  revision: item.revision,
-                  name: item.name,
-                  target: item.parentId ?? "",
-                  folder: true,
-                })
-              }
-            >
-              管理
-            </button>
-          </article>
-        ))}
-      {ready &&
-        page?.items.map((item) => (
-          <article className="resource-row" key={item.id}>
-            <a href={item.downloadPath} download={item.name}>
-              {item.name}
-            </a>
-            <span>
-              {types[item.kind] ?? "其他"} · {size(item.sizeBytes)}
-            </span>
-            <button
-              className="button secondary"
-              disabled={blocked}
-              onClick={() =>
-                setEdit({
-                  id: item.id,
-                  revision: item.revision,
-                  name: item.name,
-                  target: item.folderId ?? "",
-                  folder: false,
-                })
-              }
-            >
-              管理
-            </button>
-          </article>
-        ))}
-      {ready && page?.items.length === 0 && children.length === 0 && (
-        <WorkspaceEmpty
-          title="此目录为空"
-          description="上传文件或新建文件夹，整理你的资源。"
-        />
+              >
+                {cursors.length === 1 && selection.page > 2
+                  ? "回到第一页"
+                  : "上一页"}
+              </button>
+              <span>第 {selection.page} 页</span>
+              <button
+                disabled={blocked || !page.nextCursor}
+                onClick={() => {
+                  if (page.nextCursor)
+                    changeView({
+                      cursors: [...cursors, page.nextCursor],
+                      page: selection.page + 1,
+                    });
+                }}
+              >
+                下一页
+              </button>
+            </div>
+          </footer>
+        </>
       )}
-      {edit && (
-        <form
-          className="resource-editor"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const target = folders.find((f) => f.id === edit.target);
-            void mutate(
-              `/${edit.folder ? "folders" : "files"}/${edit.id}`,
-              "PATCH",
-              {
-                revision: edit.revision,
-                name: edit.name,
-                [edit.folder ? "parentId" : "folderId"]: edit.target || null,
-                ...(target
-                  ? {
-                      [edit.folder ? "parentRevision" : "folderRevision"]:
-                        target.revision,
-                    }
-                  : {}),
-              },
-            );
+      {uploadOpen && file && (
+        <Dialog
+          title="上传个人文件"
+          className="resource-dialog"
+          onClose={() => {
+            setUploadOpen(false);
+            clearFile();
           }}
         >
-          <h2>{edit.folder ? "目录" : "文件"}</h2>
-          <label>
-            名称
-            <input
-              value={edit.name}
-              disabled={blocked}
-              onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-            />
-          </label>
-          <label>
-            目标目录
-            <SelectMenu
-              label="目标目录"
-              variant="field"
-              value={edit.target}
-              disabled={blocked}
-              onChange={(value) => setEdit({ ...edit, target: value })}
-              options={[
-                { value: "", label: "根目录" },
-                ...folders
-                  .filter((f) => f.id !== edit.id)
-                  .map((f) => ({ value: f.id, label: path(f) })),
-              ]}
-            />
-          </label>
-          <div>
-            <button className="button" disabled={blocked || !edit.name}>
-              保存
-            </button>
+          <div className="resource-upload-summary">
+            <File size={28} aria-hidden="true" />
+            <div>
+              <strong>{file.name}</strong>
+              <span>
+                {size(file.size)} ·{" "}
+                {parent
+                  ? path(parent)
+                  : category === "media"
+                    ? "影音内容"
+                    : "构建"}
+              </span>
+            </div>
+          </div>
+          <p className="resource-muted">
+            保留原始文件与名称，单个文件最大50MiB。
+          </p>
+          <FormActions>
             <button
               className="button secondary"
-              type="button"
-              onClick={() => setEdit(null)}
+              onClick={() => {
+                setUploadOpen(false);
+                clearFile();
+              }}
             >
               取消
             </button>
-          </div>
-          <details>
-            <summary>删除</summary>
-            <p>
-              {edit.folder
-                ? "仅可删除空目录。"
-                : "删除后将不可下载，历史操作记录继续保留。"}
-            </p>
             <button
-              className="button danger"
-              type="button"
+              className="button"
               disabled={blocked}
-              onClick={() =>
-                void mutate(
-                  `/${edit.folder ? "folders" : "files"}/${edit.id}`,
-                  "DELETE",
-                  { revision: edit.revision },
-                )
-              }
+              onClick={() => {
+                const data = new FormData();
+                data.set("file", file);
+                data.set("name", file.name);
+                data.set("category", category);
+                if (parent) {
+                  data.set("folderId", parent.id);
+                  data.set("folderRevision", String(parent.revision));
+                }
+                void mutate("/files", "POST", data);
+              }}
             >
-              确认删除{edit.folder ? "目录" : "文件"}
+              {busy ? "正在上传…" : "上传"}
             </button>
-          </details>
-        </form>
+          </FormActions>
+        </Dialog>
       )}
-      <div className="resource-pages">
-        <button
-          className="button secondary"
-          disabled={busy || !cursors.length}
-          onClick={() => {
-            ++epoch.current;
-            setCursors((v) => v.slice(0, -1));
-          }}
+      {folderOpen && (
+        <Dialog
+          title="新建文件夹"
+          className="resource-dialog"
+          onClose={() => setFolderOpen(false)}
         >
-          上一页
-        </button>
-        <span>第 {cursors.length + 1} 页</span>
-        <button
-          className="button secondary"
-          disabled={busy || !ready || !page?.nextCursor}
-          onClick={() => {
-            if (page?.nextCursor) {
-              ++epoch.current;
-              setCursors((v) => [...v, page.nextCursor!]);
-            }
-          }}
+          <form
+            className="resource-editor"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void mutate("/folders", "POST", {
+                category,
+                name: newFolder,
+                ...(parent
+                  ? { parentId: parent.id, parentRevision: parent.revision }
+                  : {}),
+              });
+            }}
+          >
+            <label>
+              文件夹名称
+              <input
+                data-dialog-autofocus
+                value={newFolder}
+                maxLength={120}
+                disabled={blocked}
+                onChange={(e) => setNewFolder(e.target.value)}
+              />
+            </label>
+            <FormActions>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setFolderOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                className="button"
+                disabled={blocked || !newFolder.trim()}
+              >
+                创建
+              </button>
+            </FormActions>
+          </form>
+        </Dialog>
+      )}
+      {edit && (
+        <Dialog
+          title={edit.folder ? "文件夹管理" : "文件管理"}
+          className="resource-dialog"
+          onClose={() => setEdit(null)}
         >
-          下一页
-        </button>
-      </div>
+          <form
+            className="resource-editor"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const target = folders.find((f) => f.id === edit.target);
+              void mutate(
+                `/${edit.folder ? "folders" : "files"}/${edit.id}`,
+                "PATCH",
+                {
+                  revision: edit.revision,
+                  name: edit.name,
+                  [edit.folder ? "parentId" : "folderId"]: edit.target || null,
+                  ...(target
+                    ? {
+                        [edit.folder ? "parentRevision" : "folderRevision"]:
+                          target.revision,
+                      }
+                    : {}),
+                },
+              );
+            }}
+          >
+            <label>
+              名称
+              <input
+                data-dialog-autofocus
+                value={edit.name}
+                maxLength={120}
+                disabled={blocked}
+                onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+              />
+            </label>
+            <label>
+              所在文件夹
+              <SelectMenu
+                label="所在文件夹"
+                variant="field"
+                value={edit.target}
+                disabled={blocked}
+                onChange={(value) => setEdit({ ...edit, target: value })}
+                options={[
+                  { value: "", label: "根目录" },
+                  ...folders
+                    .filter(
+                      (f) =>
+                        f.id !== edit.id &&
+                        (!edit.folder ||
+                          !resourceAncestors(folders, f.id).some(
+                            (ancestor) => ancestor.id === edit.id,
+                          )),
+                    )
+                    .map((f) => ({ value: f.id, label: path(f) })),
+                ]}
+              />
+            </label>
+            {!edit.folder && (
+              <details className="resource-original">
+                <summary>原件信息</summary>
+                {page?.items
+                  .filter((row) => row.id === edit.id)
+                  .map((row) => (
+                    <dl key={row.id}>
+                      <dt>类型</dt>
+                      <dd>{types[row.kind] ?? "其他"}</dd>
+                      <dt>文件大小</dt>
+                      <dd>{size(row.sizeBytes)}</dd>
+                      <dt>上传时间</dt>
+                      <dd>{feedDateTime(row.createdAt)}</dd>
+                      <dt>SHA-256</dt>
+                      <dd>
+                        <code>{row.sha256}</code>
+                      </dd>
+                    </dl>
+                  ))}
+              </details>
+            )}
+            <FormActions>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setEdit(null)}
+              >
+                取消
+              </button>
+              <button
+                className="button"
+                disabled={blocked || !edit.name.trim()}
+              >
+                保存
+              </button>
+            </FormActions>
+          </form>
+        </Dialog>
+      )}
+      {confirmation.dialog}
     </section>
+  );
+}
+
+const resourceIcons = {
+  image: FileImage,
+  video: FileVideo,
+  audio: FileAudio,
+  document: FileText,
+  archive: FileArchive,
+};
+export function ResourceRows({
+  folders,
+  items,
+  blocked,
+  onFolder,
+  onManage,
+  onDelete,
+}: {
+  folders: ResourceFolder[];
+  items: Resource[];
+  blocked: boolean;
+  onFolder: (id: string) => void;
+  onManage: (item: Resource | ResourceFolder, isFolder: boolean) => void;
+  onDelete: (item: Resource | ResourceFolder, isFolder: boolean) => void;
+}) {
+  if (!folders.length && !items.length) return null;
+  return (
+    <div className="resource-list" aria-label="个人资源文件">
+      <div className="resource-list-heading">
+        <span>名称</span>
+        <span>类型 / 大小</span>
+        <span className="resource-date">上传时间</span>
+        <span className="sr-only">操作</span>
+      </div>
+      {folders.map((item) => (
+        <article className="resource-row" key={item.id}>
+          <button
+            className="resource-name resource-folder"
+            type="button"
+            onClick={() => onFolder(item.id)}
+          >
+            <span className="resource-file-icon">
+              <Folder size={21} />
+            </span>
+            <strong>{item.name}</strong>
+          </button>
+          <span className="resource-file-meta">文件夹</span>
+          <span className="resource-date">—</span>
+          <div className="resource-row-actions">
+            <button
+              className="icon-button"
+              aria-label={`管理文件夹 ${item.name}`}
+              disabled={blocked}
+              onClick={() => onManage(item, true)}
+            >
+              <Pencil size={16} />
+            </button>
+            <button
+              className="icon-button resource-delete"
+              aria-label={`删除文件夹 ${item.name}`}
+              disabled={blocked}
+              onClick={() => onDelete(item, true)}
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </article>
+      ))}
+      {items.map((item) => {
+        const Icon =
+          resourceIcons[item.kind as keyof typeof resourceIcons] || File;
+        return (
+          <article className="resource-row" key={item.id}>
+            <a
+              className="resource-name"
+              href={item.downloadPath}
+              download={item.name}
+            >
+              <span className="resource-file-icon">
+                <Icon size={21} />
+              </span>
+              <strong>{item.name}</strong>
+            </a>
+            <span className="resource-file-meta">
+              {types[item.kind] ?? "其他"} · {size(item.sizeBytes)}
+            </span>
+            <time className="resource-date">
+              {feedDateTime(item.createdAt)}
+            </time>
+            <div className="resource-row-actions">
+              <a
+                className="icon-button"
+                href={item.downloadPath}
+                download={item.name}
+                aria-label={`下载 ${item.name}`}
+              >
+                <Download size={16} />
+              </a>
+              <button
+                className="icon-button"
+                aria-label={`管理文件 ${item.name}`}
+                disabled={blocked}
+                onClick={() => onManage(item, false)}
+              >
+                <Pencil size={16} />
+              </button>
+              <button
+                className="icon-button resource-delete"
+                aria-label={`删除文件 ${item.name}`}
+                disabled={blocked}
+                onClick={() => onDelete(item, false)}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
   );
 }

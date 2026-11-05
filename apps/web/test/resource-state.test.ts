@@ -90,3 +90,75 @@ test("small nonempty resources never display as zero, while unavailable capacity
   assert.equal(resourceSize(Number.NaN), "未知");
   assert.equal(resourceSize(-1), "未知");
 });
+
+test("resource view restores scope and bounded cursors without making request URLs grow with history", async () => {
+  const {
+    resourceSelection,
+    resourceSearch,
+    resourceCursorHistory,
+    resourceAncestors,
+  } = await import("../src/resource-state.ts");
+  const folder = "rld_" + "a".repeat(32);
+  const selection = resourceSelection(
+    "?rCategory=media&rFolder=" +
+      folder +
+      "&rKind=video&rSort=name&rDirection=asc&rCursor=page-two&rPage=2",
+  );
+  assert.deepEqual(selection, {
+    category: "media",
+    folder,
+    kind: "video",
+    sort: "name",
+    direction: "asc",
+    cursors: ["page-two"],
+    page: 2,
+  });
+  const trail = Array.from({ length: 100 }, (_, i) => "cursor-" + i);
+  const search = resourceSearch("?unrelated=kept", {
+    ...selection,
+    cursors: trail,
+    page: 101,
+  });
+  assert.ok(search.length < 180);
+  assert.match(search, /unrelated=kept/);
+  assert.deepEqual(resourceSelection(search).cursors, ["cursor-99"]);
+  assert.equal(resourceSelection(search).page, 101);
+  assert.deepEqual(resourceCursorHistory(trail, "cursor-99"), trail);
+  assert.deepEqual(resourceCursorHistory(trail, "another"), ["another"]);
+  assert.deepEqual(
+    resourceCursorHistory(["secret-owner-cursor"], undefined),
+    [],
+  );
+  const invalid = resourceSelection(
+    "?rCategory=admin&rFolder=other-owner-path&rKind=secret&rSort=private&rDirection=sideways&rPage=-9",
+  );
+  assert.deepEqual(invalid, {
+    category: "components",
+    folder: null,
+    kind: "",
+    sort: "createdAt",
+    direction: "desc",
+    cursors: [],
+    page: 1,
+  });
+  assert.deepEqual(
+    resourceAncestors(
+      [
+        { id: "a", parentId: null },
+        { id: "b", parentId: "a" },
+      ],
+      "b",
+    ).map((r) => r.id),
+    ["a", "b"],
+  );
+  assert.equal(
+    resourceAncestors(
+      [
+        { id: "a", parentId: "b" },
+        { id: "b", parentId: "a" },
+      ],
+      "b",
+    ).length,
+    2,
+  );
+});
