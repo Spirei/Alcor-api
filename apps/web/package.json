@@ -1,7 +1,7 @@
 {
   "name": "@alcor/web",
   "private": true,
-  "version": "0.1.176",
+  "version": "0.1.177",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",

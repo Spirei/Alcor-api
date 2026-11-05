@@ -15,6 +15,8 @@ import {
   FileAudio,
   FileArchive,
   File,
+  Search,
+  X,
 } from "lucide-react";
 import { Dialog } from "./dialog";
 import { useConfirmationDialog } from "./confirm-dialog";
@@ -118,7 +120,18 @@ function ResourceSession({
       routeSelection.cursors.at(-1),
     ),
   };
-  const { category, folder, kind, sort, direction, cursors } = selection;
+  const {
+    category,
+    folder,
+    kind,
+    sort,
+    direction,
+    cursors,
+    system,
+    search = "",
+  } = selection;
+  const [searchDraft, setSearchDraft] = useState(search);
+  useEffect(() => setSearchDraft(search), [search]);
   const selectionKey = JSON.stringify(selection);
   const reveal = usePageReveal(selection.page);
   const changeView = (patch: Partial<ResourceSelection>) => {
@@ -158,6 +171,7 @@ function ResourceSession({
     name: string;
     target: string;
     folder: boolean;
+    category: string;
   } | null>(null);
   const live = useRef(false),
     epoch = useRef(0),
@@ -270,19 +284,24 @@ function ResourceSession({
       read === reads.current;
     try {
       const q = new URLSearchParams({
-        category,
-        folderId: folder ?? "root",
+        ...(system ? {} : { category }),
+        ...(search && !folder ? {} : { folderId: folder ?? "root" }),
         sort,
         direction,
         limit: "30",
       });
       if (kind) q.set("kind", kind);
+      if (search) q.set("q", search);
       if (cursors.length) q.set("cursor", cursors[cursors.length - 1]);
       const [tree, files] = await Promise.all([
-        api<{ items: ResourceFolder[] }>(
-          base + "/folder-tree?" + new URLSearchParams({ category }),
-          { signal: controller.signal },
-        ),
+        Promise.all(
+          (system ? ["components", "media"] : [category]).map((value) =>
+            api<{ items: ResourceFolder[] }>(
+              base + "/folder-tree?" + new URLSearchParams({ category: value }),
+              { signal: controller.signal },
+            ),
+          ),
+        ).then((trees) => ({ items: trees.flatMap((tree) => tree.items) })),
         api<Page>(base + "/files?" + q, { signal: controller.signal }),
       ]);
       if (!current()) return;
@@ -300,7 +319,12 @@ function ResourceSession({
     return () => readController.current?.abort();
   }, [active, visible, locked, load]);
   function changeFolder(id: string | null) {
-    changeView({ folder: id });
+    changeView({
+      folder: id,
+      search: "",
+      category: (folders.find((row) => row.id === id)?.category ??
+        "components") as ResourceSelection["category"],
+    });
   }
   function path(item: ResourceFolder): string {
     return resourceAncestors(folders, item.id)
@@ -444,7 +468,19 @@ function ResourceSession({
     }
   }
   const parent = folders.find((f) => f.id === folder),
-    children = folders.filter((f) => f.parentId === folder),
+    children = folders
+      .filter(
+        (f) =>
+          (search && !folder ? true : f.parentId === folder) &&
+          (!search ||
+            f.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())),
+      )
+      .sort(
+        (a, b) =>
+          (direction === "asc" ? 1 : -1) *
+          (a.name.localeCompare(b.name, "zh-CN", { numeric: true }) ||
+            a.id.localeCompare(b.id)),
+      ),
     blocked = busy || !!pending || !ready || locked;
   function manage(item: Resource | ResourceFolder, isFolder: boolean) {
     setEdit({
@@ -456,6 +492,7 @@ function ResourceSession({
           ? (item as ResourceFolder).parentId
           : (item as Resource).folderId) ?? "",
       folder: isFolder,
+      category: item.category,
     });
   }
   async function remove(item: Resource | ResourceFolder, isFolder: boolean) {
@@ -534,12 +571,19 @@ function ResourceSession({
       />
       <WorkspaceTabs
         label="资源分类"
-        value={category}
+        value={system ? "system" : category}
         disabled={busy}
         onChange={(value) =>
-          changeView({ category: value, folder: null, kind: "" })
+          changeView({
+            category: value === "media" ? "media" : "components",
+            system: value === "system",
+            folder: null,
+            kind: "",
+            search: "",
+          })
         }
         items={[
+          { value: "system", label: "系统文件" },
           { value: "components", label: "构建" },
           { value: "media", label: "影音内容" },
         ]}
@@ -583,7 +627,7 @@ function ResourceSession({
             disabled={!folder || busy}
             onClick={() => changeFolder(null)}
           >
-            {category === "media" ? "影音内容" : "构建"}
+            {system ? "系统文件" : category === "media" ? "影音内容" : "构建"}
           </button>
           {resourceAncestors(folders, folder).map((item, index, rows) => (
             <span key={item.id}>
@@ -635,6 +679,41 @@ function ResourceSession({
           />
         </div>
       </div>
+      <form
+        className="resource-search"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          changeView({ search: searchDraft.trim() });
+        }}
+      >
+        <Search size={18} aria-hidden="true" />
+        <input
+          aria-label="搜索文件和文件夹名称"
+          placeholder={folder ? "搜索此文件夹" : "搜索所有目录中的名称"}
+          value={searchDraft}
+          maxLength={120}
+          disabled={busy}
+          onChange={(event) => setSearchDraft(event.target.value)}
+        />
+        {(searchDraft || search) && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="清除文件搜索"
+            disabled={busy}
+            onClick={() => {
+              setSearchDraft("");
+              changeView({ search: "" });
+            }}
+          >
+            <X size={17} />
+          </button>
+        )}
+        <button type="submit" className="button secondary" disabled={busy}>
+          搜索
+        </button>
+      </form>
       {!page && !error && (
         <p className="resource-loading" role="status">
           正在读取…
@@ -652,11 +731,19 @@ function ResourceSession({
           />
           {!page.items.length && !children.length && (
             <WorkspaceEmpty
-              title={kind ? "当前类型没有文件" : "此文件夹为空"}
+              title={
+                search
+                  ? "没有匹配的文件或文件夹"
+                  : kind
+                    ? "当前类型没有文件"
+                    : "此文件夹为空"
+              }
               description={
-                kind
-                  ? "切换类型查看其他文件。"
-                  : "上传文件或新建文件夹，整理你的个人资源。"
+                search
+                  ? "试试其他名称，或清除搜索。"
+                  : kind
+                    ? "切换类型查看其他文件。"
+                    : "上传文件或新建文件夹，整理你的个人资源。"
               }
             />
           )}
@@ -717,9 +804,11 @@ function ResourceSession({
                 {size(file.size)} ·{" "}
                 {parent
                   ? path(parent)
-                  : category === "media"
-                    ? "影音内容"
-                    : "构建"}
+                  : system
+                    ? "系统文件"
+                    : category === "media"
+                      ? "影音内容"
+                      : "构建"}
               </span>
             </div>
           </div>
@@ -854,6 +943,7 @@ function ResourceSession({
                   ...folders
                     .filter(
                       (f) =>
+                        f.category === edit.category &&
                         f.id !== edit.id &&
                         (!edit.folder ||
                           !resourceAncestors(folders, f.id).some(

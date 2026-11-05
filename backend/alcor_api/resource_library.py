@@ -275,11 +275,14 @@ class ResourceLibrary:
         allowed = (
             {"category", "parentId", "limit", "cursor"}
             if folders
-            else {"category", "kind", "folderId", "limit", "cursor", "sort", "direction"}
+            else {"category", "kind", "folderId", "limit", "cursor", "sort", "direction", "q"}
         )
         if set(q) - allowed or any(len(q.getlist(k)) != 1 for k in q):
             raise HTTPException(400, "查询字段无效")
         cat = category(q.get("category")) if folders or "category" in q else None
+        search = q.get("q")
+        if search is not None and (not 1 <= len(search) <= 120 or search != search.strip() or any(ord(c) < 32 or ord(c) == 127 for c in search)):
+            raise HTTPException(400, "搜索名称无效")
         raw_limit = q.get("limit", "30")
         if (
             len(raw_limit) > 3
@@ -306,8 +309,11 @@ class ResourceLibrary:
         if order not in ("name", "createdAt") or direction not in ("asc", "desc"):
             raise HTTPException(400, "排序无效")
         column = "name" if order == "name" else "created_at"
+        binding_parts = [owner, "folders" if folders else "files", cat, kind, parent, order, direction]
+        if search is not None:
+            binding_parts.append(search)
         binding = json.dumps(
-            [owner, "folders" if folders else "files", cat, kind, parent, order, direction],
+            binding_parts,
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -337,6 +343,9 @@ class ResourceLibrary:
                 raise HTTPException(400, "分页游标无效") from None
         conditions = [sql.SQL("owner_id=%s"), sql.SQL("deleted_at IS NULL")]
         values = [owner]
+        if search is not None:
+            conditions.append(sql.SQL("strpos(lower(name), lower(%s)) > 0"))
+            values.append(search)
         for key, value in (("category", cat), ("kind", kind)):
             if value is not None:
                 conditions.append(sql.SQL("{}=%s").format(sql.Identifier(key)))

@@ -162,3 +162,29 @@ test("resource view restores scope and bounded cursors without making request UR
     2,
   );
 });
+
+test("system files deep links preserve combined scope and literal search while resetting page trails", async () => {
+  const { resourceSelection, resourceSearch } =
+    await import("../src/resource-state.ts");
+  const selected = resourceSelection(
+    "?rView=system&rSearch=%25_%E4%B8%AD%E6%96%87&rSort=name&rDirection=asc",
+  );
+  assert.equal(selected.system, true);
+  assert.equal(resourceSelection("").system, true);
+  assert.equal(
+    resourceSelection(
+      resourceSearch("", { ...selected, system: false, search: "" }),
+    ).system,
+    undefined,
+  );
+  assert.equal(selected.search, "%_中文");
+  assert.deepEqual(
+    resourceSelection(resourceSearch("?other=kept", selected)),
+    selected,
+  );
+  assert.equal(
+    resourceSelection("?rSearch=" + "a".repeat(140)).search?.length,
+    120,
+  );
+  assert.equal(resourceSelection("?rView=server-files").system, undefined);
+});

@@ -89,6 +89,8 @@ export function resourceSize(bytes: number): string {
 
 export type ResourceSelection = {
   category: "components" | "media";
+  system?: boolean;
+  search?: string;
   folder: string | null;
   kind: string;
   sort: "name" | "createdAt";
@@ -104,6 +106,13 @@ export function resourceSelection(search: string): ResourceSelection {
     rawCursor = query.get("rCursor"),
     cursor = rawCursor && rawCursor.length <= 2048 ? rawCursor : null;
   return {
+    ...(query.get("rView") === "system" ||
+    (!query.has("rView") && !query.has("rCategory"))
+      ? { system: true }
+      : {}),
+    ...(query.get("rSearch")
+      ? { search: query.get("rSearch")!.slice(0, 120).trim() }
+      : {}),
     category: query.get("rCategory") === "media" ? "media" : "components",
     folder: folder && /^rld_[a-f0-9]{32}$/.test(folder) ? folder : null,
     kind: fileKinds.includes(query.get("rKind") || "")
@@ -124,6 +133,8 @@ export function resourceSearch(
 ): string {
   const query = new URLSearchParams(search);
   for (const key of [
+    "rView",
+    "rSearch",
     "rCategory",
     "rFolder",
     "rKind",
@@ -133,7 +144,11 @@ export function resourceSearch(
     "rPage",
   ])
     query.delete(key);
-  if (value.category !== "components") query.set("rCategory", value.category);
+  if (value.system) query.set("rView", "system");
+  if (value.search?.trim())
+    query.set("rSearch", value.search.trim().slice(0, 120));
+  if (!value.system || value.category !== "components")
+    query.set("rCategory", value.category);
   if (value.folder) query.set("rFolder", value.folder);
   if (value.kind) query.set("rKind", value.kind);
   if (value.sort !== "createdAt") query.set("rSort", value.sort);
