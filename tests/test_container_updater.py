@@ -354,3 +354,25 @@ def test_unix_docker_api_negotiates_version_and_pulls_with_private_registry_auth
             httpd.shutdown()
             httpd.server_close()
             thread.join(timeout=2)
+
+
+def test_interrupted_healthy_replacement_removes_only_verified_stopped_previous(setup):
+    m, updater, docker, release, receipts = setup
+    updater.healthy = lambda pending: True
+    docker.current["Name"] = "/alcor-api-previous-" + release["id"][:8]
+    docker.current["State"] = {"Running": False}
+    m.atomic(updater.pending, {"release": release, "result": None, "phase": "applying",
+        "name": "/alcor-api", "old_id": docker.current["Id"], "new_id": "2" * 64})
+    updater.run()
+    assert receipts[-1]["status"] == "succeeded"
+    assert any(call[0] == "DELETE" and call[1] == "/containers/" + "1" * 64 + "?v=false" for call in docker.calls)
+
+
+def test_recovery_never_deletes_running_previous_container(setup):
+    m, updater, docker, release, receipts = setup
+    updater.healthy = lambda pending: True
+    m.atomic(updater.pending, {"release": release, "result": None, "phase": "applying",
+        "name": "/alcor-api", "old_id": docker.current["Id"], "new_id": "2" * 64})
+    updater.run()
+    assert receipts[-1]["status"] == "unknown"
+    assert not any(call[0] == "DELETE" for call in docker.calls)

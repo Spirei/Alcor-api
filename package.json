@@ -1,7 +1,7 @@
 {
   "name": "alcor-platform",
   "private": true,
-  "version": "0.1.174",
+  "version": "0.1.175",
   "workspaces": [
     "apps/web"
   ],

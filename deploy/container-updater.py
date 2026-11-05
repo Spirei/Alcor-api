@@ -283,7 +283,18 @@ class Updater:
             pending = json.loads(private(self.pending).read_text())
             self.validate(pending["release"])
             if not pending.get("result"):
-                pending["result"] = "succeeded" if self.healthy(pending) else "unknown"
+                pending["result"] = "unknown"
+                if self.healthy(pending):
+                    old_id = pending.get("old_id")
+                    if old_id and old_id != pending.get("new_id"):
+                        old = self.docker.inspect(old_id)
+                        expected = pending["name"].rstrip("/") + "-previous-" + pending["release"]["id"][:8]
+                        if (old["Id"] == old_id and old["Name"] == expected
+                            and not old["State"].get("Running")):
+                            self.docker.request("DELETE", "/containers/" + old_id + "?v=false")
+                            pending["result"] = "succeeded"
+                    else:
+                        pending["result"] = "succeeded"
                 atomic(self.pending, pending)
             self.finish(pending)
             return
