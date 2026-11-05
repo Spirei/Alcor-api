@@ -95,6 +95,7 @@ def test_proxy_origin_exception_requires_exact_web_session_binding():
         return Request({"type":"http", "method":"GET", "scheme":"http", "path":"/api/account/resource-library", "headers":headers, "query_string":b"", "server":("proxy.internal",80)})
     with pytest.raises(LegacyError): assert_native_origin(request([]), settings)
     with pytest.raises(LegacyError): assert_native_origin(request([(b"x-csrf-token",b"wrong")]), settings)
+    with pytest.raises(LegacyError): assert_native_origin(request([(b"x-csrf-token",bytes([233]) * 64)]), settings)
     bound=[(b"x-csrf-token", csrf_token("synthetic-only").encode())]
     assert_native_origin(request(bound), settings)
     settings.trusted_proxy_ips = ["192.0.2.10"]
