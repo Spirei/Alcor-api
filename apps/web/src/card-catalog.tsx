@@ -15,6 +15,7 @@ import "./card-catalog.css";
 import { CardPreferenceSettings } from "./card-preference-settings";
 import { CardWalletPanel } from "./card-wallet";
 import { preferenceCards } from "./card-preference-state";
+import { useConfirmationDialog } from "./confirm-dialog";
 
 type CustomCard = {
   id: string;
@@ -138,6 +139,15 @@ function CardCatalogContent({
   const sourceGeneration = useRef(0);
   const visible = useRef(active);
   const readEpoch = useRef(0);
+  const confirmation = useConfirmationDialog(
+    JSON.stringify([
+      scope,
+      session.csrf,
+      active,
+      workspaceSection,
+      snapshot?.preferenceRevision,
+    ]),
+  );
   if (visible.current !== active) {
     visible.current = active;
     readEpoch.current += 1;
@@ -396,6 +406,7 @@ function CardCatalogContent({
   const disabled = busy || pending !== null;
   return (
     <section className="card-catalog" aria-label="卡面目录">
+      {confirmation.dialog}
       <header className="card-catalog-heading">
         <h1>卡面</h1>
         <button
@@ -729,9 +740,14 @@ function CardCatalogContent({
                 <button
                   className="button secondary"
                   disabled={disabled}
-                  onClick={() => {
-                    if (window.confirm(`删除自建卡“${card.name}”？`))
-                      void write(
+                  onClick={async () => {
+                    if (
+                      await confirmation.ask(`删除自建卡“${card.name}”？`, {
+                        title: "删除自建卡",
+                        confirmLabel: "删除",
+                      })
+                    )
+                      await write(
                         "custom_delete",
                         "/account/card-catalog/custom?id=" +
                           encodeURIComponent(card.id),

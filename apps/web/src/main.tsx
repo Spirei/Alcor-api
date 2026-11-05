@@ -259,6 +259,10 @@ const PostgresExplorer = lazy(() =>
 import { servicePresentation } from "./connection-view";
 import type { Profile } from "./api";
 import "./styles.css";
+import "./appearance-runtime.css";
+import "./interaction.css";
+import "./workspace-forms.css";
+import "./page-layout.css";
 const AppearancePage = lazy(() =>
   import("./appearance").then((module) => ({ default: module.AppearancePage })),
 );

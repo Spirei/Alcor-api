@@ -59,7 +59,7 @@
   outline-offset: 4px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .avatar-status-picker .avatar-status-choice {
+  :root:not([data-reduced-motion="false"]) .avatar-status-picker .avatar-status-choice {
     transition: none;
     transform: none;
   }

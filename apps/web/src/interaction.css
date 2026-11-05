@@ -1,0 +1,145 @@
+/* One feedback rhythm; state changes never move surrounding layout. */
+:root {
+  --control-duration: 160ms;
+  --surface-duration: 180ms;
+  --control-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+:is(
+  .button,
+  .icon-button,
+  .text-button,
+  .sidebar nav a,
+  .sidebar-appearance,
+  .select-menu-trigger,
+  .select-menu-popup > button,
+  .workspace-tabs > button,
+  .asset-library-tabs button,
+  .asset-library-markets button,
+  .account-menu > button,
+  .appearance-switch,
+  .workspace-switch,
+  .domain-row,
+  .search-results button,
+  .account-setting-row,
+  .avatar-status-choice,
+  .users-table tbody tr,
+  .service-entry,
+  .service-entry-action,
+  .workspace-ui button:not([class])
+) {
+  transition:
+    background-color var(--control-duration) var(--control-ease),
+    color var(--control-duration) var(--control-ease),
+    border-color var(--control-duration) var(--control-ease),
+    box-shadow var(--control-duration) var(--control-ease),
+    transform var(--control-duration) var(--control-ease),
+    scale var(--control-duration) var(--control-ease);
+}
+:is(.card-gallery-item, .asset-library-item) {
+  transition:
+    background-color var(--control-duration) var(--control-ease),
+    border-color var(--control-duration) var(--control-ease),
+    box-shadow var(--control-duration) var(--control-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .button:not(:disabled):hover {
+    box-shadow: none;
+  }
+  :is(.icon-button, .text-button, .workspace-ui button:not([class])):not(
+      :disabled
+    ):hover {
+    background: var(--hover);
+  }
+}
+:is(
+    .button,
+    .icon-button,
+    .text-button,
+    .select-menu-trigger,
+    .workspace-tabs > button,
+    .asset-library-tabs button,
+    .asset-library-markets button,
+    .workspace-ui button:not([class])
+  ):not(:disabled):active {
+  scale: 0.98;
+  box-shadow: none;
+}
+button:disabled {
+  scale: 1 !important;
+}
+.select-menu-trigger > svg,
+.appearance-advanced-head button > svg {
+  transition: transform var(--control-duration) var(--control-ease);
+}
+:is(.appearance-switch-track, .workspace-switch-track) {
+  transition: background-color var(--control-duration) var(--control-ease);
+}
+:is(.appearance-switch-track, .workspace-switch-track) > span {
+  transition: transform var(--control-duration) var(--control-ease);
+}
+:is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus, var(--ink));
+  outline-offset: 3px;
+}
+
+/* Floating surfaces enter gently; dismissal and pending-operation guards stay immediate. */
+dialog[open],
+.select-menu-popup:popover-open,
+.account-menu,
+.avatar-status-popover {
+  animation: ui-surface-enter var(--surface-duration) var(--control-ease);
+}
+dialog[open]::backdrop {
+  animation: ui-backdrop-enter var(--surface-duration) var(--control-ease);
+}
+@keyframes ui-surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ui-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+:root[data-reduced-motion="true"]
+  :is(
+    .button,
+    .icon-button,
+    .text-button,
+    .select-menu-trigger,
+    .workspace-tabs > button,
+    .asset-library-tabs button,
+    .asset-library-markets button,
+    .avatar-status-choice,
+    .workspace-ui button:not([class])
+  ) {
+  scale: 1 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduced-motion="false"])
+    :is(
+      .button,
+      .icon-button,
+      .text-button,
+      .select-menu-trigger,
+      .workspace-tabs > button,
+      .asset-library-tabs button,
+      .asset-library-markets button,
+      .avatar-status-choice,
+      .workspace-ui button:not([class])
+    ) {
+    scale: 1 !important;
+  }
+}
+:root[data-reduced-motion="true"] .avatar-status-choice {
+  transform: none !important;
+}

@@ -231,7 +231,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .users-table tbody tr {
+  :root:not([data-reduced-motion="false"]) .users-table tbody tr {
     transition: none;
   }
 }

@@ -651,7 +651,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .simple-app * {
+  :root:not([data-reduced-motion="false"]) .simple-app * {
     transition: none !important;
   }
 }

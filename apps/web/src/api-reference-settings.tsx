@@ -1,3 +1,4 @@
+import { SettingsSurface } from "./workspace-forms";
 import { useEffect, useState } from "react";
 import { api, type Session } from "./api";
 import {
@@ -17,8 +18,7 @@ export function ApiReferenceSettings({
   const [version, setVersion] = useState<1 | 2>(1);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   return (
-    <details open={expanded}>
-      <summary>接口文档</summary>
+    <SettingsSurface title="接口文档" expanded={expanded} open={expanded}>
       <select
         aria-label="文档版本"
         value={version}
@@ -34,7 +34,7 @@ export function ApiReferenceSettings({
         draft={drafts[version]}
         change={(value) => setDrafts((old) => ({ ...old, [version]: value }))}
       />
-    </details>
+    </SettingsSurface>
   );
 }
 

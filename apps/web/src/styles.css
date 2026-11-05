@@ -2391,9 +2391,9 @@ dialog::backdrop {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *:before,
-  *:after {
+  :root:not([data-reduced-motion="false"]) *,
+  :root:not([data-reduced-motion="false"]) *:before,
+  :root:not([data-reduced-motion="false"]) *:after {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
@@ -2579,68 +2579,6 @@ dialog::backdrop {
 .search-results {
   display: grid;
   gap: 5px;
-}
-
-/* Shared control feedback: no geometry changes or layout shifts. */
-:is(.button, .icon-button, .text-button, .sidebar nav a,
-.sidebar-appearance, .select-menu-trigger, .select-menu-popup > button,
-.domain-row, .search-results button, .account-menu > button) {
-  transition: background-color 160ms ease, color 160ms ease,
-    box-shadow 160ms ease, transform 160ms ease;
-}
-@media (hover: hover) and (pointer: fine) {
-  .button:not(:disabled):hover {
-    transform: translateY(-1px);
-    box-shadow: 0 3px 9px #00000014;
-  }
-  .sidebar nav a.active:hover,
-  .sidebar-appearance.active:hover {
-    background: color-mix(in srgb, var(--nav-selected), #000 12%);
-  }
-}
-.button:not(:disabled):active {
-  transform: translateY(0) scale(0.98);
-  box-shadow: none;
-}
-.sidebar nav a:active,
-.sidebar-appearance:active {
-  transform: scale(0.98);
-}
-:root[data-reduced-motion="true"] :is(.button, .sidebar nav a, .sidebar-appearance) {
-  transform: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  :is(.button, .sidebar nav a, .sidebar-appearance) { transform: none !important; }
-}
-
-.service-entry {
-  transition: border-color 160ms ease;
-}
-.service-entry-action {
-  transition: background-color 160ms ease, box-shadow 160ms ease,
-    transform 160ms ease;
-}
-@media (hover: hover) and (pointer: fine) {
-  .service-entry:hover .service-entry-action {
-    background: color-mix(in srgb, var(--primary), #000 12%);
-    transform: translateY(-1px);
-    box-shadow: 0 3px 9px #00000014;
-  }
-}
-.service-entry:focus-visible .service-entry-action {
-  background: color-mix(in srgb, var(--primary), #000 12%);
-  transform: translateY(-1px);
-  box-shadow: 0 3px 9px #00000014;
-}
-.service-entry:active .service-entry-action {
-  transform: translateY(0) scale(0.98);
-  box-shadow: none;
-}
-:root[data-reduced-motion="true"] .service-entry-action {
-  transform: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .service-entry-action { transform: none !important; }
 }
 
 /* Illustrated service cards: quiet landscape, crisp linework, compact controls. */

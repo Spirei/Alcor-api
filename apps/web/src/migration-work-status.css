@@ -77,7 +77,7 @@
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .migration-work-wave i {
+  :root:not([data-reduced-motion="false"]) .migration-work-wave i {
     animation: none !important;
   }
 }

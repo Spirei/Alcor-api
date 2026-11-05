@@ -346,7 +346,7 @@ html[data-reduced-motion="true"] .site-artwork-camera {
   transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .site-artwork-camera {
+  :root:not([data-reduced-motion="false"]) .site-artwork-camera {
     transition: none;
   }
 }

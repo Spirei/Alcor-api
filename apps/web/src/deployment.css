@@ -619,7 +619,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .deploy-spinning {
+  :root:not([data-reduced-motion="false"]) .deploy-spinning {
     animation: none;
   }
 }
