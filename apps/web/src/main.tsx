@@ -1,4 +1,5 @@
 import { lazyView } from "./lazy-view";
+import { taskResultMessage } from "./task-result-message";
 import { LoadingPlaceholder } from "./loading-placeholder";
 const SyncStatusPage = lazyView(() =>
   import("./sync-status").then((module) => ({
@@ -1108,18 +1109,17 @@ function TaskDetail({
               ))}
             </ol>
             {data.result && (
-              <div className="notice">
-                <CircleCheck size={18} />
-                <span>
-                  {data.result.scope === "backup" &&
-                  typeof data.result.message === "string"
-                    ? data.result.message
-                    : data.result.scope === "runtime"
-                      ? data.result.healthy
-                        ? "内部运行检查通过，回执已保存。"
-                        : "内部运行检查完成，存在异常依赖。"
-                      : "系统检查已完成，回执已保存。"}
-                </span>
+              <div
+                className={data.status === "failed" ? "notice error" : "notice"}
+              >
+                {data.status === "failed" ? (
+                  <CircleX size={18} />
+                ) : data.status === "succeeded" ? (
+                  <CircleCheck size={18} />
+                ) : (
+                  <Activity size={18} />
+                )}
+                <span>{taskResultMessage(data)}</span>
               </div>
             )}
             {data.error_code && (
@@ -1642,6 +1642,7 @@ function ConnectionPage({
 }
 
 function TasksPage({ session }: { session: Session }) {
+  const taskLocation = useLocation();
   const [status, setStatus] = useState(""),
     [cursor, setCursor] = useState(""),
     [history, setHistory] = useState<string[]>([]),
@@ -1654,6 +1655,15 @@ function TasksPage({ session }: { session: Session }) {
   );
   usePanelReady("/tasks", Boolean(data));
   const visible = useModuleVisibility(() => setSelected(null));
+  useEffect(() => {
+    const id = new URLSearchParams(taskLocation.search).get("task");
+    if (
+      taskLocation.pathname === "/tasks" &&
+      id &&
+      /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)
+    )
+      setSelected(id);
+  }, [taskLocation.pathname, taskLocation.search]);
   const diagnostic = useDiagnostic(session, (id) => {
     if (visible.current) setSelected(id);
     setCursor("");

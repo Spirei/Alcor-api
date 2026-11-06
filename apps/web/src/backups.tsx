@@ -1,7 +1,7 @@
 import { requestResponse } from "./api-response.ts";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { BackupScheduleControls } from "./backup-schedule-controls";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { requestId as newRequestId } from "./request-id";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, base } from "./api";
@@ -9,6 +9,8 @@ import type { Session, Task } from "./api";
 import { useResource, useTaskInvalidation } from "./hooks";
 import { Dialog } from "./dialog";
 import { SelectMenu } from "./select-menu";
+import { OperationTaskCard, type OperationState } from "./operation-task-card";
+import { AccountOperationHistory } from "./account-operation-history";
 
 type Backup = {
   id: string;
@@ -78,71 +80,111 @@ function JobReceipt({
       onDone();
     }
   }, [resource.data, requestId, storageKey, onBusy, onDone]);
+  const status = resource.data?.status;
+  const state: OperationState =
+    resource.error || !status
+      ? "unknown"
+      : status === "succeeded"
+        ? "success"
+        : status === "failed"
+          ? "failed"
+          : status === "running"
+            ? "running"
+            : status === "queued" || status === "cancelled"
+              ? "idle"
+              : "unknown";
   return (
-    <section className="card padded backup-receipt" aria-label="任务回执">
-      {resource.data ? (
-        <>
-          <div className="backup-job-heading">
-            <h2>{names[resource.data.kind] || "任务"}</h2>
-            <span>{states[resource.data.status] || resource.data.status}</span>
+    <OperationTaskCard
+      title={
+        resource.data ? names[resource.data.kind] || "备份任务" : "备份任务"
+      }
+      source={
+        resource.data?.kind === "backup.restore" ? "备份文件" : "Alcor API"
+      }
+      target={
+        resource.data?.kind === "backup.restore"
+          ? "已确认的隔离目标"
+          : "加密备份"
+      }
+      steps={["受理请求", "执行任务", "保存结果", "核对回执"]}
+      state={state}
+      currentStep={
+        state === "success"
+          ? 3
+          : status === "running"
+            ? 1
+            : status === "queued"
+              ? 0
+              : undefined
+      }
+      statusLabel={
+        resource.error || !status ? "结果待核对" : states[status] || "待核对"
+      }
+      requestId={requestId}
+    >
+      <div className="backup-receipt">
+        {resource.data ? (
+          <>
+            {typeof resource.data.result?.message === "string" && (
+              <div
+                className={
+                  resource.data.status === "failed"
+                    ? "notice error"
+                    : "connection-result"
+                }
+                role="status"
+              >
+                {resource.data.result.message}
+              </div>
+            )}
+            {resource.data.error_code && !resource.data.result?.message && (
+              <div className="notice error" role="alert">
+                {resource.data.error_code}
+              </div>
+            )}
+            <details>
+              <summary>回执</summary>
+              <dl>
+                <dt>任务编号</dt>
+                <dd>{resource.data.id}</dd>
+                <dt>请求编号</dt>
+                <dd>{requestId}</dd>
+              </dl>
+            </details>
+          </>
+        ) : (
+          <div role="status">结果待核对</div>
+        )}
+        {resource.error && (
+          <div className="notice error" role="alert">
+            {resource.error}
           </div>
-          {typeof resource.data.result?.message === "string" && (
-            <div
-              className={
-                resource.data.status === "failed"
-                  ? "notice error"
-                  : "connection-result"
-              }
-              role="status"
+        )}
+        {!resource.data && (
+          <div className="backup-recovery">
+            <button
+              type="button"
+              className="text-button"
+              onClick={resource.reload}
             >
-              {resource.data.result.message}
-            </div>
-          )}
-          {resource.data.error_code && !resource.data.result?.message && (
-            <div className="notice error" role="alert">
-              {resource.data.error_code}
-            </div>
-          )}
-          <details>
-            <summary>回执</summary>
-            <dl>
-              <dt>任务编号</dt>
-              <dd>{resource.data.id}</dd>
-              <dt>请求编号</dt>
-              <dd>{requestId}</dd>
-            </dl>
-          </details>
-        </>
-      ) : (
-        <div role="status">结果待核对</div>
-      )}
-      {resource.error && (
-        <div className="notice error" role="alert">
-          {resource.error}
-        </div>
-      )}
-      {!resource.data && (
-        <div className="backup-recovery">
-          <button
-            type="button"
-            className="text-button"
-            onClick={resource.reload}
-          >
-            核对原请求
-          </button>
-          {retry && (
-            <button type="button" className="text-button" onClick={retry}>
-              重试原请求
+              核对原请求
             </button>
-          )}
-        </div>
-      )}
-    </section>
+            {retry && (
+              <button type="button" className="text-button" onClick={retry}>
+                重试原请求
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </OperationTaskCard>
   );
 }
 
 export function BackupsPage({ session }: { session: Session }) {
+  const navigate = useNavigate();
   const [workspaceSection, setWorkspaceSection] = useState("archives");
+  const [historyRevision, setHistoryRevision] = useState(0);
 
   const location = useLocation();
   const resource = useResource<{
@@ -249,9 +291,12 @@ export function BackupsPage({ session }: { session: Session }) {
     if (backup.download_available === false) return;
     setError("");
     try {
-      const response = await requestResponse(`${base}/backups/${backup.id}/download`, {
-        credentials: "same-origin",
-      });
+      const response = await requestResponse(
+        `${base}/backups/${backup.id}/download`,
+        {
+          credentials: "same-origin",
+        },
+      );
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         if (response.status === 401)
@@ -318,7 +363,10 @@ export function BackupsPage({ session }: { session: Session }) {
           requestId={requestId}
           storageKey={storageKey}
           onBusy={setActive}
-          onDone={resource.reload}
+          onDone={() => {
+            setHistoryRevision((value) => value + 1);
+            resource.reload();
+          }}
           retry={
             original.current
               ? () => {
@@ -329,6 +377,13 @@ export function BackupsPage({ session }: { session: Session }) {
         />
       )}
       <WorkspaceView active={workspaceSection === "archives"} label="备份归档">
+        <AccountOperationHistory
+          session={session}
+          kind="backup"
+          active={workspaceSection === "archives"}
+          refreshKey={historyRevision}
+          onOpenTask={(id) => navigate("/tasks?task=" + encodeURIComponent(id))}
+        />
         {resource.data && (
           <div className="access-list">
             {resource.data.items.length ? (

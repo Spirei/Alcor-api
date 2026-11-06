@@ -4,6 +4,8 @@ import { api, ApiError } from "./api";
 import type { Session } from "./api";
 import { useResource } from "./hooks";
 import { Dialog } from "./dialog";
+import { OperationTaskCard } from "./operation-task-card";
+import { AccountOperationHistory } from "./account-operation-history";
 
 type Client = {
   client_id: string;
@@ -471,47 +473,67 @@ export function AuthorizePage({
       </div>
       <Failure message={context.error || error} />
       {context.data && (
-        <section className="card padded access-form">
-          <h2>{context.data.name}</h2>
-          <div className="access-callback">{context.data.redirect_uri}</div>
-          <fieldset>
-            <legend>允许权限</legend>
-            {Object.entries(context.data.scopes).map(([scope, label]) => (
-              <label className="access-check" key={scope}>
-                <input
-                  type="checkbox"
-                  checked={scopes.includes(scope)}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setScopes((old) =>
-                      e.target.checked
-                        ? [...old, scope]
-                        : old.filter((s) => s !== scope),
-                    )
-                  }
-                />
-                {label}
-              </label>
-            ))}
-          </fieldset>
-          <div className="dialog-actions">
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() => void respond(false)}
-            >
-              拒绝
-            </button>
-            <button
-              className="button primary"
-              disabled={busy || !scopes.length}
-              onClick={() => void respond(true)}
-            >
-              {busy ? "处理中…" : "允许"}
-            </button>
+        <OperationTaskCard
+          title="API 连接授权"
+          source={context.data.name}
+          target="Alcor API"
+          steps={["发现服务", "账号授权", "核对范围", "返回 App"]}
+          state={error ? "unknown" : busy ? "running" : "confirm"}
+          currentStep={error ? undefined : 1}
+          statusLabel={
+            error ? "授权结果待核对" : busy ? "等待授权回执" : "等待本人授权"
+          }
+          requestId={requestId.current}
+        >
+          <div className="access-form" style={{ width: "100%" }}>
+            <details>
+              <summary>连接详情</summary>
+              <div className="access-callback">{context.data.redirect_uri}</div>
+            </details>
+            <fieldset>
+              <legend>允许权限</legend>
+              {Object.entries(context.data.scopes).map(([scope, label]) => (
+                <label className="access-check" key={scope}>
+                  <input
+                    type="checkbox"
+                    checked={scopes.includes(scope)}
+                    disabled={busy}
+                    onChange={(e) =>
+                      setScopes((old) =>
+                        e.target.checked
+                          ? [...old, scope]
+                          : old.filter((s) => s !== scope),
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+            <div className="dialog-actions">
+              <button
+                className="button secondary"
+                disabled={busy}
+                onClick={() => void respond(false)}
+              >
+                拒绝
+              </button>
+              <button
+                className="button primary"
+                disabled={busy || !scopes.length}
+                onClick={() => void respond(true)}
+              >
+                {busy ? "处理中…" : "允许"}
+              </button>
+            </div>
           </div>
-        </section>
+        </OperationTaskCard>
       )}
+      <AccountOperationHistory
+        session={session}
+        kind="api"
+        active={!!context.data && !context.error}
+      />
     </div>
   );
 }

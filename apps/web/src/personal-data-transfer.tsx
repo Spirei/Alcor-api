@@ -1,3 +1,6 @@
+import { personalTransferTask } from "./personal-transfer-task";
+import { OperationTaskCard } from "./operation-task-card";
+import { AccountOperationHistory } from "./account-operation-history";
 import { requestResponse } from "./api-response.ts";
 import { PersonalDataAdministration, type AdministrationMaps } from "./personal-data-administration";
 import { PasswordField } from "./password-fields";
@@ -26,10 +29,11 @@ function Panel({session,active}:{session:Session;active:boolean}){
  const [text,setText]=useState(''),[payload,setPayload]=useState<Payload|null>(null),[filename,setFilename]=useState(''),[maps,setMaps]=useState<Maps>(blank);
  const [plan,setPlan]=useState<Plan|null>(null),[receipt,setReceipt]=useState<Receipt|null>(null),[pending,setPending]=useState<string|null>(null),[phase,setPhase]=useState<'preview'|'submit'>('preview');
  const [accounts,setAccounts]=useState<Account[]>([]),[groups,setGroups]=useState<{id:string;name:string}[]>([]),[records,setRecords]=useState<Listing|null>(null),[mappingPage,setMappingPage]=useState(0),[fundPage,setFundPage]=useState(0),[orderPage,setOrderPage]=useState(0),[blockPage,setBlockPage]=useState(0);
+ const [operation,setOperation]=useState<string|null>(null);
  const [password,setPassword]=useState(''),[code,setCode]=useState('');
  const [exported,setExported]=useState<{blob:Blob;manifest:Payload['manifest']}|null>(null),[ack,setAck]=useState(false),[busy,setBusy]=useState(false),[locked,setLocked]=useState(false),[message,setMessage]=useState('');
  const epoch=useRef(0),request=useRef<AbortController|null>(null),input=useRef<HTMLInputElement>(null),live=useRef(active);live.current=active&&!locked;
- function clear(){setPassword('');setCode('');epoch.current++;request.current?.abort();request.current=null;setText('');setPayload(null);setFilename('');setMaps(blank());setPlan(null);setReceipt(null);setAccounts([]);setGroups([]);setRecords(null);setExported(null);setAck(false);setBusy(false);setMessage('');if(input.current)input.current.value='';}
+ function clear(){setOperation(null);setPassword('');setCode('');epoch.current++;request.current?.abort();request.current=null;setText('');setPayload(null);setFilename('');setMaps(blank());setPlan(null);setReceipt(null);setAccounts([]);setGroups([]);setRecords(null);setExported(null);setAck(false);setBusy(false);setMessage('');if(input.current)input.current.value='';}
  useEffect(()=>{try{const submitted=sessionStorage.getItem(storage+'.submit'),preview=sessionStorage.getItem(storage+'.preview');const id=submitted||preview;if(id&&/^[0-9a-f-]{36}$/i.test(id)){setPending(id);setPhase(submitted?'submit':'preview');}}catch{/* Only operation UUIDs are retained. */}return()=>{epoch.current++;request.current?.abort();};},[storage]);
  useEffect(()=>{if(!active)clear();},[active]);
  useEffect(()=>{const hidden=()=>{if(document.hidden)clear();};document.addEventListener('visibilitychange',hidden);return()=>document.removeEventListener('visibilitychange',hidden);},[]);
@@ -37,11 +41,11 @@ function Panel({session,active}:{session:Session;active:boolean}){
  function fail(reason:unknown){if(reason instanceof ApiError&&([401,403].includes(reason.status)||reason.code==='session_changed')){clear();setLocked(true);}setMessage(reason instanceof Error?reason.message:'个人数据操作失败');}
  function remember(id:string|null,stage=phase){if(id){sessionStorage.setItem(storage+'.'+stage,id);setPending(id);setPhase(stage);}else{sessionStorage.removeItem(storage+'.preview');sessionStorage.removeItem(storage+'.submit');setPending(null);}}
  function change(next:Maps){setPassword('');setCode('');setMaps(next);setBlockPage(0);setOrderPage(0);setPlan(null);setReceipt(null);setAck(false);}
- async function choose(file:File|undefined){if(!file||pending||busy)return;const generation=++epoch.current;setBusy(true);setMessage('');setPlan(null);setReceipt(null);setAck(false);setText('');setPayload(null);setFilename('');setMaps(blank());try{if(file.size>10*1024*1024)throw new Error('JSON 文件超过 10 MiB');const raw=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(await file.arrayBuffer());const parsed:Payload=JSON.parse(raw);if(parsed.format!=='fire-site-backup'||![1,2].includes(parsed.version)||!parsed.data||typeof parsed.data!=='object'||Array.isArray(parsed.data))throw new Error('不是受支持的个人备份 JSON');for(const key of ['records','watchGroups','fundTransactions','tradeOrders']){const entries=parsed.data[key];if(Array.isArray(entries))for(const row of entries){if(!row||typeof row!=='object')throw new Error('原记录格式无效');for(const name of ['id','record_id']){const id=row[name];if(['__proto__','prototype','constructor'].includes(String(id))||typeof id==='number'&&!Number.isSafeInteger(id))throw new Error('原记录 ID 无法安全映射，请核对原文件');}}}if(current(generation)){setText(raw);setPayload(parsed);setFilename(file.name);setMappingPage(0);setFundPage(0);setOrderPage(0);setBlockPage(0);}}catch(reason){if(current(generation))fail(reason);}finally{if(input.current)input.current.value='';if(current(generation))setBusy(false);}}
+ async function choose(file:File|undefined){if(!file||pending||busy)return;setOperation('file');const generation=++epoch.current;setBusy(true);setMessage('');setPlan(null);setReceipt(null);setAck(false);setText('');setPayload(null);setFilename('');setMaps(blank());try{if(file.size>10*1024*1024)throw new Error('JSON 文件超过 10 MiB');const raw=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(await file.arrayBuffer());const parsed:Payload=JSON.parse(raw);if(parsed.format!=='fire-site-backup'||![1,2].includes(parsed.version)||!parsed.data||typeof parsed.data!=='object'||Array.isArray(parsed.data))throw new Error('不是受支持的个人备份 JSON');for(const key of ['records','watchGroups','fundTransactions','tradeOrders']){const entries=parsed.data[key];if(Array.isArray(entries))for(const row of entries){if(!row||typeof row!=='object')throw new Error('原记录格式无效');for(const name of ['id','record_id']){const id=row[name];if(['__proto__','prototype','constructor'].includes(String(id))||typeof id==='number'&&!Number.isSafeInteger(id))throw new Error('原记录 ID 无法安全映射，请核对原文件');}}}if(current(generation)){setText(raw);setPayload(parsed);setFilename(file.name);setMappingPage(0);setFundPage(0);setOrderPage(0);setBlockPage(0);}}catch(reason){if(current(generation))fail(reason);}finally{if(input.current)input.current.value='';if(current(generation))setBusy(false);}}
  async function targets(page=1){if(!live.current||busy||document.hidden)return;const generation=epoch.current;setBusy(true);setMessage('');try{if(page===1){const [a,g,r]=await Promise.all([api<{accounts:Account[]}>('/broker-accounts',{},session.csrf),api<{groups:{id:string;name:string}[]}>('/watch-groups',{},session.csrf),api<Listing>('/portfolio/records?page=1&pageSize=100',{},session.csrf)]);if(current(generation)){setAccounts(a.accounts);setGroups(g.groups);setRecords(r);}}else{if(!records)return;const r=await api<Listing>('/portfolio/records?page='+page+'&pageSize=100&collectionRevision='+records.collectionRevision,{},session.csrf);if(current(generation))setRecords(r);}}catch(reason){if(current(generation))fail(reason);}finally{if(current(generation))setBusy(false);}}
- function accept(value:Plan|Receipt,stage:'preview'|'submit'){if(value.state==='previewed'){if(stage==='preview'){setPlan(value as Plan);remember(null);setAck(false);setMessage('预览已保存，尚未导入');}else setMessage('提交结果尚未确认，只能继续核对或关闭原请求');return;}if(['completed','closed'].includes(value.state)){setReceipt(value);setPlan(null);setAck(false);remember(null);setMessage(value.state==='closed'?'原请求已关闭，未执行导入':'个人数据导入已完成');}else setMessage('结果未知，仅核对原 UUID');}
+ function accept(value:Plan|Receipt,stage:'preview'|'submit'){if(value.state==='previewed'){if(stage==='preview'){setPlan(value as Plan);remember(null);setAck(false);setMessage('预览已保存，尚未导入');}else setMessage('提交结果尚未确认，只能继续核对或关闭原请求');return;}if(['completed','closed'].includes(value.state)){setReceipt(value);setPlan(null);setAck(false);if(value.state==='completed'&&(value as Receipt).executed!==true){setMessage('导入执行结果待核对，只查询原请求回执');return;}remember(null);setMessage(value.state==='closed'?'原请求已关闭，未执行导入':'个人数据导入已完成');}else setMessage('结果未知，仅核对原 UUID');}
  async function run(action:'preview'|'submit'|'query'|'close'){
-  if(!live.current||busy||document.hidden)return;const generation=epoch.current,controller=new AbortController();request.current=controller;setBusy(true);setMessage('');
+  if(!live.current||busy||document.hidden)return;setOperation(action);const generation=epoch.current,controller=new AbortController();request.current=controller;setBusy(true);setMessage('');
   try{
    if(action==='query'||action==='close'){if(!pending)return;const value=await api<Plan|Receipt>(root+'/operations/'+pending+(action==='close'?'/close':''),action==='close'?{method:'POST',body:'{}',signal:controller.signal}:{signal:controller.signal},session.csrf);if(current(generation))accept(value,phase);return;}
    if(pending)return;
@@ -50,7 +54,7 @@ function Panel({session,active}:{session:Session;active:boolean}){
   }catch(reason){if(current(generation)){if(action==='preview'&&reason instanceof ApiError&&[400,413,422,429].includes(reason.status))remember(null);fail(reason);}}
   finally{if(current(generation)){setBusy(false);request.current=null;}}
  }
- async function exportFile(){if(!live.current||busy||document.hidden)return;const generation=epoch.current,controller=new AbortController();request.current=controller;setBusy(true);setMessage('');setExported(null);try{const response=await requestResponse('/api'+root+'/export',{credentials:'same-origin',cache:'no-store',headers:{'X-CSRF-Token':session.csrf},signal:controller.signal});if(apiSessionSnapshot().csrf!==session.csrf)throw new ApiError(409,'登录身份已变化','','session_changed');if(!response.ok)throw new ApiError(response.status,'个人 JSON 导出不可用');const blob=await response.blob();if(blob.size>10*1024*1024)throw new Error('导出超过个人 JSON 安全预算');const metadata:Payload=JSON.parse(await blob.text());if(current(generation))setExported({blob,manifest:metadata.manifest});}catch(reason){if(current(generation))fail(reason);}finally{if(current(generation)){setBusy(false);request.current=null;}}}
+ async function exportFile(){if(!live.current||busy||document.hidden)return;setOperation('export');const generation=epoch.current,controller=new AbortController();request.current=controller;setBusy(true);setMessage('');setExported(null);try{const response=await requestResponse('/api'+root+'/export',{credentials:'same-origin',cache:'no-store',headers:{'X-CSRF-Token':session.csrf},signal:controller.signal});if(apiSessionSnapshot().csrf!==session.csrf)throw new ApiError(409,'登录身份已变化','','session_changed');if(!response.ok)throw new ApiError(response.status,'个人 JSON 导出不可用');const blob=await response.blob();if(blob.size>10*1024*1024)throw new Error('导出超过个人 JSON 安全预算');const metadata:Payload=JSON.parse(await blob.text());if(current(generation))setExported({blob,manifest:metadata.manifest});}catch(reason){if(current(generation))fail(reason);}finally{if(current(generation)){setBusy(false);request.current=null;}}}
  function download(blob:Blob,name:string){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  const sourceRows=(Array.isArray(payload?.data.records)?payload.data.records:[]) as Row[];
  const orders=(Array.isArray(payload?.data.tradeOrders)?payload.data.tradeOrders:[]) as Row[];
@@ -60,12 +64,58 @@ function Panel({session,active}:{session:Session;active:boolean}){
  const oldOwners=[...new Set(Object.values(payload?.data??{}).flatMap(value=>Array.isArray(value)?value.flatMap(row=>row&&typeof row==='object'&&row.user_id!=null?[String(row.user_id)]:[]):[]))];
  const disabled=busy||locked||!!pending||!active;
  function accountSelect(currentMap:Maps['accounts'][string]|undefined,onChange:(account:Account|undefined)=>void){return <select disabled={disabled} value={currentMap?.accountId??''} onChange={event=>onChange(accounts.find(account=>account.id===event.target.value))}><option value="">未映射账户</option>{accounts.filter(account=>account.account_kind==='real'||account.account_kind==='simulated').map(account=><option key={account.id} value={account.id}>{account.name} · {account.account_kind==='real'?'真实':'模拟'} · {(account.currencies??[]).join('/')} · {account.id}</option>)}</select>;}
- return <section className="panel"><h2>个人 JSON 数据迁移</h2><p>此文件仅包含列出的本人数据域，不是平台全库恢复或秘密备份。</p>
+  const confirmed = receipt?.state === "completed" && receipt.executed === true;
+  const exporting = operation === "export";
+  const task = personalTransferTask({
+    exporting,
+    busy,
+    pending: !!pending,
+    operation,
+    exported: !!exported,
+    hasFile: !!filename,
+    fileValid: !!payload,
+    hasMessage: !!message,
+    plan,
+    receipt,
+  });
+ return <><section className="panel"><h2>个人 JSON 数据迁移</h2><p>此文件仅包含列出的本人数据域，不是平台全库恢复或秘密备份。</p>
   <div className="module-actions"><button disabled={busy||locked||!active} onClick={()=>void exportFile()}>准备本人 JSON 导出</button>{exported&&<button onClick={()=>download(exported.blob,'personal-data.json')}>下载 JSON</button>}</div>
   {exported&&<><p role="status">{exported.manifest?.portable===true?'此文件可供个人迁移预览核对':'此导出不构成完整可移植备份'}</p>{exported.manifest?.blocked?.map((block,index)=><p key={index}>{block.domain} · {block.reason}</p>)}</>}
   <label>选择原个人 JSON<input ref={input} disabled={disabled} type="file" accept="application/json,.json" onChange={event=>void choose(event.target.files?.[0])}/></label>{filename&&<p>{filename}</p>}
   {pending&&<div className="module-actions"><span>原请求 {pending}</span><button disabled={busy||locked} onClick={()=>void run('query')}>核对原请求</button><button disabled={busy||locked} onClick={()=>void run('close')}>关闭原请求</button></div>}
   {message&&<p role="status">{message}</p>}
+{!locked &&
+  (operation || filename || pending || plan || receipt || exported) && (
+    <OperationTaskCard
+      title={exporting ? "本人 JSON 导出" : "首次导入"}
+      source={exporting ? "Alcor API" : filename || "迁移文件"}
+      target={exporting ? "JSON 文件" : "App 对应 API 账号"}
+      steps={
+        exporting
+          ? ["核对范围", "生成 JSON", "读取文件", "文件就绪"]
+          : ["读取文件", "核对差异", "确认导入", "核对回执"]
+      }
+      state={task.state}
+      currentStep={task.currentStep}
+      requestId={
+        exporting
+          ? undefined
+          : pending || receipt?.requestId || plan?.requestId
+      }
+      statusLabel={task.statusLabel}
+      message={message || undefined}
+      events={[
+        ...(!exporting && filename ? [{ label: "原文件已读取" }] : []),
+        ...(!exporting && plan
+          ? [{ label: "导入预览已保存，尚未入账" }]
+          : []),
+        ...(!exporting && confirmed
+          ? [{ label: "服务端已确认导入回执" }]
+          : []),
+      ]}
+    />
+  )}
+
   {payload&&<><dl className="portfolio-proof">{Object.entries(payload.data).map(([key,value])=><div key={key}><dt>{domains[key]??key}</dt><dd>{Array.isArray(value)?value.length:'对象'}</dd></div>)}</dl>
    <label>明确导入模式<select disabled={disabled} value={maps.mode??'legacy-portable'} onChange={event=>change({...maps,mode:event.target.value as Maps['mode']})}><option value="legacy-portable">旧版可移植模式</option><option value="mapped-domain-import">按已核对的域映射追加／合并</option></select></label>{maps.mode==='mapped-domain-import'&&<p>仅按明确的记录、账户、类型与原币映射进入当前权威，不覆盖旧 JSON 全域或恢复整库。</p>}
    <label>明确原所有者 ID<input disabled={disabled} value={maps.sourceOwnerId} list="personal-source-owners" onChange={event=>change({...maps,sourceOwnerId:event.target.value})}/><datalist id="personal-source-owners">{oldOwners.map(id=><option key={id} value={id}/>)}</datalist></label>
@@ -79,5 +129,5 @@ function Panel({session,active}:{session:Session;active:boolean}){
   </>}
   {plan&&<section><h3>导入预览</h3><p>有效至 {plan.expiresAt} · {plan.representation==='uploaded_utf8_json'?'保留原 UTF-8 文件':'规范化 JSON 快照'}</p><details><summary>服务端确认的映射</summary><p>{plan.mappings.mode??'legacy-portable'} · 原所有者 {plan.mappings.sourceOwnerId||'未登记'}</p>{Object.entries(plan.mappings.accounts??{}).slice(mappingPage*50,mappingPage*50+50).map(([old,target])=><p key={old}>原记录 {old} → {target.accountId} · {target.accountKind==='real'?'真实':'模拟'}</p>)}{Object.entries(plan.mappings.records??{}).slice(mappingPage*50,mappingPage*50+50).map(([old,target])=><p key={old}>原记录 {old} → 当前记录 {target}</p>)}{Object.entries(plan.mappings.groups??{}).map(([old,target])=><p key={old}>原分组 {old} → 当前分组 {target}</p>)}<button disabled={mappingPage===0} onClick={()=>setMappingPage(value=>value-1)}>上一页记录映射</button><button disabled={(mappingPage+1)*50>=Math.max(Object.keys(plan.mappings.accounts??{}).length,Object.keys(plan.mappings.records??{}).length)} onClick={()=>setMappingPage(value=>value+1)}>下一页记录映射</button></details><dl className="portfolio-proof">{Object.entries(plan.counts).map(([domain,count])=><div key={domain}><dt>{domains[domain]??domain}</dt><dd>{count}</dd></div>)}</dl>{plan.blocked.slice(blockPage*100,blockPage*100+100).map((block,index)=><p role="status" key={index}>{block.domain} · {block.id??''} · {block.reason}</p>)}{plan.blocked.length>100&&<div><span>阻断项 {blockPage*100+1}–{Math.min((blockPage+1)*100,plan.blocked.length)} / {plan.blocked.length}</span><button disabled={blockPage===0} onClick={()=>setBlockPage(value=>value-1)}>上一页阻断项</button><button disabled={(blockPage+1)*100>=plan.blocked.length} onClick={()=>setBlockPage(value=>value+1)}>下一页阻断项</button></div>}{plan.fundPreviews&&<details><summary>资金变化预览（{plan.fundPreviews.length}）</summary>{plan.fundPreviews.slice(fundPage*50,fundPage*50+50).map((fund,index)=><fieldset key={index}><legend>资金变化 {fund.command.cash.accountKind==='real'?'真实':'模拟'} · {fund.command.cash.accountId} · {fund.command.cash.currency}</legend><p>{fund.viewBasis==='sequential_rollback_only_authority_plan'?'服务端逐笔顺序预览，预览改动已回滚':'逐项导入前独立预览'}</p><p>{fund.command.cash.action} · {fund.command.cash.amount} · {fund.command.cash.occurredAt}</p><dl className="portfolio-proof"><div><dt>核实前余额</dt><dd>{fund.view.balanceBefore??'未知'}</dd></div><div><dt>差额</dt><dd>{fund.view.delta??'未知'}</dd></div><div><dt>核实后余额</dt><dd>{fund.view.balanceAfter??'未知'}</dd></div><div><dt>登记后小计</dt><dd>{fund.view.registeredBalanceAfter??'未知'}</dd></div></dl></fieldset>)}<p>当前第 {fundPage+1} 页</p><button disabled={fundPage===0} onClick={()=>setFundPage(value=>value-1)}>上一页资金预览</button><button disabled={(fundPage+1)*50>=plan.fundPreviews.length} onClick={()=>setFundPage(value=>value+1)}>下一页资金预览</button></details>}{plan.orderDeclarations&&<details><summary>保留为不可执行历史的委托声明（{plan.orderDeclarations.length}）</summary><p>不执行、不向券商发送指令、不预留现金。</p>{plan.orderDeclarations.slice(orderPage*100,orderPage*100+100).map(row=><p key={row.originalId}>{row.originalId} · 原状态 {row.originalStatus} · 本人导入的非执行声明</p>)}<button disabled={orderPage===0} onClick={()=>setOrderPage(value=>value-1)}>上一页历史声明</button><button disabled={(orderPage+1)*100>=plan.orderDeclarations.length} onClick={()=>setOrderPage(value=>value+1)}>下一页历史声明</button></details>}{plan.orderPlan&&<details><summary>逐笔成交预览（{plan.orderPlan.rows.length}）</summary><div className="portfolio-table"><table><thead><tr><th>行／证券</th><th>数量／价格</th><th>费用／原币</th><th>时间／状态</th></tr></thead><tbody>{plan.orderPlan.rows.slice(orderPage*100,orderPage*100+100).map(row=><tr key={row.rowIndex}><td>{row.rowIndex} · {row.market}:{row.code}<br/>{row.recordId??'记录未知'} · {row.accountKind??'类型未知'}</td><td>{row.quantity??'未知'} / {row.price??'未知'}</td><td>{row.fees??'未知'} · {row.currency??'币种未知'}</td><td>{row.tradedAt??'时间未知'} · {row.state} · {row.reason??''}</td></tr>)}</tbody></table></div><button disabled={orderPage===0} onClick={()=>setOrderPage(value=>value-1)}>上一页成交</button><button disabled={(orderPage+1)*100>=plan.orderPlan.rows.length} onClick={()=>setOrderPage(value=>value+1)}>下一页成交</button></details>}{plan.administration&&<details><summary>已核对公开内容</summary><p>人物 {plan.administration.celebs.map(person=>person.name+' · '+person.id).join('；')||'无'}</p><p>公开站点字段 {Object.keys(plan.administration.sitePatch??{}).join(' · ')||'无'}</p></details>}<a href={'/api'+root+'/originals/'+plan.sourceId} download rel="noreferrer">下载保留的 JSON 原件</a>{plan.administration?.sitePatch&&<div className="form-grid"><label>当前管理员密码<PasswordField id="personal-transfer-password" value={password} disabled={disabled} autoComplete="current-password" onChange={event=>setPassword(event.target.value)}/></label><label>验证码或备用码<input disabled={disabled} value={code} autoComplete="one-time-code" onChange={event=>setCode(event.target.value)}/></label></div>}<label><input disabled={disabled||!plan.confirmSupported||plan.blocked.length>0} type="checkbox" checked={ack} onChange={event=>setAck(event.target.checked)}/>确认以上来源、映射和可执行范围</label><button disabled={disabled||!!plan.administration?.sitePatch&&!password||!ack||!plan.confirmSupported||plan.blocked.length>0||Date.parse(plan.expiresAt)<=Date.now()} onClick={()=>void run('submit')}>确认个人数据导入</button></section>}
   {receipt&&<section><h3>原请求回执</h3><p>{receipt.requestId} · {receipt.state}</p>{receipt.beforeImageSha256&&<p>导入前态摘要 {receipt.beforeImageSha256}</p>}{receipt.sourceId&&<a href={'/api'+root+'/originals/'+receipt.sourceId} download rel="noreferrer">下载保留的 JSON 原件</a>}</section>}
- </section>;
+ </section><AccountOperationHistory session={session} kind="import" active={active&&!locked} refreshKey={[receipt?.requestId,receipt?.state,plan?.previewId].join(':')}/></>;
 }

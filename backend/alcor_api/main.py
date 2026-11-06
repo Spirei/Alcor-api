@@ -351,6 +351,8 @@ def create_app(settings: Settings | None = None):
     mount_account_devices(app, db, rate_limit)
     from .account_signal_api import mount_account_signals
     mount_account_signals(app, settings, db)
+    from .operation_history_api import mount_operation_history
+    mount_operation_history(app, db)
     from .fire_api import mount_fire_planning
     mount_fire_planning(app, settings, db)
     from .api_documents import mount_api_documents

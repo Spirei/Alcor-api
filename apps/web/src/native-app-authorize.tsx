@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { authorizationCallback } from "./native-app-callback";
 import type { Session } from "./api";
+import { OperationTaskCard } from "./operation-task-card";
+import { AccountOperationHistory } from "./account-operation-history";
 const labels: Record<string, string> = {
   "portfolio.read": "读取投资记录",
   "portfolio.write": "修改投资记录",
@@ -153,33 +155,48 @@ export function NativeAppAuthorize({
       <div className="page-heading">
         <h1>连接 Alcor iOS</h1>
       </div>
-      <p>{session.user.username}</p>
-      <ul>
-        {auth.scopes.map((scope) => (
-          <li key={scope}>{labels[scope]}</li>
-        ))}
-      </ul>
-      {error && (
-        <div className="notice error" role="alert">
-          {error}
+      <OperationTaskCard
+        title="App 连接 API"
+        source="Alcor iOS"
+        target="Alcor API"
+        steps={["核对请求", "本人授权", "回调 App", "App 核对"]}
+        state={error ? "unknown" : busy ? "running" : "confirm"}
+        currentStep={error ? undefined : 1}
+        statusLabel={
+          error ? "授权结果待核对" : busy ? "等待授权回执" : "等待本人授权"
+        }
+      >
+        <div style={{ width: "100%" }}>
+          <p>{session.user.username}</p>
+          <ul>
+            {auth.scopes.map((scope) => (
+              <li key={scope}>{labels[scope]}</li>
+            ))}
+          </ul>
+          {error && (
+            <div className="notice error" role="alert">
+              {error}
+            </div>
+          )}
+          <div className="dialog-actions">
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() => void decide("deny")}
+            >
+              拒绝
+            </button>
+            <button
+              className="button primary"
+              disabled={busy}
+              onClick={() => void decide("allow")}
+            >
+              {busy ? "处理中…" : "允许连接"}
+            </button>
+          </div>
         </div>
-      )}
-      <div className="dialog-actions">
-        <button
-          className="button secondary"
-          disabled={busy}
-          onClick={() => void decide("deny")}
-        >
-          拒绝
-        </button>
-        <button
-          className="button primary"
-          disabled={busy}
-          onClick={() => void decide("allow")}
-        >
-          {busy ? "处理中…" : "允许连接"}
-        </button>
-      </div>
+      </OperationTaskCard>
+      <AccountOperationHistory session={session} kind="api" />
     </div>
   );
 }

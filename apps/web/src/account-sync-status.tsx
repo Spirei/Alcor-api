@@ -14,6 +14,8 @@ import { Dialog } from "./dialog";
 import { WorkspaceTabs } from "./workspace-ui";
 import { LoadingPlaceholder } from "./loading-placeholder";
 import "./sync-status.css";
+import { OperationTaskCard } from "./operation-task-card";
+import { AccountOperationHistory } from "./account-operation-history";
 type Domain = {
   commitSignalComplete: boolean;
   state: "observed" | "partial" | "unavailable" | "forbidden";
@@ -215,6 +217,7 @@ function Panel({
     [errors, setErrors] = useState<Record<string, string>>({}),
     [busy, setBusy] = useState(false),
     [epochChanged, setEpochChanged] = useState(false);
+  const [taskStep, setTaskStep] = useState<number | undefined>(undefined);
   const [diagnostics, setDiagnostics] = useState(false),
     [diagnosticSection, setDiagnosticSection] = useState("connection"),
     [serviceAddress, setServiceAddress] = useState("");
@@ -233,6 +236,7 @@ function Panel({
     setBusy(false);
     setEpochChanged(false);
     setDiagnostics(false);
+    setTaskStep(undefined);
   }
   useEffect(() => {
     alive.current = true;
@@ -287,6 +291,7 @@ function Panel({
     setFees(null);
     setErrors({});
     setBusy(true);
+    setTaskStep(0);
     setEpochChanged(false);
     try {
       const signal = await api<Signals>("/account/changes", {
@@ -301,6 +306,7 @@ function Panel({
       sourceEpoch.current = signal.epoch;
       setEpochChanged(previous !== null && previous !== signal.epoch);
       setSignals(signal);
+      setTaskStep(1);
       const results = await Promise.allSettled([
         api<DeviceState>("/account/device-state", {
           signal: c.signal,
@@ -347,6 +353,7 @@ function Panel({
             ? feeFields.reason.message
             : "费率字段不可用";
       setErrors(failure);
+      setTaskStep(3);
     } catch (failure) {
       if (!c.signal.aborted && run === epoch.current) {
         clear();
@@ -400,6 +407,55 @@ function Panel({
           </button>
         </div>
       </div>
+      {active && (
+        <OperationTaskCard
+          title="同步状态核对"
+          source="当前账号"
+          target="Alcor API"
+          steps={["读取变更", "核对账号", "读取设备", "核对范围"]}
+          state={
+            busy
+              ? "running"
+              : signals
+                ? Object.keys(errors).length
+                  ? "partial"
+                  : "success"
+                : Object.keys(errors).length
+                  ? "unknown"
+                  : "idle"
+          }
+          currentStep={taskStep}
+          statusLabel={
+            busy
+              ? "核对中"
+              : signals
+                ? "当前服务已核对"
+                : Object.keys(errors).length
+                  ? "结果待核对"
+                  : "等待读取"
+          }
+          message={
+            signals
+              ? `当前服务观察时间 ${sourceTime(signals.observedAt)}`
+              : undefined
+          }
+          events={
+            signals
+              ? [
+                  { label: "当前账号与服务变更已读取", at: signals.observedAt },
+                  ...(device
+                    ? [
+                        {
+                          label: "当前设备授权状态已读取",
+                          at: device.observedAt,
+                        },
+                      ]
+                    : []),
+                ]
+              : []
+          }
+        />
+      )}
       <p className="sync-scope-note">
         仅监测当前服务；其他服务的数据不会自动合并。
       </p>
@@ -460,6 +516,12 @@ function Panel({
           ))}
         </div>
       )}
+      <AccountOperationHistory
+        session={session}
+        kind="sync"
+        active={active && !!signals}
+        refreshKey={signals?.epoch}
+      />
       <div className="sync-business-groups">
         <section aria-label="账户管理" className="sync-business-group">
           <h2>账户管理</h2>
