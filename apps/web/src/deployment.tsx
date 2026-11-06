@@ -34,6 +34,7 @@ import {
   buildReceiptMessage,
   canRestartBuild,
   receiptCloseTarget,
+  deploymentRuntimeState,
   updateNeedsObservation,
   verificationOnly,
   deploymentPollDelay,
@@ -361,7 +362,7 @@ export function DeploymentSettings({
   const verifyOnly = verificationOnly(data?.jobs);
   const sourceCurrent =
     !!data?.source && data.release?.revision === data.source.sha;
-  const runtimeCurrent = !!data?.matches_release;
+  const runtime = deploymentRuntimeState(data);
   const pollDelay = deploymentPollDelay(
     data,
     state.refreshing,
@@ -520,7 +521,7 @@ export function DeploymentSettings({
                 </div>
                 <div>
                   <dt>Watchtower</dt>
-                  <dd>{data?.runner?.online ? "已连接" : "未连接"}</dd>
+                  <dd>{data?.runner?.online ? "端口可达" : "端口未连通"}</dd>
                 </div>
               </dl>
               {data?.receipts.map((r) => {
@@ -570,7 +571,7 @@ export function DeploymentSettings({
             <h2 id="flow-title">发布流程</h2>
             <NavLink className="deploy-runtime" to="/settings">
               <i
-                className={`deploy-dot ${data?.running_revision ? "good" : "neutral"}`}
+                className={`deploy-dot ${data?.running_revision && runtime.ready ? "good" : runtime.waiting ? "pending" : "neutral"}`}
               />
               线上 {data?.running_revision?.slice(0, 7) || "待核对"}
             </NavLink>
@@ -649,20 +650,22 @@ export function DeploymentSettings({
               }
             >
               <i
-                className={`deploy-dot ${runtimeCurrent || (data?.release && data?.runner?.online) ? "good" : "neutral"}`}
+                className={`deploy-dot ${runtime.current ? "good" : runtime.waiting ? "pending" : "neutral"}`}
               />
               <IconServerCog />
-              {pending.current
-                ? "核对更新回执"
-                : runtimeCurrent
-                  ? sourceCurrent
-                    ? "容器已是最新"
-                    : "等待新镜像"
-                  : !data?.runner?.online
-                    ? "Watchtower 未连接"
-                    : data?.release
-                      ? "通知更新容器"
-                      : "暂无镜像"}
+              {runtime.waiting
+                ? "等待服务就绪"
+                : pending.current
+                  ? "核对更新回执"
+                  : runtime.current
+                    ? sourceCurrent
+                      ? "容器已是最新"
+                      : "等待新镜像"
+                    : !data?.runner?.online
+                      ? "Watchtower 端口未连通"
+                      : data?.release
+                        ? "通知更新容器"
+                        : "暂无镜像"}
             </button>
           </div>
           {data?.source_error && (

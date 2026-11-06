@@ -60,6 +60,7 @@ export type Deployment = {
   running_version: string;
   running_image: string | null;
   running_revision: string | null;
+  runtime_ready: boolean;
   matches_release: boolean;
   release: Release | null;
   release_error: string | null;
@@ -77,6 +78,22 @@ export type Deployment = {
   runner: { online: boolean; observed_at: string } | null;
   receipts: Receipt[];
 };
+export function deploymentRuntimeState(
+  data: Pick<
+    Deployment,
+    "running_revision" | "runtime_ready" | "matches_release" | "release"
+  > | null,
+) {
+  const ready = data?.runtime_ready === true;
+  return {
+    ready,
+    current: ready && data?.matches_release === true,
+    waiting:
+      !!data?.running_revision &&
+      data.running_revision === data.release?.revision &&
+      !ready,
+  };
+}
 export function receiptCloseTarget(receipt: Receipt): Release | null {
   if (
     !["queued", "running", "unknown"].includes(receipt.status) ||
@@ -142,10 +159,13 @@ export function updateNeedsObservation(
 }
 
 export function deploymentPollDelay(
-  data: Pick<
-    Deployment,
-    "build" | "source" | "check" | "release" | "build_requests" | "receipts"
-  > | null,
+  data:
+    | (Pick<
+        Deployment,
+        "build" | "source" | "check" | "release" | "build_requests" | "receipts"
+      > &
+        Partial<Pick<Deployment, "running_revision" | "runtime_ready">>)
+    | null,
   refreshing: boolean,
   failed: boolean,
   watchingUpdate: boolean,
@@ -165,6 +185,9 @@ export function deploymentPollDelay(
     age < 15 * 60000;
   const active =
     watchingUpdate ||
+    (data.runtime_ready === false &&
+      !!data.running_revision &&
+      data.running_revision === data.release?.revision) ||
     data.receipts.some((r) => updateNeedsObservation(r, now)) ||
     (data.build && data.build.status !== "completed") ||
     (data.check && data.check.status !== "completed") ||

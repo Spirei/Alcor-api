@@ -81,6 +81,15 @@ def runtime_matches(settings, approved, *, version, schema):
                 and approved["image"].split("@")[0] == settings.deployment_image)
 
 
+async def runtime_ready(conn, *, version):
+    """Call only on a connection that has verified the PG identity and migrations."""
+    row = await (await conn.execute(
+        "SELECT EXISTS(SELECT 1 FROM worker_heartbeats WHERE version=%s "
+        "AND observed_at>clock_timestamp()-interval '30 seconds') AS healthy", (version,),
+    )).fetchone()
+    return bool(row["healthy"])
+
+
 async def dispatch(db, settings, record_id):
     """Commit uncertainty before the one network action, so replay can only observe."""
     async with db.connection() as conn, conn.transaction():
@@ -124,11 +133,7 @@ async def reconcile(db, settings, *, version, schema):
         return []
     async with db.connection() as conn, conn.transaction():
         await conn.execute(LOCK)
-        ready = await (await conn.execute(
-            "SELECT EXISTS(SELECT 1 FROM worker_heartbeats WHERE version=%s "
-            "AND observed_at>clock_timestamp()-interval '30 seconds') AS healthy", (version,),
-        )).fetchone()
-        if not ready["healthy"]:
+        if not await runtime_ready(conn, version=version):
             return []
         rows = await (await conn.execute(
             "SELECT * FROM deployment_requests WHERE status IN ('queued','running','unknown') "

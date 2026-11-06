@@ -148,8 +148,10 @@ async def status(request: Request, who: Admin):
         active = await (await conn.execute(
             "SELECT 1 FROM deployment_requests WHERE status IN ('queued','running','unknown') LIMIT 1",
         )).fetchone()
+        ready = await bridge.runtime_ready(conn, version=__version__)
     runner = await asyncio.to_thread(bridge.probe, settings)
     compatible = bool(release and release.schema_hash == schema_hash(settings.migration_dir))
+    matches = already_running(settings, release)
     return {
         "configured": configured(settings),
         "repository": settings.deployment_repository,
@@ -157,7 +159,9 @@ async def status(request: Request, who: Admin):
         "running_version": __version__,
         "running_image": settings.deployment_running_image or None,
         "running_revision": settings.source_revision or None,
-        "matches_release": already_running(settings, release),
+        "runtime_ready": ready,
+        "runtime_matches_release": matches,
+        "matches_release": matches and ready,
         "release": release,
         "release_error": release_error,
         **observed,

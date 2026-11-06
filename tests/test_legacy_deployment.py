@@ -79,6 +79,30 @@ async def test_legacy_unconfigured_reads_are_unknown_no_write_and_no_probe(legac
         assert await business_hashes(conn) == before
 
 
+async def test_legacy_matching_runtime_needs_same_version_fresh_worker(legacy, app, db, monkeypatch):
+    from alcor_api import __version__
+    from test_deployment_requests import configure
+
+    release, _calls, _headers = configure(app, monkeypatch)
+    app.state.settings.source_revision = release.revision
+    first = await legacy.get(P)
+    assert first.status_code == 200, first.text
+    assert first.json()["runtime"]["sha"] == release.revision
+    assert first.json()["runtime"]["ready"] is False
+    assert first.json()["runtime"]["matchesImage"] is False
+    async with db.connection() as conn:
+        worker = uuid4()
+        await conn.execute("INSERT INTO worker_heartbeats(worker_id,version) VALUES(%s,'0.0.0')", (worker,))
+    assert (await legacy.get(P)).json()["runtime"]["matchesImage"] is False
+    async with db.connection() as conn:
+        await conn.execute("UPDATE worker_heartbeats SET version=%s WHERE worker_id=%s", (__version__, worker))
+    ready = (await legacy.get(P)).json()["runtime"]
+    assert ready["ready"] is True and ready["matchesImage"] is True
+    async with db.connection() as conn:
+        await conn.execute("UPDATE worker_heartbeats SET observed_at=clock_timestamp()-interval '1 minute' WHERE worker_id=%s", (worker,))
+    assert (await legacy.get(P)).json()["runtime"]["matchesImage"] is False
+
+
 async def test_config_uuid_cas_clear_manual_token_and_disconnect_receipt(legacy, db):
     first = await save(legacy, token="SyntheticDeploySecret9")
     assert first.status_code == 200, first.text

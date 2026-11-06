@@ -10,8 +10,65 @@ import {
   deploymentPollDelay,
   canRestartBuild,
   receiptCloseTarget,
+  deploymentRuntimeState,
   updateNeedsObservation,
 } from "../src/deployment-view.ts";
+test("a matching runtime commit stays pending until the service is explicitly ready", () => {
+  const release = {
+    image: "ghcr.io/synthetic/alcor-api@sha256:" + "a".repeat(64),
+    version: "0.1.99",
+    revision: "b".repeat(40),
+    schema_hash: "c".repeat(64),
+  };
+  const data = {
+    running_revision: release.revision,
+    runtime_ready: false,
+    matches_release: true,
+    release,
+  };
+  assert.deepEqual(deploymentRuntimeState(data), {
+    ready: false,
+    current: false,
+    waiting: true,
+  });
+  assert.deepEqual(deploymentRuntimeState({ ...data, runtime_ready: true }), {
+    ready: true,
+    current: true,
+    waiting: false,
+  });
+  assert.deepEqual(
+    deploymentRuntimeState({
+      ...data,
+      runtime_ready: true,
+      matches_release: false,
+    }),
+    { ready: true, current: false, waiting: false },
+  );
+  assert.deepEqual(
+    deploymentRuntimeState({ ...data, running_revision: "d".repeat(40) }),
+    { ready: false, current: false, waiting: false },
+  );
+  assert.deepEqual(deploymentRuntimeState(null), {
+    ready: false,
+    current: false,
+    waiting: false,
+  });
+  const idle = {
+    ...data,
+    source: { sha: release.revision, url: "#" },
+    check: null,
+    build: null,
+    receipts: [],
+    build_requests: [],
+  };
+  assert.equal(deploymentPollDelay(idle, false, false, false), 5000);
+  assert.equal(deploymentPollDelay(idle, false, true, false), 15000);
+  assert.equal(deploymentPollDelay(idle, true, false, false), null);
+  assert.equal(
+    deploymentPollDelay({ ...idle, runtime_ready: true }, false, false, false),
+    null,
+  );
+});
 test("only unresolved receipts with an immutable complete target can be explicitly closed", () => {
   const receipt = {
     id: "record",

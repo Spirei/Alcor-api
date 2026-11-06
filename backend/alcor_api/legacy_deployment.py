@@ -196,8 +196,9 @@ def mount_legacy_deployment(app, settings, db):
             "runtime": {
                 "sha": runtime_sha or "unknown",
                 "shortSha": runtime_sha[:7] if runtime_sha else "unknown",
-                "matchesImage": runtime_sha == release_sha if runtime_sha and release_sha else None,
-                "matchesMain": runtime_sha == source_sha if runtime_sha and source_sha else None,
+                "ready": state["runtime_ready"],
+                "matchesImage": state["matches_release"] if runtime_sha and release_sha else None,
+                "matchesMain": state["runtime_ready"] and runtime_sha == source_sha if runtime_sha and source_sha else None,
             },
             "checkedAt": state["checked_at"],
             "configured": state["configured"],

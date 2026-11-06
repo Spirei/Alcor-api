@@ -270,16 +270,14 @@ def create_app(settings: Settings | None = None):
 
     @app.get("/health/container", include_in_schema=False)
     async def container_health():
+        from .deployment_watchtower import runtime_ready
+
         try:
             async with db.connection() as conn:
-                row = await (
-                    await conn.execute(
-                        "SELECT EXISTS(SELECT 1 FROM worker_heartbeats WHERE observed_at>clock_timestamp()-interval '30 seconds') AS healthy"
-                    )
-                ).fetchone()
+                healthy = await runtime_ready(conn, version=__version__)
             return JSONResponse(
-                {"status": "ready" if row["healthy"] else "worker_unavailable"},
-                status_code=200 if row["healthy"] else 503,
+                {"status": "ready" if healthy else "worker_unavailable"},
+                status_code=200 if healthy else 503,
             )
         except Exception:
             return JSONResponse({"status": "not_ready"}, status_code=503)
