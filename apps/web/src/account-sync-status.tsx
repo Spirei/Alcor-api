@@ -252,7 +252,8 @@ function Panel({
       c = new AbortController();
     controller.current?.abort();
     controller.current = c;
-    setSignals(null);
+    // Same-session management metadata stays visible while its replacement is checked.
+    // clear() still withdraws it on a context failure, hidden view or changed identity.
     setDevice(null);
     setWatch(null);
     setFees(null);
@@ -363,7 +364,7 @@ function Panel({
       {epochChanged && <p role="status">来源代次已变化，旧版本不再用于比较</p>}
       {signals && (
         <>
-          <div className="sync-status-list">
+          <div className="sync-status-list" aria-busy={busy}>
             {syncRows({
               ...signals,
               unrepresentedSources: signals.unrepresentedSources || [],
