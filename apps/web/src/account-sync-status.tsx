@@ -334,14 +334,15 @@ function Panel({
   return (
     <section className="account-sync-panel workspace-ui">
       <div className="account-sync-toolbar">
-        <span>{busy ? "正在读取同步状态…" : "当前账号同步范围"}</span>
+        <span>当前账号同步范围</span>
         <button
           className="icon-button"
           aria-label="刷新同步状态"
+          aria-busy={busy}
           disabled={busy || !active}
           onClick={() => void load()}
         >
-          <RefreshCw size={16} />
+          <RefreshCw size={16} className={busy ? "spin" : undefined} />
         </button>
       </div>
       {Object.entries(errors).map(([key, value]) => (
