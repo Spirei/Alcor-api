@@ -68,7 +68,7 @@ function AvatarStatusPicker({ onSelected }: { onSelected: () => void }) {
           }}
         >
           <Icon
-            size={24}
+            size={19}
             strokeWidth={2.4}
             fill={status === "online" ? "currentColor" : "none"}
           />
