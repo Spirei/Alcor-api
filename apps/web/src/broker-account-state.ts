@@ -136,6 +136,22 @@ export function brokerCurrencyStatus(value: {
   return value.complete ? "已核实" : value.opening ? "待核实" : "期初未登记";
 }
 
+/** Never turn an unreadable original UUID into permission to submit a fresh mutation. */
+export function restoreBrokerOperation(
+  storage: Pick<Storage, "getItem">,
+  key: string,
+): string | null {
+  const value = storage.getItem(key);
+  if (value === null) return null;
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      value,
+    )
+  )
+    throw new Error("原账户操作编号无法读取，请先恢复浏览器存储并核对原请求。");
+  return value;
+}
+
 /** Human labels keep the opaque account ID as the selector value, never infer a target by name. */
 export function brokerAccountLabels<
   T extends {

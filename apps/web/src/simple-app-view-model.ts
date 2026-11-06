@@ -5,6 +5,7 @@ import {
   decimal,
   negate,
   object,
+  performance,
   rows,
   sum,
   text,
@@ -55,6 +56,23 @@ export function declaredInvestmentPnl(
       ),
     ),
   );
+}
+/** Separate account IRRs are not a combined portfolio IRR. */
+export function declaredInvestmentAnnual(ledger: Row): string | null {
+  if (
+    !Array.isArray(ledger.invest) ||
+    rows(ledger.invest).length !== ledger.invest.length
+  )
+    return null;
+  const active = rows(ledger.invest).filter((row) => row.archived !== true);
+  if (active.length !== 1) return null;
+  const row = active[0];
+  return performance(
+    rows(row.hist),
+    row.historyComplete === true &&
+      Array.isArray(row.hist) &&
+      rows(row.hist).length === row.hist.length,
+  ).annual;
 }
 /** Group exact decimal text without converting original monetary values to binary floats. */
 export function displayDecimal(value: string | null) {

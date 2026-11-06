@@ -9594,6 +9594,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/account/simple-ledger/revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Revision */
+        get: operations["revision_api_account_simple_ledger_revision_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/simple-ledger/operations/{rid}": {
         parameters: {
             query?: never;
@@ -35281,6 +35298,26 @@ export interface operations {
         };
     };
     simple_ledger_2_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    revision_api_account_simple_ledger_revision_get: {
         parameters: {
             query?: never;
             header?: never;

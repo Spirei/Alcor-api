@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Alcor Platform",
-    "version": "0.1.184"
+    "version": "0.1.185"
   },
   "paths": {
     "/api/profile/requests": {
@@ -19383,6 +19383,22 @@
       "put": {
         "summary": "Endpoint",
         "operationId": "simple_ledger_2_put",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/simple-ledger/revision": {
+      "get": {
+        "summary": "Revision",
+        "operationId": "revision_api_account_simple_ledger_revision_get",
         "responses": {
           "200": {
             "description": "Successful Response",

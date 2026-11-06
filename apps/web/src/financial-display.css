@@ -1,0 +1,17 @@
+.financial-market-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: inherit;
+}
+.financial-market-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  font-size: 17px;
+  line-height: 1;
+}

@@ -84,6 +84,12 @@ def mount_simple_ledger(app,db):
     for version,path in ((0,'/api/account/simple-ledger'),(1,'/api/v1/simple-ledger'),(2,'/api/v2/simple-ledger')):
         for method in ('GET','PUT'): app.add_api_route(path,ledger_endpoint(version),methods=[method],operation_id=f'simple_ledger_{version}_{method.lower()}')
 
+    @app.get('/api/account/simple-ledger/revision')
+    async def revision(request:Request):
+        who=await actor(request)
+        if request.query_params:raise HTTPException(400,'不支持查询参数')
+        return JSONResponse(await service.read_revision(who),headers=HEADERS)
+
     def recovery_endpoint(version,close_operation=False):
         async def endpoint(rid:str,request:Request):
             try:

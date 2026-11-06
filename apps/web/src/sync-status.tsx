@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { Session } from "./api";
 import { AccountSyncStatus } from "./account-sync-status";
 export function SyncStatusPage({
@@ -19,16 +19,6 @@ export function SyncStatusPage({
         active={active}
         onOpenDevices={() => navigate("/account#account-owned-devices")}
       />
-      <div className="sync-status-links">
-        <Link className="button secondary" to="/legacy-import">
-          导入数据
-        </Link>
-        {session.user.role === "admin" && (
-          <Link className="button secondary" to="/backups">
-            备份恢复
-          </Link>
-        )}
-      </div>
     </>
   );
 }

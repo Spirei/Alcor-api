@@ -76,7 +76,8 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
       htmls.account.includes("真实") || htmls.account.includes("原始观察"),
     );
     assert.ok(htmls.account.includes("券商"));
-    assert.ok(htmls.account.includes("明确添加一次估值"));
+    assert.ok(htmls.account.includes("更新收益"));
+    assert.doesNotMatch(htmls.account, /观察日期（明确填写）/);
     assert.ok(htmls.family.includes("已登记家庭资产快照"));
     assert.ok(htmls.calendar.includes("没有已登记观察"));
     assert.ok(htmls.invest.includes("归档"));
@@ -90,7 +91,7 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
     const renderBudget = (value: any) =>
       renderToStaticMarkup(
         React.createElement(module.SimplePages, {
-          ledger: { ...ledger, cashflow: value },
+          ledger: { ...ledger, cashflow: { ...value, completed: true } },
           page: "cashflow",
           context: {},
           patch: () => {
@@ -101,17 +102,69 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
       )
         .replace(/<[^>]*>/g, " ")
         .replace(/\s+/g, " ");
-    assert.match(renderBudget(cashflow), /预估年度收入 未知 币种未登记/);
+    assert.match(renderBudget(cashflow), /预估收入 未知 币种未登记/);
     const declaredBudget = renderBudget({ ...cashflow, currency: "CNY" });
-    assert.match(declaredBudget, /预估年度收入 12000 CNY/);
-    assert.match(declaredBudget, /预估年度支出 3600 CNY/);
-    assert.match(declaredBudget, /预估年度结余 8400 CNY/);
+    assert.match(declaredBudget, /预估收入 12,000 CNY/);
+    assert.match(declaredBudget, /预估支出 3,600 CNY/);
+    assert.match(declaredBudget, /预估年度结余 8,400 CNY/);
+    await t.test(
+      "cashflow tracking separates its single hero from editable planning steps and preserves missing data",
+      () => {
+        const renderCashflow = (value: any, hide = false) =>
+          renderToStaticMarkup(
+            React.createElement(module.SimplePages, {
+              ledger: { ...ledger, hide, cashflow: value },
+              page: "cashflow",
+              context: {},
+              patch: () => {
+                throw Error("render cannot mutate");
+              },
+              go: () => {},
+            }),
+          );
+        const known = { ...cashflow, currency: "CNY", completed: true },
+          overview = renderCashflow(known);
+        assert.doesNotMatch(
+          overview,
+          /现金流规划步骤|simple-budget-flow-labels|simple-budget-summary/,
+        );
+        assert.match(overview, /储蓄率/);
+        assert.match(overview, /70%/);
+        assert.equal((overview.match(/预估年度结余/g) || []).length, 1);
+        assert.match(overview, /simple-budget-track/);
+        assert.doesNotMatch(overview, /本月支出.*0|月度剩余/);
+        const edit = renderCashflow({
+          ...known,
+          completed: false,
+          started: true,
+        });
+        assert.match(edit, /现金流规划步骤/);
+        assert.match(edit, /simple-budget-row-main/);
+        assert.match(edit, /\/月/);
+        assert.doesNotMatch(edit, /\/ ?month|simple-budget-summary|删除草稿项/);
+        assert.match(edit, /aria-label="收入操作"/);
+        assert.match(edit, /popover="auto"/);
+        assert.doesNotMatch(
+          renderCashflow(known, true),
+          /12,000|3,600|8,400|70%|<svg[^>]+role="img"/,
+        );
+        assert.match(
+          renderCashflow({ ...known, currency: "" }),
+          /尚未完善收支预算/,
+        );
+        assert.doesNotMatch(
+          renderCashflow({ ...known, currency: "" }),
+          /70%|<svg[^>]+role="img"/,
+        );
+      },
+    );
     await t.test(
       "overview keeps exact amounts and never invents a cross-account return",
       () => {
         assert.match(htmls.home, /家庭总资产/);
         assert.match(htmls.home, /123,456,789,012,345,678,901,344/);
-        assert.doesNotMatch(htmls.home, /年化|资产没有变化|负债没有变化/);
+        assert.match(htmls.home, /暂无<small>年化/);
+        assert.doesNotMatch(htmls.home, /资产没有变化|负债没有变化/);
         assert.equal(
           module.displayDecimal("9007199254740993.000000000000000001"),
           "9,007,199,254,740,993.000000000000000001",
@@ -168,6 +221,73 @@ test("all sixteen legacy routes expose real typed controls and preserve independ
             },
           }).surplus,
           null,
+        );
+      },
+    );
+    await t.test(
+      "legacy summary layout keeps unsupported combined returns unknown and hides proportional amounts",
+      () => {
+        const renderHome = (value: any) =>
+          renderToStaticMarkup(
+            React.createElement(module.SimplePages, {
+              ledger: value,
+              page: "home",
+              context: {},
+              patch: () => {},
+              go: () => {},
+            }),
+          );
+        const one = {
+          ...ledger,
+          invest: [{ ...ledger.invest[0], historyComplete: true }],
+        };
+        assert.match(renderHome(one), /10%<small>年化/);
+        assert.match(
+          renderHome({
+            ...one,
+            invest: [...one.invest, { ...one.invest[0], id: "other" }],
+          }),
+          /暂无<small>年化/,
+        );
+        assert.match(
+          renderHome({ ...one, invest: [...one.invest, null] }),
+          /暂无<small>年化/,
+        );
+        const known = {
+          ...ledger,
+          cashflow: {
+            currency: "CNY",
+            incomeItems: [{ name: "收入", amount: "1000", freq: "year" }],
+            expenseItems: [
+              { name: "支出", amount: "250", freq: "year", type: "stable" },
+            ],
+          },
+        };
+        assert.match(renderHome(known), /75%<small>储蓄率/);
+        assert.match(
+          renderHome(known),
+          /simple-cashflow-part stable[^>]+width:25%/,
+        );
+        assert.doesNotMatch(
+          renderHome({ ...known, hide: true }),
+          /width:25%|75%/,
+        );
+        assert.doesNotMatch(
+          renderHome({
+            ...known,
+            cashflow: { ...known.cashflow, currency: "" },
+          }),
+          /width:25%/,
+        );
+        assert.doesNotMatch(
+          renderHome({
+            ...known,
+            cashflow: {
+              ...known.cashflow,
+              expenseItems: [{ amount: "2000", freq: "year", type: "stable" }],
+            },
+          }),
+          /simple-cashflow-part stable/,
         );
       },
     );

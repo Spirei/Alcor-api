@@ -130,3 +130,16 @@
     flex-basis: 100%;
   }
 }
+
+.watch-group-draft-conflict {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.watch-group-draft-conflict button {
+  font-size: 12px;
+}

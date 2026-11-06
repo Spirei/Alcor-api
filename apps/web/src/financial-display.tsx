@@ -1,6 +1,8 @@
 import { Eye, EyeOff } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { usePublicSite } from "./public-site";
+import { libraryMarkets } from "./asset-library-market";
+import "./financial-display.css";
 const Context = createContext({
   visible: true,
   setVisible: (_value: boolean) => {},
@@ -47,18 +49,54 @@ export function MarketBadge({ market }: { market: string }) {
     badge = Object.hasOwn(site.marketBadges, market)
       ? site.marketBadges[market]
       : undefined;
-  if (!site.marketBadgesVisible || !badge) return <span>{market}</span>;
+  const flags: Record<string, string> = {
+    US: "🇺🇸",
+    HK: "🇭🇰",
+    CN: "🇨🇳",
+    JP: "🇯🇵",
+    KR: "🇰🇷",
+    SG: "🇸🇬",
+    UK: "🇬🇧",
+    DE: "🇩🇪",
+    FR: "🇫🇷",
+    AU: "🇦🇺",
+    CA: "🇨🇦",
+    IN: "🇮🇳",
+    TW: "🇹🇼",
+    BR: "🇧🇷",
+  };
+  const label = libraryMarkets[market] || market;
+  const color =
+    badge && site.marketBadgesVisible
+      ? {
+          backgroundColor: badge.bg,
+          color: badge.fg,
+          borderRadius: 4,
+          paddingInline: 5,
+          whiteSpace: "nowrap" as const,
+        }
+      : undefined;
+  if (!Object.hasOwn(libraryMarkets, market))
+    return <span style={color}>{color ? badge!.label : market}</span>;
   return (
-    <span
-      style={{
-        backgroundColor: badge.bg,
-        color: badge.fg,
-        borderRadius: 4,
-        paddingInline: 5,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {badge.label}
+    <span className="financial-market-label">
+      <span className="financial-market-icon" aria-hidden="true">
+        {flags[market]}
+      </span>
+      <span>{label}</span>
+      {site.marketBadgesVisible && badge && badge.label !== label && (
+        <span
+          style={{
+            backgroundColor: badge.bg,
+            color: badge.fg,
+            borderRadius: 4,
+            paddingInline: 5,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {badge.label}
+        </span>
+      )}
     </span>
   );
 }

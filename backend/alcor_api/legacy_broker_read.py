@@ -1,4 +1,4 @@
-"""Frozen App broker reads over owned platform accounts, never provider balances."""
+"""App broker reads over owned platform accounts, never provider balances."""
 
 import json
 import re
@@ -14,7 +14,10 @@ from .native_app_auth import CLIENT
 from .source_read_access import source_read_lock
 
 PRESETS = json.loads((Path(__file__).parent / "data" / "broker-presets.json").read_text())
-LEGACY_CURRENCIES = tuple(c for c in CURRENCIES if c != "CHF")
+# Keep the original fourteen currencies and ordering, with explicit CHF support.
+# The current App's account DTO and PortfolioCurrency both accept CHF. This
+# extends account metadata only; cash/settlement permissions and data stay separate.
+LEGACY_CURRENCIES = CURRENCIES
 MARKETS = {
     "US": "USD",
     "HK": "HKD",

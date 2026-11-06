@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
 import {
+  watchRowDraft,
+  reconcileWatchDrafts,
+  watchDraftChanges,
+  type WatchRowDraft,
+} from "./watch-edit-state";
+import {
   WatchDisplayReadScope,
   watchField as field,
   watchDisplayValue,
@@ -30,6 +36,7 @@ export function WatchDisplaySettings(props: {
   complete?: boolean;
   active?: boolean;
   blocked?: boolean;
+  recheck?: number;
   onState?: (value: WatchDisplayState | null) => void;
   onChanged?: () => void;
   onDenied: (error: unknown) => void;
@@ -57,6 +64,7 @@ function Panel({
   complete = false,
   active = true,
   blocked = false,
+  recheck = 0,
   onState,
   onChanged,
   onDenied,
@@ -68,6 +76,7 @@ function Panel({
   complete?: boolean;
   active?: boolean;
   blocked?: boolean;
+  recheck?: number;
   onState?: (value: WatchDisplayState | null) => void;
   onChanged?: () => void;
   onDenied: (error: unknown) => void;
@@ -81,9 +90,7 @@ function Panel({
       session.receipt_scope,
     ]);
   const [snapshot, setSnapshot] = useState<WatchDisplayState | null>(null),
-    [drafts, setDrafts] = useState<
-      Record<string, { alias: string; note: string; move: string }>
-    >({}),
+    [drafts, setDrafts] = useState<Record<string, WatchRowDraft>>({}),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
@@ -104,7 +111,8 @@ function Panel({
     busyRef = useRef(false),
     alive = useRef(true),
     current = useRef<WatchDisplayState | null>(null),
-    callbacks = useRef({ onState, onChanged, onDenied });
+    callbacks = useRef({ onState, onChanged, onDenied }),
+    lastRecheck = useRef(recheck);
   callbacks.current = { onState, onChanged, onDenied };
   function working(value: boolean) {
     busyRef.current = value;
@@ -114,7 +122,7 @@ function Panel({
     current.current = value;
     setSnapshot(value);
     callbacks.current.onState?.(value);
-    setDrafts({});
+    setDrafts((previous) => reconcileWatchDrafts(previous, value));
   }
   function fail(e: unknown) {
     if (e instanceof ApiError && [401, 403].includes(e.status)) {
@@ -175,6 +183,12 @@ function Panel({
       document.removeEventListener("visibilitychange", presence);
     };
   }, [active]);
+  useEffect(() => {
+    if (lastRecheck.current === recheck || !active || document.hidden || busy)
+      return;
+    lastRecheck.current = recheck;
+    void load();
+  }, [recheck, active, busy]);
   function remember(id: string | null) {
     try {
       if (id) sessionStorage.setItem(storage, id);
@@ -211,7 +225,9 @@ function Panel({
     );
     callbacks.current.onChanged?.();
   }
-  async function mutate(values: { key: string; value: unknown }[]) {
+  async function mutate(
+    values: { key: string; value: unknown; revision?: number }[],
+  ) {
     if (!snapshot || busy || pending || blocked || !active || document.hidden)
       return;
     try {
@@ -230,7 +246,7 @@ function Panel({
     const run = scope.current.generation,
       changes = values.map((value) => ({
         ...value,
-        revision: snapshot.fields[value.key]?.revision ?? 0,
+        revision: value.revision ?? snapshot.fields[value.key]?.revision ?? 0,
       }));
     working(true);
     setError("");
@@ -330,14 +346,7 @@ function Panel({
             const hidden =
                 watchDisplayValue(snapshot, "hidden", row.id) === true,
               pinned = watchDisplayValue(snapshot, "pinned", row.id) === true,
-              alias = watchDisplayValue(snapshot, "aliases", row.id),
-              note = watchDisplayValue(snapshot, "notes", row.id),
-              moved = watchDisplayValue(snapshot, "moved", row.id),
-              draft = drafts[row.id] || {
-                alias: typeof alias === "string" ? alias : "",
-                note: typeof note === "string" ? note : "",
-                move: typeof moved === "string" ? moved : "",
-              };
+              draft = drafts[row.id] || watchRowDraft(snapshot, row.id);
             const edit = (patch: Partial<typeof draft>) =>
               setDrafts((previous) => ({
                 ...previous,
@@ -414,16 +423,9 @@ function Panel({
                 <button
                   disabled={disabled}
                   onClick={() =>
-                    void mutate([
-                      {
-                        key: field("aliases", row.id),
-                        value: draft.alias || null,
-                      },
-                      {
-                        key: field("notes", row.id),
-                        value: draft.note || null,
-                      },
-                    ])
+                    void mutate(
+                      watchDraftChanges(draft, row.id, ["alias", "note"]),
+                    )
                   }
                 >
                   保存别名与显示备注
@@ -454,16 +456,26 @@ function Panel({
                 <button
                   disabled={disabled}
                   onClick={() =>
-                    void mutate([
-                      {
-                        key: field("moved", row.id),
-                        value: draft.move || null,
-                      },
-                    ])
+                    void mutate(watchDraftChanges(draft, row.id, ["move"]))
                   }
                 >
                   保存显示归属
                 </button>
+                {drafts[row.id] && (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      setDrafts((previous) => {
+                        const next = { ...previous };
+                        delete next[row.id];
+                        return next;
+                      })
+                    }
+                  >
+                    放弃本行修改
+                  </button>
+                )}
                 {groups
                   .filter((group) => group.kind === "custom")
                   .map((group) => {

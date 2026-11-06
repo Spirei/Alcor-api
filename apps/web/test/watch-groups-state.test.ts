@@ -9,6 +9,8 @@ import {
   groupRecords,
   groupReceipt,
   groupCommand,
+  groupEdit,
+  reviewedGroupEdit,
   groupLabel,
   groupName,
   groupRecordsPath,
@@ -198,7 +200,11 @@ test("page projection keeps identity and actual totals while dropping financial 
     },
     1,
   );
-  assert.deepEqual(safe, { ...page, displayRevision: undefined, membershipBasis: undefined });
+  assert.deepEqual(safe, {
+    ...page,
+    displayRevision: undefined,
+    membershipBasis: undefined,
+  });
   assert.ok(!JSON.stringify(safe).includes("999"));
   assert.equal(
     groupLabel("legacy-unmapped-id", list.groups),
@@ -247,4 +253,52 @@ test("read listing never invents initialization and record paging pins the colle
   assert.equal(query.get("collectionRevision"), "23");
   assert.equal(query.get("view"), custom.id);
   assert.equal(query.get("brokerAccountId"), "account-with-scope");
+});
+
+test("an external group listing refresh preserves draft input and its original collection CAS until explicit review", () => {
+  const draft = groupEdit(list, custom.id, { name: "My draft", visible: "1" });
+  const remote = {
+    ...list,
+    revision: 8,
+    groups: [
+      market,
+      { ...custom, name: "Changed on another client", revision: 3 },
+    ],
+  };
+  const editedAgain = groupEdit(
+    remote,
+    custom.id,
+    { ...draft, name: "My continued draft" },
+    draft,
+  );
+  assert.equal(editedAgain.expectedRevision, 7);
+  assert.equal(
+    groupCommand(remote, "update", { id: custom.id, ...editedAgain }, id)
+      .expectedRevision,
+    7,
+  );
+  assert.equal(editedAgain.name, "My continued draft");
+  const reviewed = reviewedGroupEdit(remote, custom.id, editedAgain, 8);
+  assert.equal(reviewed.expectedRevision, 8);
+  assert.equal(reviewed.name, editedAgain.name);
+  assert.equal(
+    groupCommand(remote, "update", { id: custom.id, ...reviewed }, id)
+      .expectedRevision,
+    8,
+  );
+  assert.throws(
+    () =>
+      reviewedGroupEdit({ ...remote, revision: 9 }, custom.id, editedAgain, 8),
+    /再次变化/,
+  );
+  assert.throws(
+    () =>
+      groupCommand(
+        remote,
+        "update",
+        { id: custom.id, ...draft, expectedRevision: 9 },
+        id,
+      ),
+    /版本/,
+  );
 });

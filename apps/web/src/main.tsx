@@ -191,6 +191,7 @@ import type {
   TaskList,
 } from "./api";
 import { ResourceProvider, useResource, useTaskInvalidation } from "./hooks";
+import { AccountChangeProvider } from "./account-change-context";
 import { VersionHistory } from "./version-history";
 const BackupsPage = lazyView(() =>
   import("./backups").then((module) => ({ default: module.BackupsPage })),
@@ -2730,9 +2731,11 @@ function App() {
       if (document.visibilityState === "visible" && apiSessionSnapshot().csrf)
         readSession();
     };
+    const recheck = () => readSession(true);
     readSession();
     window.addEventListener("alcor:session-expired", expired);
     window.addEventListener("alcor:session-changed", changed);
+    window.addEventListener("alcor:session-recheck", recheck);
     window.addEventListener("focus", visible);
     document.addEventListener("visibilitychange", visible);
     return () => {
@@ -2740,6 +2743,7 @@ function App() {
       controller?.abort();
       window.removeEventListener("alcor:session-expired", expired);
       window.removeEventListener("alcor:session-changed", changed);
+      window.removeEventListener("alcor:session-recheck", recheck);
       window.removeEventListener("focus", visible);
       document.removeEventListener("visibilitychange", visible);
     };
@@ -2768,48 +2772,54 @@ function App() {
                     session.receipt_scope,
                   ])}
                 >
-                  <AccountPreferencesProvider
-                    session={session}
-                    appearance={appearance}
-                  >
-                    <AvatarStatusProvider session={session}>
-                      <>
-                        <PersonalFontsProvider
-                          session={session}
-                          appearance={appearance}
-                        >
-                          <FinancialDisplayProvider>
-                            <AuthenticatedViews
-                              session={session}
-                              appearance={appearance}
-                              onLogout={() => {
-                                try {
-                                  clearOperationJournal(sessionStorage);
-                                  clearReferenceRequests(sessionStorage);
-                                  clearPersonalProfileRequests(sessionStorage);
-                                  clearResourceRequests(sessionStorage);
-                                  clearSharedAssetRequests(sessionStorage);
-                                  clearFireRequests(sessionStorage);
-                                  clearGroupRequests(sessionStorage);
-                                  clearSourceRequests(sessionStorage);
-                                  clearIconRequests(sessionStorage);
-                                  clearFontRequests(sessionStorage);
-                                  clearAttachmentRequests(sessionStorage);
-                                  clearAttachmentImportRequests(sessionStorage);
-                                  clearLegacyImportRequests(sessionStorage);
-                                  clearResourceImportRequests(sessionStorage);
-                                  clearPreferenceDrafts(sessionStorage);
-                                } catch {}
-                                bindApiSession(null);
-                                setSession(null);
-                                setError("");
-                              }}
-                            />
-                          </FinancialDisplayProvider>
-                        </PersonalFontsProvider>
-                      </>
-                    </AvatarStatusProvider>
-                  </AccountPreferencesProvider>
+                  <AccountChangeProvider session={session}>
+                    <AccountPreferencesProvider
+                      session={session}
+                      appearance={appearance}
+                    >
+                      <AvatarStatusProvider session={session}>
+                        <>
+                          <PersonalFontsProvider
+                            session={session}
+                            appearance={appearance}
+                          >
+                            <FinancialDisplayProvider>
+                              <AuthenticatedViews
+                                session={session}
+                                appearance={appearance}
+                                onLogout={() => {
+                                  try {
+                                    clearOperationJournal(sessionStorage);
+                                    clearReferenceRequests(sessionStorage);
+                                    clearPersonalProfileRequests(
+                                      sessionStorage,
+                                    );
+                                    clearResourceRequests(sessionStorage);
+                                    clearSharedAssetRequests(sessionStorage);
+                                    clearFireRequests(sessionStorage);
+                                    clearGroupRequests(sessionStorage);
+                                    clearSourceRequests(sessionStorage);
+                                    clearIconRequests(sessionStorage);
+                                    clearFontRequests(sessionStorage);
+                                    clearAttachmentRequests(sessionStorage);
+                                    clearAttachmentImportRequests(
+                                      sessionStorage,
+                                    );
+                                    clearLegacyImportRequests(sessionStorage);
+                                    clearResourceImportRequests(sessionStorage);
+                                    clearPreferenceDrafts(sessionStorage);
+                                  } catch {}
+                                  bindApiSession(null);
+                                  setSession(null);
+                                  setError("");
+                                }}
+                              />
+                            </FinancialDisplayProvider>
+                          </PersonalFontsProvider>
+                        </>
+                      </AvatarStatusProvider>
+                    </AccountPreferencesProvider>
+                  </AccountChangeProvider>
                 </ResourceProvider>
               ) : (
                 <>

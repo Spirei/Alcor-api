@@ -1,22 +1,22 @@
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  ChevronRight,
-  CloudSun,
-  Eye,
-  EyeOff,
-  Landmark,
-  Wallet,
-} from "lucide-react";
+import { ChevronRight, CloudSun, Eye, EyeOff } from "lucide-react";
 import {
   budgetSummary,
   declaredInvestmentPnl,
+  declaredInvestmentAnnual,
   displayDecimal,
+  displayRatio,
 } from "./simple-app-view-model";
 import {
   day,
+  add,
+  annual,
   decimal,
+  multiply,
+  negate,
+  object,
+  ratio,
   rows,
+  sum,
   text,
   totals,
   type Page,
@@ -64,7 +64,46 @@ export function SimpleOverview({
     )
     .sort((a, b) => text(a.at).localeCompare(text(b.at)))
     .slice(-3);
+  const previous = snapshots.at(-1),
+    assetChange = previous
+      ? add(t.assets, negate(decimal(previous.assets)))
+      : null,
+    debtChange = previous ? add(t.debt, negate(decimal(previous.debt))) : null,
+    investments = rows(ledger.invest).filter((row) => row.archived !== true),
+    annualReturn = declaredInvestmentAnnual(ledger),
+    savingsRate =
+      budget.income && budget.income !== "0" && !budget.income.startsWith("-")
+        ? multiply(ratio(budget.surplus, budget.income), "100")
+        : null;
   const max = Math.max(...snapshots.map((row) => Number(decimal(row.assets))));
+  const expenseItems = rows(object(ledger.cashflow).expenseItems),
+    flowParts = ["stable", "flexible", "other", "unclassified"].map((kind) => ({
+      kind,
+      amount: sum(
+        expenseItems
+          .filter((row) =>
+            kind === "unclassified"
+              ? !["stable", "flexible", "other"].includes(text(row.type))
+              : text(row.type) === kind,
+          )
+          .map(annual),
+      ),
+    })),
+    flowKnown =
+      budget.income !== null &&
+      budget.income !== "0" &&
+      !budget.income.startsWith("-") &&
+      budget.surplus !== null &&
+      !budget.surplus.startsWith("-") &&
+      expenseItems.every(
+        (row) => annual(row) !== null && !annual(row)!.startsWith("-"),
+      );
+  const change = (value: string | null, name: string) =>
+    value === null
+      ? `暂无可比${name}观察`
+      : value === "0"
+        ? `${name}没有变化`
+        : `${name}${value.startsWith("-") ? "减少" : "增加"} ${hidden ? "••••" : displayDecimal(value.replace(/^-/, ""))} ${currency}`;
   return (
     <div className="simple-overview">
       <div className="simple-screen-heading">
@@ -81,19 +120,20 @@ export function SimpleOverview({
         <button className="simple-weather-link" onClick={() => go("weather")}>
           <CloudSun size={18} />
           财务晴雨表
-          <ChevronRight size={15} />
         </button>
       </div>
       <button className="simple-home-hero" onClick={() => go("family")}>
         <span className="simple-home-label">
           家庭总资产
-          <ChevronRight size={18} />
+          {previous && (
+            <small className="simple-home-last">
+              {text(previous.at).slice(0, 10).replaceAll("-", "/")}
+            </small>
+          )}
         </span>
         <LedgerAmount value={t.assets} currency={currency} hidden={hidden} />
         <span className="simple-home-caption">
-          {t.assets === null
-            ? "完善金额、币种与登记汇率后查看"
-            : "本人登记与估算 · 非券商已核余额"}
+          {t.assets === null ? "点此开始记录" : "本人登记资产"}
         </span>
         <span className="simple-home-bottom">
           <span
@@ -118,85 +158,96 @@ export function SimpleOverview({
               ))
             )}
           </span>
-          <span className="simple-home-net">
-            <span>
-              净资产
-              <LedgerAmount value={t.net} currency={currency} hidden={hidden} />
-            </span>
-            <span>
-              已登记负债
-              <LedgerAmount
-                value={t.debt}
-                currency={currency}
-                hidden={hidden}
-              />
-            </span>
+          <span className="simple-home-changes">
+            <span>{change(assetChange, "资产")}</span>
+            <span>{change(debtChange, "负债")}</span>
           </span>
         </span>
       </button>
       <div className="simple-home-links">
         <button className="simple-home-invest" onClick={() => go("invest")}>
           <span className="simple-home-label">
-            <span>
-              <Landmark size={19} />
-              投资记账
+            <span>投资记账</span>
+            <span className="simple-chevron-round">
+              <ChevronRight size={13} />
             </span>
-            <ChevronRight size={18} />
           </span>
-          <LedgerAmount value={t.invest} currency={currency} hidden={hidden} />
-          <span className="simple-home-caption">独立投资账户估值</span>
-          <span className="simple-home-secondary">
-            <span>登记累计收益</span>
-            <LedgerAmount
-              value={declaredInvestmentPnl(ledger, currency)}
-              currency={currency}
-              hidden={hidden}
-            />
+          <span className="simple-home-return">
+            {hidden
+              ? "••••"
+              : annualReturn === null
+                ? "暂无"
+                : displayRatio(annualReturn).replace(/^约 /, "") + "%"}
+            <small>年化</small>
+          </span>
+          <span className="simple-home-caption">
+            {investments.length
+              ? `${investments.length} 项投资资产`
+              : "尚未记账"}
+          </span>
+          <span className="simple-invest-pair">
+            <span>
+              <small>累计收益</small>
+              <LedgerAmount
+                value={declaredInvestmentPnl(ledger, currency)}
+                currency={currency}
+                hidden={hidden}
+              />
+            </span>
+            <span>
+              <small>今年收益</small>
+              <span className="simple-amount unknown">
+                <span>{hidden ? "••••" : "暂无"}</span>
+                <small>{currency || "币种未登记"}</small>
+              </span>
+            </span>
           </span>
         </button>
         <button className="simple-home-cashflow" onClick={() => go("cashflow")}>
           <span className="simple-home-label">
-            <span>
-              <Wallet size={19} />
-              年度现金流
-            </span>
-            <ChevronRight size={18} />
+            <span>年度现金流</span>
           </span>
-          <LedgerAmount
-            value={budget.surplus}
-            currency={budget.currency}
-            hidden={hidden}
-          />
-          <span className="simple-home-caption">预估年度结余 · 预算规划</span>
-          <span className="simple-budget-pair">
-            <span>
-              <ArrowDownLeft size={16} />
-              收入
-              <LedgerAmount
-                value={budget.income}
-                currency={budget.currency}
-                hidden={hidden}
-              />
-            </span>
-            <span>
-              <ArrowUpRight size={16} />
-              支出
-              <LedgerAmount
-                value={budget.expense}
-                currency={budget.currency}
-                hidden={hidden}
-              />
-            </span>
+          <span className="simple-home-return">
+            {hidden
+              ? "••••"
+              : savingsRate === null
+                ? "待规划"
+                : displayRatio(savingsRate).replace(/^约 /, "") + "%"}
+            <small>{savingsRate === null ? "规划年度收支" : "储蓄率"}</small>
+          </span>
+          <span
+            className="simple-cashflow-preview"
+            role="img"
+            aria-label={hidden ? "预算金额已隐藏" : "已登记年度支出与结余占比"}
+          >
+            {!hidden && flowKnown ? (
+              <>
+                {flowParts
+                  .filter((part) => part.amount !== "0")
+                  .map((part) => (
+                    <i
+                      key={part.kind}
+                      className={"simple-cashflow-part " + part.kind}
+                      style={{
+                        width:
+                          Number(ratio(part.amount, budget.income)) * 100 + "%",
+                      }}
+                    />
+                  ))}
+                <i
+                  className="simple-cashflow-part surplus"
+                  style={{
+                    width:
+                      Number(ratio(budget.surplus, budget.income)) * 100 + "%",
+                  }}
+                />
+              </>
+            ) : (
+              <small>{hidden ? "金额已隐藏" : "尚未完善收支预算"}</small>
+            )}
           </span>
         </button>
       </div>
-      <details className="simple-basis">
-        <summary>估算范围与精度</summary>
-        <p>
-          按本人登记汇率折算；缺金额、币种或正汇率保持未知。非终止除法按 18
-          位有效数字四舍五入，原金额与汇率不改。不自动补历史、不从当前估值合成收益率。
-        </p>
-      </details>
     </div>
   );
 }

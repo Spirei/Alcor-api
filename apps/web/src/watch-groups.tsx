@@ -1,4 +1,5 @@
 import { LoadingPlaceholder } from "./loading-placeholder";
+import { useAccountChanges } from "./account-change-context";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { useState as useWorkspaceState } from "react";
 import {
@@ -31,6 +32,9 @@ import {
   groupRecords,
   groupReceipt,
   groupCommand,
+  groupEdit,
+  reviewedGroupEdit,
+  type WatchGroupEdit,
   groupLabel,
   groupRecordsPath,
   visibilityOptions,
@@ -42,7 +46,7 @@ import {
 } from "./watch-groups-state";
 import "./watch-groups.css";
 const base = "/watch-groups";
-type Edit = { name: string; visible: string };
+type Edit = WatchGroupEdit;
 type Broker = { id: string; name: string };
 export function WatchGroupsPage({
   session,
@@ -84,6 +88,9 @@ function WatchGroupsSession({
   const [watchDisplay, setWatchDisplay] = useState<WatchDisplayState | null>(
     null,
   );
+  const [groupRecheck, setGroupRecheck] = useState(0);
+  const [displayRecheck, setDisplayRecheck] = useState(0);
+  const [recordsFresh, setRecordsFresh] = useState(false);
   const [sourceBlocked, setSourceBlocked] = useState(false);
   const sourcePending = useRef(false);
   const changeSourceBlocked = useCallback((value: boolean) => {
@@ -143,11 +150,25 @@ function WatchGroupsSession({
     displayRevision.current = null;
     setRecords(null);
     setBrokers(null);
+    setRecordsFresh(false);
     setSelected([]);
     setRecordError("");
     setDirectoryError("");
     setPage(1);
     setRecordRefresh((v) => v + 1);
+  }, []);
+  const recheckMembers = useCallback(() => {
+    ++recordRead.current;
+    financial.current?.abort();
+    financial.current = null;
+    collection.current = null;
+    displayRevision.current = null;
+    setRecordsFresh(false);
+    setSelected([]);
+    setDeleting(null);
+    setReceipt(null);
+    setPage(1);
+    setRecordRefresh((value) => value + 1);
   }, []);
   const pause = useCallback(() => {
     live.current = false;
@@ -259,7 +280,7 @@ function WatchGroupsSession({
   }, [displayed, fail]);
   useEffect(() => {
     if (active && visible && !locked) void load();
-  }, [active, visible, locked, load]);
+  }, [active, visible, locked, load, groupRecheck]);
   const loadRecords = useCallback(async () => {
     if (!live.current || !displayed()) return;
     if (page > 1 && collection.current === null) {
@@ -271,8 +292,7 @@ function WatchGroupsSession({
       controller = new AbortController();
     financial.current?.abort();
     financial.current = controller;
-    setRecords(null);
-    setBrokers(null);
+    setRecordsFresh(false);
     setSelected([]);
     setRecordError("");
     setDirectoryError("");
@@ -321,6 +341,7 @@ function WatchGroupsSession({
         collection.current = value.collectionRevision;
         displayRevision.current = value.displayRevision ?? null;
         setRecords(value);
+        setRecordsFresh(true);
       } catch (reason) {
         setRecordError(reason instanceof Error ? reason.message : "记录待核对");
       }
@@ -350,16 +371,33 @@ function WatchGroupsSession({
     if (financial.current === controller) financial.current = null;
   }, [page, view, account, displayed, fail]);
   useEffect(() => {
-    if (members && active && visible && !locked) void loadRecords();
+    if (
+      members &&
+      workspaceSection === "members" &&
+      active &&
+      visible &&
+      !locked
+    )
+      void loadRecords();
   }, [
     members,
     active,
     visible,
     locked,
-    groups?.revision,
+    workspaceSection,
     recordRefresh,
     loadRecords,
   ]);
+  useAccountChanges(["watch", "brokers", "portfolio"], (change) => {
+    if (change.retire) {
+      fail(new ApiError(403, "登录或权限已变化，请重新登录后读取。"));
+      return;
+    }
+    recheckMembers();
+    setGroupRecheck((value) => value + 1);
+    if (change.domains.includes("watch"))
+      setDisplayRecheck((value) => value + 1);
+  });
   function changeRecordFilter(nextView: string, nextAccount: string) {
     clearFinancial();
     setView(nextView);
@@ -385,6 +423,12 @@ function WatchGroupsSession({
       setPending(null);
       rejected.current = undefined;
       if (action.current === "create") setName("");
+      if (action.current === "update" && value.group)
+        setEdits((previous) => {
+          const next = { ...previous };
+          delete next[value.group!.id];
+          return next;
+        });
       action.current = null;
     }
     setLookup(id);
@@ -464,7 +508,8 @@ function WatchGroupsSession({
       sourcePending.current ||
       !ready ||
       !journalReady ||
-      !groups
+      !groups ||
+      (kind === "assign" && !recordsFresh)
     )
       return;
     const id = requestId(),
@@ -605,7 +650,10 @@ function WatchGroupsSession({
         <h1>自选分组</h1>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => {
+            recheckMembers();
+            void load();
+          }}
           disabled={busy || !active || !visible || locked}
         >
           刷新
@@ -672,7 +720,20 @@ function WatchGroupsSession({
             all={groups.groups}
             disabled={disabled}
             edits={edits}
-            onEdit={(id, edit) => setEdits((old) => ({ ...old, [id]: edit }))}
+            revision={groups.revision}
+            onEdit={(id, edit) =>
+              setEdits((old) => ({
+                ...old,
+                [id]: groupEdit(groups, id, edit, old[id]),
+              }))
+            }
+            onReview={(id, edit) => {
+              setEdits((old) => ({
+                ...old,
+                [id]: reviewedGroupEdit(groups, id, edit, groups.revision),
+              }));
+              setNotice("");
+            }}
             onSave={(g, edit) => void mutate("update", { id: g.id, ...edit })}
             onDelete={setDeleting}
             onReorder={reorder}
@@ -771,12 +832,13 @@ function WatchGroupsSession({
                         )?.id || view
                   }
                   active={active && visible && !locked}
-                  blocked={disabled}
+                  blocked={disabled || !recordsFresh}
+                  recheck={displayRecheck}
                   onState={(value) => {
                     setWatchDisplay(value);
                     setSelected([]);
                   }}
-                  onChanged={clearFinancial}
+                  onChanged={recheckMembers}
                   onDenied={fail}
                 />
                 <WatchGroupRecords
@@ -794,7 +856,7 @@ function WatchGroupsSession({
                   records={records}
                   groups={groups?.groups ?? []}
                   selected={selected}
-                  disabled={disabled}
+                  disabled={disabled || !recordsFresh}
                   onSelect={(id, checked) =>
                     setSelected((old) =>
                       checked
@@ -809,12 +871,12 @@ function WatchGroupsSession({
                     value={target}
                     options={targetOptions}
                     onChange={setTarget}
-                    disabled={disabled}
+                    disabled={disabled || !recordsFresh}
                     variant="field"
                   />
                   <button
                     type="button"
-                    disabled={disabled || !selected.length}
+                    disabled={disabled || !recordsFresh || !selected.length}
                     onClick={() =>
                       void mutate("assign", { ids: selected, groupId: target })
                     }
@@ -941,6 +1003,8 @@ export function WatchGroupRows({
   all,
   disabled,
   edits,
+  revision,
+  onReview,
   onEdit,
   onSave,
   onDelete,
@@ -950,6 +1014,8 @@ export function WatchGroupRows({
   all: WatchGroup[];
   disabled: boolean;
   edits: Record<string, Edit>;
+  revision?: number;
+  onReview?: (id: string, edit: Edit) => void;
   onEdit: (id: string, edit: Edit) => void;
   onSave: (group: WatchGroup, edit: Edit) => void;
   onDelete: (group: WatchGroup) => void;
@@ -989,6 +1055,27 @@ export function WatchGroupRows({
                 disabled={disabled}
                 variant="field"
               />
+              {edit.expectedRevision !== undefined &&
+                revision !== undefined &&
+                edit.expectedRevision !== revision && (
+                  <div className="watch-group-draft-conflict" role="status">
+                    <span>
+                      分组目录已更新，当前为：{g.name} ·{" "}
+                      {
+                        visibilityOptions.find(
+                          (option) => option.value === String(g.visible),
+                        )?.label
+                      }
+                    </span>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => onReview?.(g.id, edit)}
+                    >
+                      核对当前版本并保留修改
+                    </button>
+                  </div>
+                )}
               <div className="watch-group-row-actions">
                 <button
                   type="button"

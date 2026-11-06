@@ -16,6 +16,7 @@ import type {
 } from "./preference-draft";
 export type { AvatarStatus } from "./preference-draft";
 import { AccountPreferenceContext as Context } from "./account-preference-context";
+import { useAccountChanges } from "./account-change-context";
 export {
   useAccountStatus,
   useAccountAppearance,
@@ -61,6 +62,9 @@ export function AccountPreferencesProvider({
     lastAppearance = useRef("");
   current.current = appearance;
   statusRef.current = status;
+  useAccountChanges(["settings"], () => {
+    if (!document.hidden && !saving.current) retryRead.current();
+  });
   function cache(value = current.current.settings) {
     try {
       localStorage.setItem(appearanceKey, JSON.stringify(value));

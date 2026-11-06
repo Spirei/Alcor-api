@@ -1,22 +1,30 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useConfirmationDialog } from "./confirm-dialog";
 import {
   ArrowDown,
   ArrowUp,
   ChevronLeft,
   ChevronRight,
+  Bell,
+  MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
   Wallet,
 } from "lucide-react";
 import { SelectMenu } from "./select-menu";
+import { Dialog } from "./dialog";
+import { LedgerAmount } from "./simple-app-overview";
 import { WorkspaceTabs } from "./workspace-ui";
 import { SimpleOverview } from "./simple-app-overview";
 import { SimpleBudgetFlow } from "./simple-budget-flow";
 import { SimpleFamilyOverview } from "./simple-family-overview";
+import { changeSimpleLedgerStep } from "./simple-app-navigation";
 import {
   budgetSummary,
+  declaredInvestmentPnl,
+  declaredInvestmentAnnual,
+  displayDecimal,
   displayRatio,
   ledgerMonthCells,
   shiftLedgerMonth,
@@ -24,6 +32,7 @@ import {
 import { requestId } from "./request-id";
 import {
   add,
+  appendInvestmentObservation,
   amountIn,
   annual,
   categories,
@@ -53,6 +62,13 @@ type Props = {
   context: Row;
   patch: (ledger: Row) => void;
   go: (page: Page, context?: Row) => void;
+  onEditingChange?: (editing: boolean) => void;
+  filters?: { member: string; investment: string; archived: boolean };
+  onFiltersChange?: (filters: {
+    member: string;
+    investment: string;
+    archived: boolean;
+  }) => void;
 };
 const show = (value: string | null) => (value === null ? "未知" : value);
 const today = () => {
@@ -90,6 +106,22 @@ const markets = [
   "TW",
   "BR",
 ];
+const marketFlags: Record<string, string> = {
+  US: "🇺🇸",
+  HK: "🇭🇰",
+  CN: "🇨🇳",
+  JP: "🇯🇵",
+  KR: "🇰🇷",
+  SG: "🇸🇬",
+  UK: "🇬🇧",
+  DE: "🇩🇪",
+  FR: "🇫🇷",
+  AU: "🇦🇺",
+  CA: "🇨🇦",
+  IN: "🇮🇳",
+  TW: "🇹🇼",
+  BR: "🇧🇷",
+};
 function Field({
   label,
   value,
@@ -219,6 +251,9 @@ function PageBody({
   patch,
   go,
   ask,
+  onEditingChange,
+  filters,
+  onFiltersChange,
 }: Props & {
   ask: (
     message: string,
@@ -227,10 +262,25 @@ function PageBody({
 }) {
   const currency = text(ledger.displayCur),
     t = totals(ledger, currency);
-  const [member, setMember] = useState(""),
-    [filter, setFilter] = useState(""),
-    [archived, setArchived] = useState(false),
+  const [localMember, setMemberLocal] = useState(""),
+    [localFilter, setFilterLocal] = useState(""),
+    [localArchived, setArchivedLocal] = useState(false),
     [error, setError] = useState("");
+  const member = filters?.member ?? localMember,
+    filter = filters?.investment ?? localFilter,
+    archived = filters?.archived ?? localArchived;
+  const setMember = (value: string) => {
+      setMemberLocal(value);
+      onFiltersChange?.({ member: value, investment: filter, archived });
+    },
+    setFilter = (value: string) => {
+      setFilterLocal(value);
+      onFiltersChange?.({ member, investment: value, archived });
+    },
+    setArchived = (value: boolean) => {
+      setArchivedLocal(value);
+      onFiltersChange?.({ member, investment: filter, archived: value });
+    };
   const category = (
     categories.includes(text(context.cat) as Category)
       ? text(context.cat)
@@ -271,24 +321,111 @@ function PageBody({
     patch({ ...ledger, [cat]: move(rows(ledger[cat]), index, direction) });
   function cards(cat: Category, list = rows(ledger[cat])) {
     const all = rows(ledger[cat]);
+    if (cat === "invest")
+      return (
+        <div className="simple-invest-assets">
+          {!list.length && <p className="simple-empty">还没有投资资产</p>}
+          {list.map((row, i) => {
+            const index = all.indexOf(row),
+              pnl = add(
+                decimal(row.amount),
+                negate(add(decimal(row.inAmt), negate(decimal(row.outAmt)))),
+              ),
+              annualReturn = performance(
+                rows(row.hist),
+                row.historyComplete === true &&
+                  Array.isArray(row.hist) &&
+                  rows(row.hist).length === row.hist.length,
+                today(),
+              ).annual;
+            return (
+              <article className="simple-invest-asset" key={text(row.id) || i}>
+                <header>
+                  <button
+                    className="simple-invest-name"
+                    onClick={() => go("account", { account: row.id ?? "" })}
+                  >
+                    {marketFlags[text(row.market)] && (
+                      <span className="simple-invest-market" aria-hidden="true">
+                        {marketFlags[text(row.market)]}
+                      </span>
+                    )}
+                    <strong>{text(row.name) || "未命名"}</strong>
+                    <small>
+                      {text(row.market)}
+                      {row.archived === true ? " · 已归档" : ""}
+                    </small>
+                  </button>
+                  <InvestmentObservation
+                    ledger={ledger}
+                    row={row}
+                    patch={patch}
+                    compact
+                    onEditingChange={onEditingChange}
+                  />
+                  <SelectMenu
+                    label={`${text(row.name)}操作`}
+                    value=""
+                    variant="compact"
+                    triggerIcon={<MoreHorizontal size={18} />}
+                    options={[
+                      { value: "", label: "操作" },
+                      { value: "edit", label: "账户设置" },
+                      ...(index > 0 ? [{ value: "up", label: "上移" }] : []),
+                      ...(index < all.length - 1
+                        ? [{ value: "down", label: "下移" }]
+                        : []),
+                      { value: "remove", label: "移除草稿项" },
+                    ]}
+                    onChange={(value) => {
+                      if (value === "edit")
+                        go("settings", { account: row.id ?? "" });
+                      else if (value === "up") order(cat, index, -1);
+                      else if (value === "down") order(cat, index, 1);
+                      else if (value === "remove") void remove(row, cat);
+                    }}
+                  />
+                </header>
+                <button
+                  className="simple-invest-metrics"
+                  onClick={() => go("account", { account: row.id ?? "" })}
+                >
+                  <span>
+                    <small>资产 ({text(row.cur) || "币种未知"})</small>
+                    <b>{ledger.hide ? "••••" : show(decimal(row.amount))}</b>
+                  </span>
+                  <span>
+                    <small>累计收益</small>
+                    <b>{ledger.hide ? "••••" : show(pnl)}</b>
+                  </span>
+                  <span>
+                    <small>年化收益率</small>
+                    <b>
+                      {ledger.hide
+                        ? "••••"
+                        : annualReturn === null
+                          ? "暂无"
+                          : displayRatio(annualReturn).replace(/^约 /, "") +
+                            "%"}
+                    </b>
+                  </span>
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      );
     return (
       <div className="simple-asset-list">
         {!list.length && (
           <div className="simple-empty">
             <Wallet size={28} />
             <h4>还没有{labels[cat]}</h4>
-            <p>添加本人登记的资产，保留原币与归属。</p>
           </div>
         )}
         {list.map((row, i) => {
           const index = all.indexOf(row);
-          const open = () =>
-            go(
-              cat === "invest" ? "account" : "editItem",
-              cat === "invest"
-                ? { account: row.id ?? "" }
-                : { cat, itemId: row.id ?? "" },
-            );
+          const open = () => go("editItem", { cat, itemId: row.id ?? "" });
           return (
             <article
               className="simple-asset-row"
@@ -299,12 +436,7 @@ function PageBody({
               </span>
               <button className="simple-asset-main" onClick={open}>
                 <strong>{text(row.name) || "未命名"}</strong>
-                <small>
-                  {text(row.owner) || "成员未登记"}
-                  {cat === "invest"
-                    ? ` · ${text(row.bucket) || "类别未登记"} · ${text(row.market) || "市场未登记"}${row.archived === true ? " · 已归档" : ""}`
-                    : ""}
-                </small>
+                <small>{text(row.owner) || "成员未登记"}</small>
               </button>
               <span className="simple-asset-value">
                 {ledger.hide ? "••••" : text(row.amount) || "金额未知"}
@@ -330,11 +462,7 @@ function PageBody({
                 <button
                   className="icon-button"
                   aria-label={`编辑${text(row.name)}`}
-                  onClick={() =>
-                    cat === "invest"
-                      ? go("settings", { account: row.id ?? "" })
-                      : open()
-                  }
+                  onClick={open}
                 >
                   <Pencil size={16} />
                 </button>
@@ -377,6 +505,7 @@ function PageBody({
           );
         }}
         error={error}
+        onEditingChange={onEditingChange}
       />
     );
   }
@@ -472,35 +601,44 @@ function PageBody({
         </p>
       </>
     );
-  if (page === "cashflow") return <Cashflow ledger={ledger} patch={patch} />;
+  if (page === "cashflow")
+    return (
+      <Cashflow
+        ledger={ledger}
+        patch={patch}
+        onEditingChange={onEditingChange}
+        ask={ask}
+      />
+    );
   if (page === "family")
     return (
       <>
-        <div className="simple-section-title">
-          <h3>家庭资产与历史</h3>
-          <div className="module-actions">
-            <button className="button secondary" onClick={() => go("manage")}>
-              家庭成员
-            </button>
-            <button className="button secondary" onClick={() => go("update")}>
-              <Pencil size={16} />
-              更新资产
-            </button>
-          </div>
+        <h3 className="simple-nav-title">家庭资产记账</h3>
+        <div className="simple-member-filter">
+          <WorkspaceTabs
+            label="家庭成员筛选"
+            value={member}
+            onChange={setMember}
+            items={[
+              { value: "", label: "全部" },
+              ...rows(ledger.members)
+                .filter((row) => row.show !== false && text(row.name))
+                .map((row) => ({
+                  value: text(row.name),
+                  label: text(row.name),
+                })),
+            ]}
+          />
+          <button className="simple-ghost" onClick={() => go("manage")}>
+            管理 ›
+          </button>
         </div>
-        <WorkspaceTabs
-          label="家庭成员筛选"
-          value={member}
-          onChange={setMember}
-          items={[
-            { value: "", label: "全部" },
-            ...rows(ledger.members)
-              .filter((row) => row.show !== false && text(row.name))
-              .map((row) => ({ value: text(row.name), label: text(row.name) })),
-          ]}
+        <SimpleFamilyOverview
+          ledger={ledger}
+          member={member}
+          patch={patch}
+          go={go}
         />
-        <SimpleFamilyOverview ledger={ledger} member={member} patch={patch} />
-        <p>成员历史快照若未标归属不与当前成员资产混合。</p>
         <History
           rows={rows(ledger.snaps).filter(
             (r) => !member || text(r.owner) === member,
@@ -511,6 +649,14 @@ function PageBody({
           label="已登记家庭资产快照"
         />
         <Snapshot ledger={ledger} patch={patch} />
+        <div className="simple-ledger-dock">
+          <button
+            className="simple-primary"
+            onClick={() => go("update", { cat: "cash" })}
+          >
+            更新资产
+          </button>
+        </div>
       </>
     );
   if (page === "calendar") return <Calendar ledger={ledger} />;
@@ -523,11 +669,66 @@ function PageBody({
     );
     return (
       <>
-        <div className="simple-section-title">
-          <h3>投资记账</h3>
-          <button onClick={() => go("summary")}>
-            投资汇总
-            <ChevronRight size={16} />
+        <div className="simple-section-title simple-invest-heading">
+          <h3 className="simple-nav-title">投资记账</h3>
+          <button className="simple-reminder" onClick={() => go("settings")}>
+            <Bell size={13} />
+            {text(ledger.reminder) && text(ledger.reminder) !== "0"
+              ? `每月${text(ledger.reminder)}日`
+              : "记账提醒"}
+          </button>
+        </div>
+        <h4>分组汇总</h4>
+        <div className="simple-summary-strip">
+          <button className="simple-summary-card" onClick={() => go("summary")}>
+            <small>默认汇总 ({currency || "币种未知"})</small>
+            <LedgerAmount
+              value={t.invest}
+              currency={currency}
+              hidden={ledger.hide === true}
+            />
+            <div className="simple-summary-metric-pair">
+              <span>
+                <small>累计收益</small>
+                <b>
+                  {ledger.hide
+                    ? "••••"
+                    : show(declaredInvestmentPnl(ledger, currency))}
+                </b>
+              </span>
+              <span>
+                <small>年化收益率</small>
+                <b>
+                  {ledger.hide
+                    ? "••••"
+                    : declaredInvestmentAnnual(ledger) === null
+                      ? "暂无"
+                      : displayRatio(declaredInvestmentAnnual(ledger)).replace(
+                          /^约 /,
+                          "",
+                        ) + "%"}
+                </b>
+              </span>
+            </div>
+          </button>
+          {rows(ledger.summaries).map((row) => (
+            <button
+              className="simple-summary-card"
+              key={text(row.id)}
+              onClick={() => go("summary", { summaryId: row.id ?? "" })}
+            >
+              <strong>{text(row.name)}</strong>
+              <small>
+                {Array.isArray(row.ids) ? row.ids.length : "未知"} 项资产
+              </small>
+            </button>
+          ))}
+          <button
+            className="simple-add-summary"
+            onClick={() => go("addSummary")}
+          >
+            <Plus size={22} />
+            <span>添加汇总</span>
           </button>
         </div>
         <div className="simple-filter-bar">
@@ -560,14 +761,13 @@ function PageBody({
             查看已归档账户
           </label>
         </div>
-        <div className="module-actions">
+        {cards("invest", visible)}
+        <div className="module-actions simple-invest-add">
           <button className="button secondary" onClick={() => go("addInvest")}>
             <Plus size={16} />
-            添加投资账户
+            添加投资资产
           </button>
-          <button onClick={() => go("addSummary")}>创建自定义汇总</button>
         </div>
-        {cards("invest", visible)}
       </>
     );
   }
@@ -668,23 +868,24 @@ function PageBody({
           currency={text(investment.cur)}
           values={{ invest: decimal(investment.amount), pnl }}
         />
-        <Returns ledger={ledger} row={investment} patch={patch} />
-        <button
-          onClick={() => go("settings", { account: investment.id ?? "" })}
-        >
-          账户设置
-        </button>
-        <button
-          onClick={() => {
-            void navigator.clipboard
-              ?.writeText(
-                `${text(investment.name)}\n${text(investment.amount) || "未知"} ${text(investment.cur)}\n登记收益 ${show(pnl)}`,
-              )
-              .catch(() => setError("复制不可用，请手动选择摘要"));
-          }}
-        >
-          复制登记摘要
-        </button>
+        <div className="simple-account-actions">
+          <button
+            onClick={() => go("settings", { account: investment.id ?? "" })}
+          >
+            账户设置
+          </button>
+          <button
+            onClick={() => {
+              void navigator.clipboard
+                ?.writeText(
+                  `${text(investment.name)}\n${text(investment.amount) || "未知"} ${text(investment.cur)}\n登记收益 ${show(pnl)}`,
+                )
+                .catch(() => setError("复制不可用，请手动选择摘要"));
+            }}
+          >
+            复制登记摘要
+          </button>
+        </div>
         <History
           rows={rows(investment.hist)}
           dateField="d"
@@ -696,7 +897,16 @@ function PageBody({
           }
           label="投资原始观察"
         />
-        <InvestmentObservation ledger={ledger} row={investment} patch={patch} />
+        <details className="simple-return-method">
+          <summary>收益口径与完整性</summary>
+          <Returns ledger={ledger} row={investment} patch={patch} />
+        </details>
+        <InvestmentObservation
+          ledger={ledger}
+          row={investment}
+          patch={patch}
+          onEditingChange={onEditingChange}
+        />
         {error && <p role="alert">{error}</p>}
       </>
     );
@@ -719,6 +929,7 @@ function PageBody({
               go("account", { account: row.id ?? "" });
             }}
             error={error}
+            onEditingChange={onEditingChange}
           />
           <button
             onClick={() =>
@@ -745,12 +956,14 @@ function RowEditor({
   members,
   onSave,
   error,
+  onEditingChange,
 }: {
   original?: Row;
   category: Category;
   members: Row[];
   onSave: (row: Row) => void;
   error: string;
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const [draft, setDraft] = useState<Row>(
     original
@@ -765,6 +978,11 @@ function RowEditor({
         },
   );
   const [local, setLocal] = useState("");
+  const initial = useRef(encode(draft));
+  useLayoutEffect(() => {
+    onEditingChange?.(encode(draft) !== initial.current);
+    return () => onEditingChange?.(false);
+  }, [encode(draft)]);
   const field = (key: string, label: string) => (
     <Field
       key={key}
@@ -802,7 +1020,7 @@ function RowEditor({
         {category === "invest" && (
           <>
             <Choice
-              label="市场（不自动推断币种）"
+              label="市场"
               value={text(draft.market)}
               options={markets}
               onChange={(value) => setDraft({ ...draft, market: value })}
@@ -819,12 +1037,9 @@ function RowEditor({
             {field("expected", "预期年化 %（规划值）")}
           </>
         )}
-        {field("date", "登记日期（原值保留；修改请用YYYY-MM-DD）")}
+        {field("date", "登记日期")}
         {field("note", "备注")}
       </div>
-      <p>
-        未编辑的额外字段和历史原样保留。金额修改不自动生成历史观察或资金流。
-      </p>
       {(error || local) && <p role="alert">{error || local}</p>}
       <button
         onClick={() => {
@@ -1339,96 +1554,167 @@ function InvestmentObservation({
   ledger,
   row,
   patch,
+  compact = false,
+  onEditingChange,
 }: {
   ledger: Row;
   row: Row;
   patch: Props["patch"];
+  compact?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 }) {
-  const [date, setDate] = useState(""),
+  const [date, setDate] = useState(today()),
     [value, setValue] = useState(""),
     [incoming, setIncoming] = useState(""),
     [outgoing, setOutgoing] = useState(""),
-    [current, setCurrent] = useState(false),
-    [error, setError] = useState("");
+    [flow, setFlow] = useState<"unknown" | "none" | "some">("unknown"),
+    [error, setError] = useState(""),
+    [open, setOpen] = useState(false);
+  useLayoutEffect(() => {
+    onEditingChange?.(open);
+    return () => onEditingChange?.(false);
+  }, [open]);
+  const currency = text(row.cur),
+    symbol: Record<string, string> = {
+      CNY: "¥",
+      USD: "$",
+      HKD: "HK$",
+      JPY: "¥",
+      GBP: "£",
+      EUR: "€",
+    };
+  function commit() {
+    try {
+      const next = appendInvestmentObservation(
+        row,
+        { date, amount: value, flow, incoming, outgoing },
+        today(),
+      );
+      patch(patchRow(ledger, "invest", next));
+      setValue("");
+      setIncoming("");
+      setOutgoing("");
+      setFlow("unknown");
+      setDate(today());
+      setError("");
+      setOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "记录未加入草稿");
+    }
+  }
   return (
-    <details>
-      <summary>明确添加一次估值/资金流观察</summary>
-      <Field
-        label="观察日期（明确填写）"
-        type="date"
-        value={date}
-        onChange={setDate}
-      />
-      <Field label="当日资产金额" value={value} onChange={setValue} />
-      <Field
-        label="当日投入（无投入需明确填0；未知留空）"
-        value={incoming}
-        onChange={setIncoming}
-      />
-      <Field
-        label="当日转出（无转出需明确填0；未知留空）"
-        value={outgoing}
-        onChange={setOutgoing}
-      />
-      <label>
-        <input
-          type="checkbox"
-          checked={current}
-          onChange={(e) => setCurrent(e.target.checked)}
-        />
-        同时更新当前登记金额及已知累计投入/转出
-      </label>
-      <button
-        onClick={() => {
-          if (row.hist !== undefined && !Array.isArray(row.hist)) {
-            setError("原历史不是可识别数组，不能覆盖；请先核对原件");
-            return;
-          }
-          if (!day(date) || date > today() || decimal(value) === null) {
-            setError("需真实有效观察日期及明确估值");
-            return;
-          }
-          if (
-            (incoming && decimal(incoming) === null) ||
-            (outgoing && decimal(outgoing) === null)
-          ) {
-            setError("资金流格式无效");
-            return;
-          }
-          const observation: Row = {
-            d: date,
-            v: value,
-            inn: incoming || null,
-            out: outgoing || null,
-          };
-          let next: Row = {
-            ...row,
-            historyComplete: false,
-            hist: [...(Array.isArray(row.hist) ? row.hist : []), observation],
-          };
-          if (current)
-            next = {
-              ...next,
-              amount: value,
-              updated: date,
-              inAmt: add(decimal(row.inAmt), decimal(incoming)),
-              outAmt: add(decimal(row.outAmt), decimal(outgoing)),
-            };
-          patch(patchRow(ledger, "invest", next));
-          setDate("");
-          setValue("");
-          setIncoming("");
-          setOutgoing("");
-          setError("");
-        }}
-      >
-        将原观察加入草稿（不改旧记录）
-      </button>
-      <p>
-        相同日期可有多次明确观察，按原顺序保留；不自动去重、修复或平移收益曲线。
-      </p>
-      {error && <p role="alert">{error}</p>}
-    </details>
+    <>
+      <div className={compact ? "simple-invest-update" : "simple-ledger-dock"}>
+        <button
+          className={compact ? "simple-ghost" : "simple-primary"}
+          disabled={!text(row.id)}
+          onClick={() => setOpen(true)}
+        >
+          更新收益
+        </button>
+      </div>
+      {open && (
+        <Dialog
+          title="更新收益"
+          className="simple-observation-dialog simple-income-dialog"
+          onClose={() => setOpen(false)}
+        >
+          <div className="simple-dialog-body">
+            <p className="simple-observation-note">
+              {text(row.updated)
+                ? `上次更新 ${text(row.updated).replaceAll("-", "/")} 至今，`
+                : ""}
+              记下市值变化；有资金进出时一并登记投入或转出。
+            </p>
+            <div className="simple-field">
+              <span>资金进出</span>
+              <div
+                className="simple-flow-choice"
+                role="group"
+                aria-label="资金进出"
+              >
+                <button
+                  aria-pressed={flow === "some"}
+                  onClick={() => setFlow("some")}
+                >
+                  有资金进出
+                </button>
+                <button
+                  aria-pressed={flow === "none"}
+                  onClick={() => setFlow("none")}
+                >
+                  没有资金进出
+                </button>
+              </div>
+            </div>
+            {flow === "some" && (
+              <div className="simple-observation-flows">
+                <Field
+                  label={`投入 (${currency || "币种未知"})`}
+                  value={incoming}
+                  onChange={setIncoming}
+                />
+                <Field
+                  label={`转出 (${currency || "币种未知"})`}
+                  value={outgoing}
+                  onChange={setOutgoing}
+                />
+              </div>
+            )}
+            <label className="simple-field">
+              <span className="simple-money-label">
+                <span>当前资产金额</span>
+                <small>{currency || "币种未登记"}</small>
+              </span>
+              <span className="simple-money-input">
+                <span>{symbol[currency] || ""}</span>
+                <input
+                  aria-label="当前资产金额"
+                  data-dialog-autofocus
+                  inputMode="decimal"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                />
+                <small>{currency}</small>
+              </span>
+            </label>
+            <dl className="simple-observation-preview">
+              <div>
+                <dt>记账前</dt>
+                <dd>
+                  {ledger.hide ? "••••" : show(decimal(row.amount))} {currency}
+                </dd>
+              </div>
+              <div>
+                <dt>记账后</dt>
+                <dd>
+                  {ledger.hide ? "••••" : decimal(value) === null ? "—" : value}{" "}
+                  {currency}
+                </dd>
+              </div>
+            </dl>
+            <Field
+              label="记账日期"
+              type="date"
+              value={date}
+              onChange={setDate}
+            />
+            {flow === "some" && (
+              <p className="simple-value-basis">
+                没有投入或转出时请明确填 0，留空保留未知。
+              </p>
+            )}
+            {error && <p role="alert">{error}</p>}
+            <footer className="simple-observation-actions">
+              <button className="secondary" onClick={() => setOpen(false)}>
+                取消
+              </button>
+              <button onClick={commit}>确认并加入草稿</button>
+            </footer>
+          </div>
+        </Dialog>
+      )}
+    </>
   );
 }
 function Snapshot({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
@@ -1614,88 +1900,258 @@ function Calendar({ ledger }: { ledger: Row }) {
   );
 }
 
-function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
+function Cashflow({
+  ledger,
+  patch,
+  onEditingChange,
+  ask,
+}: {
+  ledger: Row;
+  patch: Props["patch"];
+  onEditingChange?: (editing: boolean) => void;
+  ask: (
+    message: string,
+    options?: { title?: string; confirmLabel?: string },
+  ) => Promise<boolean>;
+}) {
   const cf = object(ledger.cashflow);
   const [step, setStep] = useState(
-      cf.completed === true ? "overview" : "intro",
+      cf.completed === true
+        ? "overview"
+        : cf.started === true
+          ? "income"
+          : "intro",
     ),
     [editing, setEditing] = useState<Row | null>(null),
     [kind, setKind] = useState<"income" | "expense">("income"),
     [error, setError] = useState("");
+  useLayoutEffect(() => {
+    onEditingChange?.(editing !== null);
+    return () => onEditingChange?.(false);
+  }, [editing !== null]);
   const list = (k: string) =>
     rows(cf[k === "income" ? "incomeItems" : "expenseItems"]);
   const { income, expense, surplus } = budgetSummary(ledger);
+  const currency = text(cf.currency).trim() || "币种未登记",
+    hidden = ledger.hide === true,
+    money = (amount: string | null) =>
+      hidden ? "••••" : amount === null ? "未知" : displayDecimal(amount),
+    savingsRate =
+      income !== null && income !== "0" && !income.startsWith("-")
+        ? multiply(ratio(surplus, income), "100")
+        : null,
+    frequency: Record<string, string> = {
+      month: "月",
+      monthly: "月",
+      quarter: "季度",
+      year: "年",
+      yearly: "年",
+      once: "次",
+      week: "周",
+      day: "天",
+    };
   const save = (next: Row) => patch({ ...ledger, cashflow: next });
-  return (
-    <section className="simple-editor">
-      <h3>年度现金流规划</h3>
-      <Choice
-        label="明确预算币种"
-        value={text(cf.currency)}
-        options={currencyOptions}
-        onChange={(currency) => save({ ...cf, currency })}
-      />
-      <WorkspaceTabs
-        label="现金流规划步骤"
-        value={step}
-        onChange={(next) => {
-          setStep(next);
-          setEditing(null);
-        }}
-        items={[
-          { value: "intro", label: "开始" },
-          { value: "income", label: "收入" },
-          { value: "expense", label: "支出" },
-          { value: "overview", label: "预算追踪" },
-        ]}
-      />
-      <div className="simple-budget-summary">
-        <Metrics
-          hidden={ledger.hide === true}
-          currency={text(cf.currency).trim() || "币种未登记"}
-          values={{ income, expenses: expense, surplus }}
+  const mounted = useRef(false),
+    local = useRef({ step, editing });
+  local.current = { step, editing };
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  function switchStep(next: string) {
+    const source = local.current;
+    return changeSimpleLedgerStep(
+      source.step,
+      next,
+      source.editing !== null,
+      () =>
+        ask("当前预算表单尚未加入草稿，放弃并切换步骤？", {
+          title: "切换现金流步骤",
+          confirmLabel: "放弃并切换",
+        }),
+      (value) => {
+        setStep(value);
+        setEditing(null);
+        setError("");
+      },
+      () =>
+        mounted.current &&
+        local.current.step === source.step &&
+        local.current.editing === source.editing,
+    );
+  }
+  async function editBudget(k: "income" | "expense", row: Row) {
+    if (step !== k && !(await switchStep(k))) return;
+    if (!mounted.current) return;
+    setKind(k);
+    setEditing({ ...row });
+    setError("");
+  }
+  function budgetRow(
+    k: "income" | "expense",
+    row: Row,
+    index: number,
+    tracking = false,
+  ) {
+    const label = text(row.name) || "未命名预算";
+    return (
+      <article
+        className={
+          "simple-budget-row" + (tracking ? " simple-budget-track" : "")
+        }
+        key={text(row.id) || index}
+      >
+        <button
+          className="simple-budget-row-main"
+          onClick={() => void editBudget(k, row)}
+          aria-label={`编辑${label}`}
+        >
+          <strong>{label}</strong>
+          <span>
+            {tracking && <small>年度预算</small>}
+            <b>{money(tracking ? annual(row) : decimal(row.amount))}</b>{" "}
+            <small>{currency}</small>
+            {!tracking && <em>/{frequency[text(row.freq)] || "频率未知"}</em>}
+          </span>
+        </button>
+        <SelectMenu
+          label={`${label}操作`}
+          value=""
+          variant="compact"
+          triggerIcon={<MoreHorizontal size={19} />}
+          options={[
+            { value: "edit", label: "编辑", icon: <Pencil size={15} /> },
+            ...(index > 0
+              ? [{ value: "up", label: "上移", icon: <ArrowUp size={15} /> }]
+              : []),
+            { value: "delete", label: "删除预算", icon: <Trash2 size={15} /> },
+          ]}
+          onChange={async (action) => {
+            if (action === "edit") {
+              void editBudget(k, row);
+              return;
+            }
+            const key = k === "income" ? "incomeItems" : "expenseItems";
+            if (action === "up") {
+              save({ ...cf, [key]: move(list(k), index, -1) });
+              return;
+            }
+            const source = local.current;
+            if (
+              action === "delete" &&
+              (await ask(`删除“${label}”预算？`, {
+                title: "删除预算",
+                confirmLabel: "删除",
+              })) &&
+              mounted.current &&
+              local.current.step === source.step &&
+              local.current.editing === source.editing
+            ) {
+              save({ ...cf, [key]: list(k).filter((_, i) => i !== index) });
+            }
+          }}
         />
-      </div>
-      <p>
-        仅为年度预算，不代表实际收支或现金余额；未登记币种和期间时保留未知。
-      </p>
+      </article>
+    );
+  }
+  return (
+    <section className={"simple-editor simple-cashflow is-" + step}>
+      <h3>
+        {step === "intro"
+          ? `现金流计算器 (${new Date().getFullYear()})`
+          : step === "overview"
+            ? "年度现金流"
+            : `${new Date().getFullYear()} 年现金流`}
+      </h3>
+      {["income", "expense"].includes(step) && (
+        <WorkspaceTabs
+          label="现金流规划步骤"
+          value={step}
+          onChange={(next) => void switchStep(next)}
+          items={[
+            { value: "income", label: "收入预估" },
+            { value: "expense", label: "支出预估" },
+          ]}
+        />
+      )}
       {step === "intro" ? (
         <>
-          <p>逐项登记金额和频率，再明确完成。未知频率不自动当年付。</p>
-          <button
-            onClick={() => {
-              save({ ...cf, started: true });
-              setStep("income");
-            }}
-          >
-            开始规划
-          </button>
-        </>
-      ) : step === "overview" ? (
-        <>
+          <p className="simple-cashflow-intro">
+            预估一年的收入与开支，为自己规划更合理的年度现金流，并追踪开支计划是否与预期吻合。
+          </p>
           <SimpleBudgetFlow
             income={income}
             expense={expense}
             currency={text(cf.currency)}
             hidden={ledger.hide === true}
           />
-          {list("expense").map((r, i) => (
-            <article key={text(r.id) || i}>
-              <strong>{text(r.name)}</strong>
-              <p>
-                年度预估 {show(annual(r))} · 实际月支出 未知 · 实际剩余 未知
-              </p>
-              <button
-                onClick={() => {
-                  setKind("expense");
-                  setEditing(r);
-                  setStep("expense");
-                }}
-              >
-                编辑预算
-              </button>
-            </article>
-          ))}
+          <Choice
+            label="预算币种"
+            value={text(cf.currency)}
+            options={currencyOptions}
+            onChange={(currency) => save({ ...cf, currency })}
+          />
+          <button
+            className="simple-primary"
+            onClick={() => {
+              save({ ...cf, started: true });
+              void switchStep("income");
+            }}
+          >
+            开始计算
+          </button>
+        </>
+      ) : step === "overview" ? (
+        <>
+          <div className="simple-budget-hero">
+            <div className="simple-budget-hero-metrics">
+              <div>
+                <span>预估年度结余</span>
+                <LedgerAmount
+                  value={surplus}
+                  currency={currency}
+                  hidden={hidden}
+                />
+                <small>
+                  预估收入 <b>{money(income)}</b> {currency}
+                </small>
+              </div>
+              <div>
+                <div className="simple-budget-rate-label">
+                  <span>储蓄率</span>
+                  <button onClick={() => void switchStep("income")}>
+                    编辑 <ChevronRight size={13} />
+                  </button>
+                </div>
+                <strong className="simple-budget-rate">
+                  {hidden
+                    ? "••••"
+                    : savingsRate === null
+                      ? "未知"
+                      : displayRatio(savingsRate, 1).replace(/^约 /, "") + "%"}
+                </strong>
+                <small>
+                  预估支出 <b>{money(expense)}</b> {currency}
+                </small>
+              </div>
+            </div>
+            <SimpleBudgetFlow
+              income={income}
+              expense={expense}
+              hidden={hidden}
+            />
+          </div>
+          <div className="simple-section-title">
+            <h4>支出预算追踪</h4>
+          </div>
+          <div className="simple-budget-list">
+            {list("expense").map((r, i) => budgetRow("expense", r, i, true))}
+          </div>
+          {!list("expense").length && (
+            <p className="simple-empty">尚未添加支出预算</p>
+          )}
           {cf.completed !== true && (
             <button onClick={() => save({ ...cf, completed: true })}>
               明确完成规划并加入草稿
@@ -1704,51 +2160,24 @@ function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
         </>
       ) : (
         <>
-          {list(step).map((r, i) => (
-            <article key={text(r.id) || i}>
-              <h4>{text(r.name)}</h4>
-              <p>
-                {text(r.amount) || "未知"} / {text(r.freq) || "频率未知"} ·{" "}
-                {text(r.type)}
-              </p>
-              <button
-                onClick={() => {
-                  setKind(step as "income" | "expense");
-                  setEditing({ ...r });
-                }}
-              >
-                编辑
-              </button>
-              <button
-                onClick={() =>
-                  save({
-                    ...cf,
-                    [step === "income" ? "incomeItems" : "expenseItems"]: list(
-                      step,
-                    ).filter((_, j) => i !== j),
-                  })
-                }
-              >
-                删除草稿项
-              </button>
-              <button
-                disabled={i === 0}
-                onClick={() =>
-                  save({
-                    ...cf,
-                    [step === "income" ? "incomeItems" : "expenseItems"]: move(
-                      list(step),
-                      i,
-                      -1,
-                    ),
-                  })
-                }
-              >
-                上移
-              </button>
-            </article>
-          ))}
+          <div className="simple-budget-estimate-total">
+            <span>{step === "income" ? "预估年度收入" : "预估年度支出"}</span>
+            <LedgerAmount
+              value={step === "income" ? income : expense}
+              currency={currency}
+              hidden={hidden}
+            />
+          </div>
+          <div className="simple-section-title">
+            <h4>{step === "income" ? "收入项" : "支出项"}</h4>
+          </div>
+          <div className="simple-budget-list">
+            {list(step).map((r, i) =>
+              budgetRow(step as "income" | "expense", r, i),
+            )}
+          </div>
           <button
+            className="simple-add-budget"
             onClick={() => {
               setKind(step as "income" | "expense");
               setEditing({
@@ -1761,75 +2190,91 @@ function Cashflow({ ledger, patch }: { ledger: Row; patch: Props["patch"] }) {
               });
             }}
           >
-            添加{step === "income" ? "收入" : "支出"}
+            <span className="simple-budget-kind" aria-hidden="true">
+              {step === "income" ? "收" : "支"}
+            </span>
+            <span>添加{step === "income" ? "收入" : "支出"}</span>
+            <Plus size={19} />
           </button>
           <button
-            onClick={() => setStep(step === "income" ? "expense" : "overview")}
+            className="simple-primary"
+            onClick={() =>
+              void switchStep(step === "income" ? "expense" : "overview")
+            }
           >
-            下一步
+            {step === "income" ? "下一步" : "完成预估"}
           </button>
         </>
       )}
       {editing && (
-        <article>
-          <Field
-            label="名称"
-            value={text(editing.name)}
-            onChange={(name) => setEditing({ ...editing, name })}
-          />
-          <Field
-            label="每期预算金额"
-            value={text(editing.amount)}
-            onChange={(amount) => setEditing({ ...editing, amount })}
-          />
-          <Choice
-            label="频率"
-            value={text(editing.freq)}
-            options={["month", "quarter", "year", "once"]}
-            onChange={(freq) => setEditing({ ...editing, freq })}
-          />
-          {kind === "expense" && (
-            <Choice
-              label="支出类别"
-              value={text(editing.type)}
-              options={["stable", "flexible", "other"]}
-              onChange={(type) => setEditing({ ...editing, type })}
+        <Dialog
+          title={
+            text(editing.name) || (kind === "income" ? "添加收入" : "添加支出")
+          }
+          className="simple-observation-dialog"
+          onClose={() => setEditing(null)}
+        >
+          <div className="simple-dialog-body">
+            <Field
+              label="名称"
+              value={text(editing.name)}
+              onChange={(name) => setEditing({ ...editing, name })}
             />
-          )}
-          <button
-            onClick={() => {
-              if (
-                !text(editing.name).trim() ||
-                decimal(editing.amount) === null ||
-                decimal(editing.amount) === "0" ||
-                decimal(editing.amount)!.startsWith("-") ||
-                !["month", "quarter", "year", "once"].includes(
-                  text(editing.freq),
-                )
-              ) {
-                setError("请明确填写名称、金额和频率");
-                return;
-              }
-              const key = kind === "income" ? "incomeItems" : "expenseItems",
-                old = list(kind),
-                id = text(editing.id);
-              save({
-                ...cf,
-                started: true,
-                [key]: old.some((r) => text(r.id) === id)
-                  ? old.map((r) => (text(r.id) === id ? editing : r))
-                  : [...old, editing],
-              });
-              setEditing(null);
-              setError("");
-            }}
-          >
-            加入预算草稿
-          </button>
-          <button onClick={() => setEditing(null)}>取消编辑</button>
-        </article>
+            <Field
+              label="每期预算金额"
+              value={text(editing.amount)}
+              onChange={(amount) => setEditing({ ...editing, amount })}
+            />
+            <Choice
+              label="频率"
+              value={text(editing.freq)}
+              options={["month", "quarter", "year", "once"]}
+              onChange={(freq) => setEditing({ ...editing, freq })}
+            />
+            {kind === "expense" && (
+              <Choice
+                label="支出类别"
+                value={text(editing.type)}
+                options={["stable", "flexible", "other"]}
+                onChange={(type) => setEditing({ ...editing, type })}
+              />
+            )}
+            <button
+              onClick={() => {
+                if (
+                  !text(editing.name).trim() ||
+                  decimal(editing.amount) === null ||
+                  decimal(editing.amount) === "0" ||
+                  decimal(editing.amount)!.startsWith("-") ||
+                  !["month", "quarter", "year", "once"].includes(
+                    text(editing.freq),
+                  )
+                ) {
+                  setError("请明确填写名称、金额和频率");
+                  return;
+                }
+                const key = kind === "income" ? "incomeItems" : "expenseItems",
+                  old = list(kind),
+                  id = text(editing.id);
+                save({
+                  ...cf,
+                  started: true,
+                  [key]: old.some((r) => text(r.id) === id)
+                    ? old.map((r) => (text(r.id) === id ? editing : r))
+                    : [...old, editing],
+                });
+                setEditing(null);
+                setError("");
+              }}
+            >
+              加入预算草稿
+            </button>
+            <button onClick={() => setEditing(null)}>取消编辑</button>
+            {error && <p role="alert">{error}</p>}
+          </div>
+        </Dialog>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && !editing && <p role="alert">{error}</p>}
     </section>
   );
 }

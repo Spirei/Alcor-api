@@ -7,6 +7,7 @@ import {
   currencyRemovalBlocked,
   brokerCurrencyStatus,
   brokerAccountLabels,
+  restoreBrokerOperation,
   type BrokerAccount,
 } from "../src/broker-account-state.ts";
 const row: BrokerAccount = {
@@ -147,4 +148,31 @@ test("account selectors distinguish duplicate labels without exposing opaque ide
   for (const label of labels.values())
     assert.ok(!label.includes("private-opaque"));
   assert.equal(rows[1].id, "private-opaque-b");
+});
+
+test("a missing broker journal can start a new request, while inaccessible or corrupt journals cannot lose the original UUID", () => {
+  assert.equal(restoreBrokerOperation({ getItem: () => null }, "scope"), null);
+  const original = "9e517576-7d26-4252-9a39-cc05d5799d24";
+  assert.equal(
+    restoreBrokerOperation({ getItem: () => original }, "scope"),
+    original,
+  );
+  assert.throws(() =>
+    restoreBrokerOperation(
+      {
+        getItem: () => {
+          throw new Error("storage unavailable");
+        },
+      },
+      "scope",
+    ),
+  );
+  for (const value of [
+    "",
+    "partially-corrupt-uuid",
+    "9e517576-7d26-4252-9a39-cc05d5799d24 ",
+  ])
+    assert.throws(() =>
+      restoreBrokerOperation({ getItem: () => value }, "scope"),
+    );
 });

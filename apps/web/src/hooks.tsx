@@ -18,9 +18,15 @@ const ResourceContext = createContext<ResourceStore | null>(null);
 function createStore() {
   return new ResourceStore(
     (path, signal) => {
-      if (!managementReadAllowed(path))
-        throw new Error("内容暂时无法读取");
-      return api(path, { signal }, undefined, path === "/deployment" || path.startsWith("/deployment/") ? 30000 : 10000);
+      if (!managementReadAllowed(path)) throw new Error("内容暂时无法读取");
+      return api(
+        path,
+        { signal },
+        undefined,
+        path === "/deployment" || path.startsWith("/deployment/")
+          ? 30000
+          : 10000,
+      );
     },
     {
       isVisible: () => !document.hidden,
@@ -96,4 +102,41 @@ export function useMigrationInvalidation() {
 export function useDeploymentInvalidation() {
   const store = useContext(ResourceContext);
   return useCallback(() => store?.invalidate(["/deployment"], true), [store]);
+}
+
+const domainReads: Record<string, string[]> = {
+  profile: ["/profile"],
+  portfolio: [
+    "/portfolio",
+    "/records",
+    "/account-assets",
+    "/account/cash",
+    "/account/fund",
+    "/account/trading",
+  ],
+  brokers: ["/broker", "/account/broker", "/portfolio", "/account-assets"],
+  watch: ["/watch", "/account/watch", "/records", "/portfolio"],
+  alerts: ["/notifications", "/alerts", "/account/notifications"],
+  resources: ["/resources", "/account/resources"],
+  feed: ["/feed"],
+  settings: [
+    "/account/preferences",
+    "/account/settings",
+    "/fees",
+    "/fire",
+    "/cards",
+  ],
+  authorization: ["/account/", "/devices", "/sources", "/profile"],
+};
+export function useAccountInvalidation() {
+  const store = useContext(ResourceContext);
+  return useCallback(
+    (domains: string[], discard: boolean) => {
+      store?.invalidate(
+        [...new Set(domains.flatMap((domain) => domainReads[domain] || []))],
+        discard,
+      );
+    },
+    [store],
+  );
 }

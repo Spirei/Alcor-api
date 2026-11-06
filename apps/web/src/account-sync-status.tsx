@@ -2,7 +2,18 @@ import { syncRows } from "./sync-status-model";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type Session } from "./api";
-import { RefreshCw } from "lucide-react";
+import {
+  RefreshCw,
+  ListFilter,
+  ReceiptText,
+  MonitorSmartphone,
+  FileInput,
+  ArchiveRestore,
+} from "lucide-react";
+import { Dialog } from "./dialog";
+import { WorkspaceTabs } from "./workspace-ui";
+import { LoadingPlaceholder } from "./loading-placeholder";
+import "./sync-status.css";
 type Domain = {
   commitSignalComplete: boolean;
   state: "observed" | "partial" | "unavailable" | "forbidden";
@@ -149,7 +160,20 @@ function fieldLabel(key: string) {
   return key;
 }
 const time = (value: number | null) =>
-  value === null ? "未知" : new Date(value).toLocaleString("zh-CN");
+  value === null ||
+  !Number.isFinite(value) ||
+  !Number.isFinite(new Date(value).getTime())
+    ? "未知"
+    : new Date(value).toLocaleString("zh-CN");
+const sourceTime = (value: string | null | undefined) =>
+  value && Number.isFinite(Date.parse(value))
+    ? new Date(value).toLocaleString("zh-CN")
+    : "未知";
+const domainGroups = [
+  { label: "账户与资产", keys: ["brokers", "portfolio", "watch"] },
+  { label: "个人内容", keys: ["profile", "resources", "feed"] },
+  { label: "设置与安全", keys: ["alerts", "settings", "authorization"] },
+];
 export function AccountSyncStatus({
   session,
   active,
@@ -191,6 +215,9 @@ function Panel({
     [errors, setErrors] = useState<Record<string, string>>({}),
     [busy, setBusy] = useState(false),
     [epochChanged, setEpochChanged] = useState(false);
+  const [diagnostics, setDiagnostics] = useState(false),
+    [diagnosticSection, setDiagnosticSection] = useState("connection"),
+    [serviceAddress, setServiceAddress] = useState("");
   const epoch = useRef(0),
     alive = useRef(true),
     controller = useRef<AbortController | null>(null),
@@ -205,6 +232,7 @@ function Panel({
     setFees(null);
     setBusy(false);
     setEpochChanged(false);
+    setDiagnostics(false);
   }
   useEffect(() => {
     alive.current = true;
@@ -332,22 +360,51 @@ function Panel({
       if (run === epoch.current) setBusy(false);
     }
   }
+  const rows = signals
+    ? syncRows({
+        ...signals,
+        unrepresentedSources: signals.unrepresentedSources || [],
+      })
+    : [];
   return (
-    <section className="account-sync-panel workspace-ui">
+    <section className="account-sync-panel account-sync-overview workspace-ui">
       <div className="account-sync-toolbar">
-        <span>当前账号同步范围</span>
-        <button
-          className="icon-button"
-          aria-label="刷新同步状态"
-          aria-busy={busy}
-          disabled={busy || !active}
-          onClick={() => void load()}
-        >
-          <RefreshCw size={16} className={busy ? "spin" : undefined} />
-        </button>
+        <span>
+          {signals
+            ? `核对于 ${sourceTime(signals.observedAt)}`
+            : "当前服务变更监测"}
+        </span>
+        <div className="account-sync-toolbar-actions">
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              setServiceAddress(window.location.origin);
+              setDiagnostics(true);
+            }}
+          >
+            诊断详情
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="刷新同步状态"
+            aria-busy={busy}
+            disabled={busy || !active}
+            onClick={() => void load()}
+          >
+            <RefreshCw
+              size={16}
+              className={busy ? "sync-refreshing" : undefined}
+            />
+          </button>
+        </div>
       </div>
+      <p className="sync-scope-note">
+        仅监测当前服务；其他服务的数据不会自动合并。
+      </p>
       {Object.entries(errors).map(([key, value]) => (
-        <p key={key} role="alert">
+        <p key={key} role="alert" className="sync-read-error">
           {
             (
               {
@@ -361,221 +418,425 @@ function Panel({
           · {value}
         </p>
       ))}
-      {epochChanged && <p role="status">来源代次已变化，旧版本不再用于比较</p>}
+      {epochChanged && (
+        <p role="status" className="sync-read-notice">
+          来源已变化，已撤下旧版本。
+        </p>
+      )}
+      {!signals && busy && <LoadingPlaceholder label="正在核对同步范围" />}
       {signals && (
-        <>
-          <div className="sync-status-list" aria-busy={busy}>
-            {syncRows({
-              ...signals,
-              unrepresentedSources: signals.unrepresentedSources || [],
-            }).map((row) => (
-              <div className="sync-status-row" key={row.key}>
-                <div>
-                  <strong>{row.label}</strong>
-                  <small>
-                    {row.changedAt
-                      ? `最近变更 ${new Date(row.changedAt).toLocaleString()}`
-                      : "尚无变更时间"}
-                  </small>
-                </div>
-                <span>{row.status}</span>
+        <div className="sync-domain-groups" aria-busy={busy}>
+          {domainGroups.map((group) => (
+            <section
+              key={group.label}
+              className="sync-domain-group"
+              aria-label={group.label}
+            >
+              <h2>{group.label}</h2>
+              <div>
+                {group.keys.map((key) => {
+                  const row = rows.find((value) => value.key === key)!;
+                  return (
+                    <div className="sync-domain-row" key={key}>
+                      <span>{row.label}</span>
+                      <span
+                        className="sync-domain-state"
+                        data-state={
+                          row.status === "已监测"
+                            ? "observed"
+                            : signals.domains[key]?.state === "forbidden"
+                              ? "forbidden"
+                              : "unknown"
+                        }
+                      >
+                        <i aria-hidden="true" />
+                        {row.status}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            </section>
+          ))}
+        </div>
+      )}
+      <div className="sync-business-groups">
+        <section aria-label="账户管理" className="sync-business-group">
+          <h2>账户管理</h2>
+          <div className="sync-entry-list">
+            <Link className="sync-entry" to="/watch-groups">
+              <ListFilter size={18} />
+              <span>自选分组</span>
+            </Link>
+            <Link className="sync-entry" to="/fees">
+              <ReceiptText size={18} />
+              <span>费用</span>
+            </Link>
+            <button
+              type="button"
+              className="sync-entry"
+              onClick={onOpenDevices}
+            >
+              <MonitorSmartphone size={18} />
+              <span>设备与授权</span>
+            </button>
           </div>
-          <details>
-            <summary>来源与覆盖范围</summary>
-            <p>
-              读取时间 {signals.observedAt} · 平台启用以来的变更范围
-              {signals.legacyComplete === false ? " · 旧来源尚未完整验收" : ""}
-            </p>
-            <div className="workspace-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>类别</th>
-                    <th>状态</th>
-                    <th>当前账号修订</th>
-                    <th>最近变更</th>
-                    <th>来源</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(signals.domains).map(([name, value]) => (
-                    <tr key={name}>
-                      <td>{domainLabels[name] || name}</td>
-                      <td>{states[value.state] || value.state}</td>
-                      <td>
-                        {value.revision === null ? "未知" : value.revision}
-                      </td>
-                      <td>{value.lastChangedAt || "未知"}</td>
-                      <td>
-                        <details>
-                          <summary>
-                            已登记 {value.sources.length} · 缺失{" "}
-                            {value.missingSources.length}
-                          </summary>
-                          {value.coveredSince && (
-                            <p>覆盖起点 {value.coveredSince}</p>
-                          )}
-                          <p>已登记来源 {value.sources.join("、") || "无"}</p>
-                          <p>
-                            缺失来源{" "}
-                            {value.missingSources.join("、") || "无已登记缺项"}
-                          </p>
-                          {value.expectedSources && (
-                            <p>
-                              预期来源{" "}
-                              {value.expectedSources.join("、") || "未登记"}
-                            </p>
-                          )}
-                        </details>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <details>
-              <summary>来源与账号标识</summary>
-              <dl>
-                <dt>账号</dt>
-                <dd>{signals.userId}</dd>
-                <dt>实例</dt>
-                <dd>{signals.instanceId}</dd>
-                <dt>来源代次</dt>
-                <dd>{signals.epoch}</dd>
-                <dt>平台启用</dt>
-                <dd>{signals.installedAt}</dd>
-                <dt>当前会话授权范围</dt>
-                <dd>{signals.binding.scopes.join("、")}</dd>
-                <dt>会话代次</dt>
-                <dd>{signals.binding.sessionVersion}</dd>
-                <dt>变更标识</dt>
-                <dd>{signals.context}</dd>
-              </dl>
-              <p>变更修订不作为金融写入确认或余额证明</p>
-            </details>
-          </details>
-        </>
+        </section>
+        <section aria-label="数据管理" className="sync-business-group">
+          <h2>数据管理</h2>
+          <div className="sync-entry-list">
+            <Link className="sync-entry" to="/legacy-import">
+              <FileInput size={18} />
+              <span>导入数据</span>
+            </Link>
+            {session.user.role === "admin" && (
+              <Link className="sync-entry" to="/backups">
+                <ArchiveRestore size={18} />
+                <span>备份恢复</span>
+              </Link>
+            )}
+          </div>
+        </section>
+      </div>
+      {diagnostics && (
+        <Dialog
+          title="诊断详情"
+          className="sync-diagnostic-dialog"
+          onClose={() => setDiagnostics(false)}
+        >
+          <div className="sync-diagnostic-body">
+            <WorkspaceTabs
+              label="同步诊断分类"
+              value={diagnosticSection}
+              onChange={setDiagnosticSection}
+              items={[
+                { value: "connection", label: "当前连接" },
+                { value: "coverage", label: "来源覆盖" },
+                { value: "fields", label: "字段记录" },
+              ]}
+            />
+            {diagnosticSection === "connection" && (
+              <div className="sync-diagnostic-sections">
+                <section>
+                  <h3>当前服务</h3>
+                  <dl className="sync-diagnostic-values">
+                    <div>
+                      <dt>服务地址</dt>
+                      <dd>
+                        <code>{serviceAddress}</code>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>监测范围</dt>
+                      <dd>当前服务、当前登录账号</dd>
+                    </div>
+                  </dl>
+                </section>
+                {signals && (
+                  <section>
+                    <h3>账号与来源</h3>
+                    <dl className="sync-diagnostic-values">
+                      <div>
+                        <dt>账号</dt>
+                        <dd>
+                          <code>{signals.userId}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>实例</dt>
+                        <dd>
+                          <code>{signals.instanceId}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>来源代次</dt>
+                        <dd>
+                          <code>{signals.epoch}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>平台启用</dt>
+                        <dd>{sourceTime(signals.installedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>覆盖口径</dt>
+                        <dd>{signals.scope}</dd>
+                      </div>
+                      <div>
+                        <dt>读取时间</dt>
+                        <dd>{sourceTime(signals.observedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>授权范围</dt>
+                        <dd>{signals.binding.scopes.join("、") || "未登记"}</dd>
+                      </div>
+                      <div>
+                        <dt>会话代次</dt>
+                        <dd>{signals.binding.sessionVersion}</dd>
+                      </div>
+                      <div>
+                        <dt>变更标识</dt>
+                        <dd>
+                          <code>{signals.context}</code>
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                )}
+                {device && (
+                  <section>
+                    <h3>当前设备</h3>
+                    <dl className="sync-diagnostic-values">
+                      <div>
+                        <dt>名称</dt>
+                        <dd>
+                          {device.device.name} ·{" "}
+                          {device.device.kind === "web" ? "Web" : "App"} ·{" "}
+                          {device.device.current ? "当前会话" : "当前性待核对"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>授权</dt>
+                        <dd>
+                          {device.device.authorizationState === "active"
+                            ? "当前有效"
+                            : device.device.authorizationState}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>在线状态</dt>
+                        <dd>
+                          {device.device.onlineState === "unknown"
+                            ? "未知"
+                            : device.device.onlineState}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>创建</dt>
+                        <dd>{time(device.device.createdAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>到期</dt>
+                        <dd>{time(device.device.expiresAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>最近使用</dt>
+                        <dd>{time(device.device.lastUsedAt)}</dd>
+                      </div>
+                      <div>
+                        <dt>设备标识</dt>
+                        <dd>
+                          <code>{device.device.id}</code>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>使用时间依据</dt>
+                        <dd>
+                          {device.device.lastUsedEvidence === "unavailable"
+                            ? "不可用"
+                            : device.device.lastUsedEvidence}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                )}
+                <p className="sync-diagnostic-note">
+                  有效凭据不代表设备在线；变更修订不作为余额或金融写入证明。
+                </p>
+              </div>
+            )}
+            {diagnosticSection === "coverage" && (
+              <div className="sync-diagnostic-sections">
+                {signals ? (
+                  <>
+                    <section>
+                      <h3>变更来源</h3>
+                      <p className="sync-diagnostic-note">
+                        读取于 {sourceTime(signals.observedAt)}
+                        {signals.legacyComplete === false
+                          ? " · 旧来源尚未完整验收"
+                          : ""}
+                      </p>
+                      <div className="sync-diagnostic-table">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>范围</th>
+                              <th>修订与时间</th>
+                              <th>来源覆盖</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(signals.domains).map(
+                              ([name, value]) => (
+                                <tr key={name}>
+                                  <td>
+                                    <strong>
+                                      {domainLabels[name] || name}
+                                    </strong>
+                                    <small>
+                                      {states[value.state] || value.state}
+                                    </small>
+                                  </td>
+                                  <td>
+                                    {value.revision === null
+                                      ? "未知"
+                                      : value.revision}
+                                    <small>
+                                      {sourceTime(value.lastChangedAt)}
+                                    </small>
+                                  </td>
+                                  <td>
+                                    <dl className="sync-source-values">
+                                      <div>
+                                        <dt>提交信号</dt>
+                                        <dd>
+                                          {value.commitSignalComplete
+                                            ? "已覆盖登记范围"
+                                            : "尚未完整覆盖"}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt>已登记</dt>
+                                        <dd>
+                                          {value.sources.join("、") || "无"}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt>缺失</dt>
+                                        <dd>
+                                          {value.missingSources.join("、") ||
+                                            "无已登记缺项"}
+                                        </dd>
+                                      </div>
+                                      {value.coveredSince && (
+                                        <div>
+                                          <dt>覆盖起点</dt>
+                                          <dd>
+                                            {sourceTime(value.coveredSince)}
+                                          </dd>
+                                        </div>
+                                      )}
+                                      {value.expectedSources && (
+                                        <div>
+                                          <dt>预期来源</dt>
+                                          <dd>
+                                            {value.expectedSources.join("、") ||
+                                              "未登记"}
+                                          </dd>
+                                        </div>
+                                      )}
+                                    </dl>
+                                  </td>
+                                </tr>
+                              ),
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                    {!!signals.unrepresentedSources?.length && (
+                      <section>
+                        <h3>尚未纳入的来源</h3>
+                        <p>{signals.unrepresentedSources.join("、")}</p>
+                      </section>
+                    )}
+                  </>
+                ) : (
+                  <p className="sync-diagnostic-empty">尚未取得来源记录</p>
+                )}
+              </div>
+            )}
+            {diagnosticSection === "fields" && (
+              <div className="sync-diagnostic-sections">
+                <FieldList summary={watch} namespace="watch" />
+                <FieldList summary={fees} namespace="fees" />
+              </div>
+            )}
+          </div>
+        </Dialog>
       )}
-      {device && (
-        <details>
-          <summary>当前设备与授权</summary>
-          <p>
-            {device.device.name} ·{" "}
-            {device.device.kind === "web" ? "Web" : "App"} ·{" "}
-            {device.device.current ? "当前会话" : "当前性待核对"}
-          </p>
-          <dl>
-            <dt>授权</dt>
-            <dd>
-              {device.device.authorizationState === "active"
-                ? "当前有效"
-                : device.device.authorizationState}
-            </dd>
-            <dt>在线状态</dt>
-            <dd>
-              {device.device.onlineState === "unknown"
-                ? "未知（不据有效凭据推断在线）"
-                : device.device.onlineState}
-            </dd>
-            <dt>创建</dt>
-            <dd>{time(device.device.createdAt)}</dd>
-            <dt>到期</dt>
-            <dd>{time(device.device.expiresAt)}</dd>
-            <dt>最近使用</dt>
-            <dd>{time(device.device.lastUsedAt)}</dd>
-          </dl>
-          <details>
-            <summary>设备标识</summary>
-            <p>{device.device.id}</p>
-            <p>
-              使用时间依据{" "}
-              {device.device.lastUsedEvidence === "unavailable"
-                ? "不可用"
-                : device.device.lastUsedEvidence}
-            </p>
-          </details>
-          <button
-            type="button"
-            className="button secondary"
-            onClick={onOpenDevices}
-          >
-            管理登录设备
-          </button>
-        </details>
-      )}
-      {watch && <FieldList summary={watch} />}
-      <Link className="button secondary" to="/watch-groups">
-        打开本人自选与分组
-      </Link>
-      {fees && <FieldList summary={fees} />}
-      <Link className="button secondary" to="/fees">
-        打开本人费率与原件核对
-      </Link>
     </section>
   );
 }
-function FieldList({ summary }: { summary: FieldSummary }) {
+function FieldList({
+  summary,
+  namespace,
+}: {
+  summary: FieldSummary | null;
+  namespace: "watch" | "fees";
+}) {
   return (
-    <details>
-      <summary>
-        {summary.namespace === "watch" ? "自选显示字段" : "费率同步字段"} ·{" "}
-        {summary.items.length} 项
-      </summary>
-      {!summary.items.length && <p>平台当前无字段记录，不表示旧来源已迁移</p>}
-      <div className="workspace-table">
-        <table>
-          <thead>
-            <tr>
-              <th>字段</th>
-              <th>字段修订</th>
-              <th>状态</th>
-              {summary.namespace === "fees" && (
-                <>
-                  <th>来源口径</th>
-                  <th>旧原字节</th>
-                </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {summary.items.map((item) => (
-              <tr key={item.key}>
-                <td>
-                  {fieldLabel(item.key)}
-                  {item.market && <small> · {item.market}</small>}
-                </td>
-                <td>{item.revision}</td>
-                <td>
-                  {item.deleted ? "删除墓碑（不删除金融历史）" : "已保存字段"}
-                </td>
-                {summary.namespace === "fees" && (
-                  <>
-                    <td>
-                      {item.authority === "retained_legacy_original"
-                        ? "保留旧规则原件"
-                        : item.authority ===
-                            "platform_revision_projection_not_original"
-                          ? "平台修订兼容投影（非旧原件）"
-                          : item.authority === "retained_deletion_tombstone"
-                            ? "保留删除墓碑（历史规则保留）"
-                            : item.authority || "未知"}
-                    </td>
-                    <td>
-                      {item.originalBytesRetained === true
-                        ? "保留"
-                        : item.originalBytesRetained === false
-                          ? "未附"
-                          : "未知"}
-                    </td>
-                  </>
-                )}
+    <section>
+      <h3>
+        {namespace === "watch" ? "自选显示字段" : "费率字段"}
+        {summary && summary.items.length > 0 && (
+          <span className="sync-field-count">{summary.items.length}</span>
+        )}
+      </h3>
+      {!summary ? (
+        <p className="sync-diagnostic-empty">尚未取得字段记录</p>
+      ) : !summary.items.length ? (
+        <p className="sync-diagnostic-empty">
+          当前服务暂无字段记录；不表示其他服务的数据已迁移。
+        </p>
+      ) : (
+        <div className="sync-diagnostic-table">
+          <table>
+            <thead>
+              <tr>
+                <th>字段</th>
+                <th>修订</th>
+                <th>状态与来源</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
+            </thead>
+            <tbody>
+              {summary.items.map((item) => (
+                <tr key={item.key}>
+                  <td>
+                    {fieldLabel(item.key)}
+                    {item.market && <small>{item.market}</small>}
+                    {item.planId && (
+                      <small>
+                        规则 {item.planId}
+                        {item.planRevision === undefined
+                          ? ""
+                          : ` · 修订 ${item.planRevision}`}
+                      </small>
+                    )}
+                  </td>
+                  <td>{item.revision}</td>
+                  <td>
+                    {item.deleted ? "删除墓碑（金融历史保留）" : "已保存字段"}
+                    {namespace === "fees" && (
+                      <>
+                        <small>
+                          {item.authority === "retained_legacy_original"
+                            ? "保留旧规则原件"
+                            : item.authority ===
+                                "platform_revision_projection_not_original"
+                              ? "平台修订兼容投影（非旧原件）"
+                              : item.authority === "retained_deletion_tombstone"
+                                ? "保留删除墓碑（历史规则保留）"
+                                : item.authority || "来源口径未知"}
+                        </small>
+                        <small>
+                          旧原字节：
+                          {item.originalBytesRetained === true
+                            ? "保留"
+                            : item.originalBytesRetained === false
+                              ? "未附"
+                              : "未知"}
+                        </small>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }

@@ -1,4 +1,4 @@
-import {watchRecordsPath} from './watch-display-state.ts';
+import { watchRecordsPath } from "./watch-display-state.ts";
 type Store = Pick<
   Storage,
   "getItem" | "setItem" | "removeItem" | "key" | "length"
@@ -19,6 +19,38 @@ export type GroupListing = {
   revision: number;
   initialized: boolean;
 };
+export type WatchGroupEdit = {
+  name: string;
+  visible: string;
+  expectedRevision?: number;
+};
+export function groupEdit(
+  list: GroupListing,
+  id: string,
+  patch: WatchGroupEdit,
+  previous?: WatchGroupEdit,
+): WatchGroupEdit {
+  if (!list.groups.some((group) => group.id === id))
+    throw new Error("分组已变化，请重新核对");
+  return {
+    ...patch,
+    expectedRevision: previous?.expectedRevision ?? list.revision,
+  };
+}
+/** Only an explicit review of this exact fresh listing can rebase a preserved draft. */
+export function reviewedGroupEdit(
+  list: GroupListing,
+  id: string,
+  edit: WatchGroupEdit,
+  confirmedRevision: number,
+): WatchGroupEdit {
+  if (
+    confirmedRevision !== list.revision ||
+    !list.groups.some((group) => group.id === id)
+  )
+    throw new Error("分组已再次变化，请重新核对");
+  return { ...edit, expectedRevision: confirmedRevision };
+}
 export type GroupRecord = {
   id: string;
   name: string;
@@ -27,9 +59,9 @@ export type GroupRecord = {
   watchGroupId: string;
 };
 export type GroupRecords = {
-  displayMode?: "all"|"watch";
-  displayRevision?:string|null;
-  membershipBasis?:string;
+  displayMode?: "all" | "watch";
+  displayRevision?: string | null;
+  membershipBasis?: string;
   records: GroupRecord[];
   total: number;
   page: number;
@@ -87,9 +119,13 @@ export function groupRecords(raw: unknown, page: number): GroupRecords {
   if (
     !v ||
     !integer(v.collectionRevision) ||
-    (v.displayMode!==undefined&&v.displayMode!=="all"&&v.displayMode!=="watch") ||
-    (v.displayMode==="watch"&&!v.displayRevision) ||
-    (v.displayRevision!=null&&(typeof v.displayRevision!=="string"||!/^([a-f0-9]{64})$/.test(v.displayRevision))) ||
+    (v.displayMode !== undefined &&
+      v.displayMode !== "all" &&
+      v.displayMode !== "watch") ||
+    (v.displayMode === "watch" && !v.displayRevision) ||
+    (v.displayRevision != null &&
+      (typeof v.displayRevision !== "string" ||
+        !/^([a-f0-9]{64})$/.test(v.displayRevision))) ||
     !integer(v.total) ||
     v.page !== page ||
     !integer(v.pageSize) ||
@@ -114,9 +150,9 @@ export function groupRecords(raw: unknown, page: number): GroupRecords {
     page: v.page,
     pageSize: v.pageSize,
     collectionRevision: v.collectionRevision,
-    ...(v.displayMode!==undefined?{displayMode:v.displayMode}:{}),
-    displayRevision:v.displayRevision,
-    membershipBasis:v.membershipBasis,
+    ...(v.displayMode !== undefined ? { displayMode: v.displayMode } : {}),
+    displayRevision: v.displayRevision,
+    membershipBasis: v.membershipBasis,
     records: v.records.map(({ id, name, code, market, watchGroupId }) => ({
       id,
       name,
@@ -238,15 +274,21 @@ export function groupCommand(
       throw new Error("请重新读取记录并选择自定义分组");
     data = { ids, groupId, collectionRevision: records.collectionRevision };
   }
-  return { requestId, expectedRevision: list.revision, action, data };
+  const expectedRevision =
+    action === "update" && fields.expectedRevision !== undefined
+      ? fields.expectedRevision
+      : list.revision;
+  if (!integer(expectedRevision) || Number(expectedRevision) > list.revision)
+    throw new Error("分组版本待核对");
+  return { requestId, expectedRevision, action, data };
 }
 export function groupRecordsPath(
   page: number,
   collectionRevision: number | null,
   view: string,
   account: string,
-  displayRevision: string|null = null,
-  displayMode: "all"|"watch" = "all",
+  displayRevision: string | null = null,
+  displayMode: "all" | "watch" = "all",
 ) {
   if (page > 1 && collectionRevision === null)
     throw new Error("请先读取第一页");
@@ -256,7 +298,12 @@ export function groupRecordsPath(
     view,
   });
   if (page > 1) query.set("collectionRevision", String(collectionRevision));
-  if(page>1&&displayRevision)query.set("displayRevision",displayRevision);
+  if (page > 1 && displayRevision)
+    query.set("displayRevision", displayRevision);
   if (account) query.set("brokerAccountId", account);
-  return watchRecordsPath("/portfolio/records?" + query,displayMode==="watch",displayRevision);
+  return watchRecordsPath(
+    "/portfolio/records?" + query,
+    displayMode === "watch",
+    displayRevision,
+  );
 }

@@ -237,6 +237,13 @@ class SimpleLedger:
             await self.lock(conn,who)
             return await self.current(conn,who.id,legacy=legacy)
 
+    async def read_revision(self,who):
+        """A committed owner watermark; never loads the ledger or initializes it."""
+        async with self.db.connection() as conn,conn.transaction():
+            await self.lock(conn,who)
+            row=await(await conn.execute('SELECT h.revision FROM simple_ledger_heads h JOIN simple_ledger_versions v USING(owner_id,revision) WHERE h.owner_id=%s',(who.id,))).fetchone()
+            return {'revision':row['revision'] if row else 0}
+
     async def save(self,who,raw,*,legacy=False):
         if not isinstance(raw,dict): raise HTTPException(400,'无效请求')
         supplied=raw.get('requestId')
