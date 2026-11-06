@@ -14,10 +14,11 @@ from .native_app_auth import CLIENT
 from .source_read_access import source_read_lock
 
 PRESETS = json.loads((Path(__file__).parent / "data" / "broker-presets.json").read_text())
-# Keep the original fourteen currencies and ordering, with explicit CHF support.
-# The current App's account DTO and PortfolioCurrency both accept CHF. This
-# extends account metadata only; cash/settlement permissions and data stay separate.
-LEGACY_CURRENCIES = CURRENCIES
+# Cash/settlement adapters share this frozen fourteen-currency contract.
+LEGACY_CURRENCIES = tuple(c for c in CURRENCIES if c != "CHF")
+# Only account metadata gains CHF: the current App's DTO and display model
+# accept it, while cash/settlement adapters retain their separate original limits.
+ACCOUNT_METADATA_CURRENCIES = CURRENCIES
 MARKETS = {
     "US": "USD",
     "HK": "HKD",
@@ -64,7 +65,7 @@ async def presets(catalog):
 
 async def account_view(conn, owner, identifier, preset_rows, *, version=2):
     row = await broker_account(conn, owner, identifier)
-    if any(c not in LEGACY_CURRENCIES for c in row["currencies"]):
+    if any(c not in ACCOUNT_METADATA_CURRENCIES for c in row["currencies"]):
         raise HTTPException(409, "旧账户协议不支持当前账户币种，请使用平台账户接口")
     records = await (
         await conn.execute(
@@ -103,7 +104,7 @@ async def account_view(conn, owner, identifier, preset_rows, *, version=2):
         "providerId": row["provider_id"],
         "accountKind": row["account_kind"],
         "currency": row["currency"],
-        "currencies": [c for c in LEGACY_CURRENCIES if c in set(row["currencies"]) | used],
+        "currencies": [c for c in ACCOUNT_METADATA_CURRENCIES if c in set(row["currencies"]) | used],
         "currencyUsage": {
             "complete": False,
             "platformComplete": not issues,

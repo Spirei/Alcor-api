@@ -20,7 +20,7 @@ from .broker_accounts import BrokerDelete, BrokerUpdate, LegacyBrokerCreate
 from .broker_metadata import fingerprint
 from .card_preferences import JS_WHITESPACE
 from .fx_provider_parser import unique
-from .legacy_broker_read import LEGACY_CURRENCIES, account_view, iso, presets
+from .legacy_broker_read import ACCOUNT_METADATA_CURRENCIES, account_view, iso, presets
 from .legacy_broker_statements import ACCOUNT, request_id
 from .legacy_identity import assert_native_origin, native_identity
 from .native_app_auth import CLIENT
@@ -59,11 +59,11 @@ def fields(raw, required, optional=()):
 
 
 def currencies(value, default):
-    if (not isinstance(value, list) or not 1 <= len(value) <= len(LEGACY_CURRENCIES)
-            or any(not isinstance(item, str) or item not in LEGACY_CURRENCIES for item in value)
+    if (not isinstance(value, list) or not 1 <= len(value) <= len(ACCOUNT_METADATA_CURRENCIES)
+            or any(not isinstance(item, str) or item not in ACCOUNT_METADATA_CURRENCIES for item in value)
             or len(set(value)) != len(value) or default not in value):
         raise HTTPException(400, '请至少选择一种支持币种，默认币种必须在已选集合内')
-    return [item for item in LEGACY_CURRENCIES if item in value]
+    return [item for item in ACCOUNT_METADATA_CURRENCIES if item in value]
 
 
 def metadata_model(kind, raw, *, current=None):
@@ -77,7 +77,7 @@ def metadata_model(kind, raw, *, current=None):
     if (not isinstance(name, str) or not name.strip(JS_WHITESPACE)
             or any(ord(char)<32 or ord(char)==127 for char in name)
             or len(name.strip(JS_WHITESPACE).encode('utf-16-le', errors='surrogatepass'))//2 > 60
-            or not isinstance(currency, str) or currency not in LEGACY_CURRENCIES):
+            or not isinstance(currency, str) or currency not in ACCOUNT_METADATA_CURRENCIES):
         raise HTTPException(400, '名称或币种无效')
     chosen = raw.get('currencies')
     if chosen is None and 'currencies' in raw:
