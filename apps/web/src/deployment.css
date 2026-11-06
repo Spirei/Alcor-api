@@ -44,8 +44,19 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.24em;
+  text-transform: uppercase;
   color: var(--deploy-muted);
   margin-bottom: 8px;
+}
+.deploy-lede {
+  max-width: 30rem;
+  margin-top: 8px;
+  color: var(--deploy-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.deploy-title-short {
+  display: none;
 }
 .deploy-page h1 {
   font-size: 24px;
@@ -617,6 +628,16 @@
   .deploy-page h1 {
     font-size: 20px;
   }
+  .deploy-title-short {
+    display: inline;
+  }
+  .deploy-title-full {
+    display: none;
+  }
+  .deploy-lede {
+    margin-top: 6px;
+    font-size: 13px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-reduced-motion="false"]) .deploy-spinning {
@@ -762,4 +783,6 @@
 .deploy-config-fields .password-field input {
   background: var(--deploy-card);
 }
-:root[data-theme="dark"] .deploy-page .deploy-icon {border-color:#3a3f4d;}
+:root[data-theme="dark"] .deploy-page .deploy-icon {
+  border-color: #3a3f4d;
+}

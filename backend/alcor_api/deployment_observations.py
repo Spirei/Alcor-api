@@ -14,6 +14,18 @@ from .deployments import Admin, configured, github_json
 
 router = APIRouter(prefix="/api/deployment", tags=["deployment"])
 
+STAGE_ORDER = {
+    "Check scheduled source changes": 0,
+    "检查定时源码变更": 0,
+    "核对发布条件": 0,
+    "TypeScript check": 1,
+    "TypeScript 检查": 1,
+    "Publish linux/amd64 image": 2,
+    "构建 linux/amd64 镜像": 2,
+    "发布 linux/amd64 镜像": 2,
+    "发布不可变版本清单": 3,
+}
+
 
 def run_view(settings, raw):
     ident = raw.get("id")
@@ -126,6 +138,7 @@ async def observation(settings):
                     }
                     for j in raw_jobs["jobs"][:20]
                 ]
+                result["jobs"].sort(key=lambda job: (STAGE_ORDER.get(job["name"], 50), job["id"]))
             except (OSError, ValueError, KeyError, TypeError):
                 result["jobs_error"] = "构建阶段暂不可用"
         except (OSError, ValueError, KeyError, TypeError):

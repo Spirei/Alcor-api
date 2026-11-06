@@ -5,6 +5,9 @@ import {
   selectedHeat,
   runState,
   formatTime,
+  formatShanghai,
+  visibleRunTitle,
+  orderedJobs,
   buildReceiptMessage,
   verificationOnly,
   deploymentPollDelay,
@@ -358,4 +361,30 @@ test("status and dates never promote missing or skipped checks to success", () =
   assert.equal(runState("completed", "success").tone, "good");
   assert.match(formatTime("2026-10-30T16:30:00Z"), /2026\/10\/31 00:30/);
   assert.equal(formatTime(null), "—");
+  assert.equal(
+    formatShanghai("2026-11-05T22:25:00Z"),
+    "2026/11/6 06:25 上海时间",
+  );
+  assert.equal(formatShanghai(null), "");
+  assert.equal(formatShanghai("not-a-date"), "");
+  assert.equal(
+    visibleRunTitle(
+      "feat: 发布 AlcorApi 统一迁移版本 · 81e50f3b-dccb-44a4-b45d-a73782fda35c",
+    ),
+    "feat: 发布 AlcorApi 统一迁移版本",
+  );
+  assert.equal(
+    visibleRunTitle(`ci: 验证 AlcorApi 发布流程 · ${"ab".repeat(20)}`),
+    "ci: 验证 AlcorApi 发布流程",
+  );
+  assert.equal(visibleRunTitle("Synthetic run"), "Synthetic run");
+  assert.deepEqual(
+    orderedJobs([
+      { id: 3, name: "发布不可变版本清单" },
+      { id: 9, name: "publish" },
+      { id: 2, name: "TypeScript 检查" },
+      { id: 1, name: "核对发布条件" },
+    ])?.map((job) => job.name),
+    ["核对发布条件", "TypeScript 检查", "发布不可变版本清单", "publish"],
+  );
 });

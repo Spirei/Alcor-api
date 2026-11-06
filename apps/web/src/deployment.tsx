@@ -22,7 +22,6 @@ import { useResource } from "./hooks";
 import { usePanelReady } from "./transition-qa";
 import { requestId } from "./request-id";
 import type { AppearanceController } from "./use-appearance";
-import { Dialog } from "./dialog";
 import {
   DeploymentHeatmap,
   type DeploymentActivity,
@@ -30,8 +29,11 @@ import {
 import {
   runState,
   formatTime,
+  formatShanghai,
   formatDuration,
   workflowLabel,
+  visibleRunTitle,
+  orderedJobs,
   buildReceiptMessage,
   buildReceiptPending,
   originalBuildPublished,
@@ -89,8 +91,7 @@ export function DeploymentSettings({
   appearance: AppearanceController;
 }) {
   const state = useResource<Deployment>("/deployment");
-  const [busy, setBusy] = useState(false),
-    [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const identity = [
     session.instance_id,
@@ -107,18 +108,14 @@ export function DeploymentSettings({
     null,
   );
   const observationStarts = useRef(new Map<string, ScopedObservation>());
-  const [closing, setClosing] = useState<{
-    request_id: string;
-    release: Release;
-  } | null>(null);
   const buildPending = useRef<string | null>(null);
   const ignoredBuilds = useRef(new Set<string>());
   const ignoredUpdates = useRef(new Set<string>());
-  const [buildConfirm, setBuildConfirm] = useState<{
+  type BuildApproval = {
     repository: string;
     revision: string;
     previous: string | null;
-  } | null>(null);
+  };
   // Keep the UUID after a timeout: only query that receipt; never submit a new request implicitly.
   const pending = useRef<string | null>(null);
   useEffect(() => {
@@ -130,9 +127,6 @@ export function DeploymentSettings({
       ignoredBuilds.current.clear();
       setWatchingUpdate(null);
       setWatchingBuild(null);
-      setConfirm(false);
-      setBuildConfirm(null);
-      setClosing(null);
       setMessage("");
     }
     setBusy(false);
@@ -389,7 +383,6 @@ export function DeploymentSettings({
           throw new Error("更新回执编号不匹配，请核对原请求");
         observeUpdate(result);
       }
-      setConfirm(false);
       state.reload();
     } catch (error) {
       if (!current()) return;
@@ -411,7 +404,6 @@ export function DeploymentSettings({
         } else if (!ignoredUpdates.current.has(id)) {
           pending.current = id;
           watchRequest("update", id);
-          setConfirm(false);
           setMessage(`更新结果待核对，正在读取原回执 · ${id}`);
         }
       }
@@ -420,9 +412,11 @@ export function DeploymentSettings({
       if (current()) setBusy(false);
     }
   }
-  async function closeUpdate() {
-    if (!closing || busy) return;
-    const approval = closing;
+  async function closeUpdate(approval: {
+    request_id: string;
+    release: Release;
+  }) {
+    if (busy) return;
     const current = currentRequest();
     setBusy(true);
     setMessage("");
@@ -456,21 +450,18 @@ export function DeploymentSettings({
         state.reload();
       }
     } finally {
-      if (current()) {
-        setClosing(null);
-        setBusy(false);
-      }
+      if (current()) setBusy(false);
     }
   }
-  function confirmBuild(previous: string | null = null) {
-    if (!data?.source) return;
-    setBuildConfirm({
+  function buildApproval(previous: string | null = null): BuildApproval | null {
+    if (!data?.source) return null;
+    return {
       repository: data.repository,
       revision: data.source.sha,
       previous,
-    });
+    };
   }
-  async function build(approval = buildConfirm) {
+  async function build(approval: BuildApproval | null) {
     if (busy) return;
     const checking = !approval && !!buildPending.current;
     if (
@@ -488,8 +479,7 @@ export function DeploymentSettings({
           (approval.previous !== buildPending.current ||
             !canRestartBuild(data, approval.previous))))
     ) {
-      setBuildConfirm(null);
-      setMessage("构建状态已变化，请刷新后重新确认");
+      setMessage("构建状态已变化，请刷新后重试");
       state.reload();
       return;
     }
@@ -524,7 +514,6 @@ export function DeploymentSettings({
       if (result.request_id !== id)
         throw new Error("构建回执编号不匹配，请核对原请求");
       observeBuild(result);
-      setBuildConfirm(null);
       state.reload();
     } catch (error) {
       if (!current()) return;
@@ -534,7 +523,6 @@ export function DeploymentSettings({
         setWatchingBuild((current) =>
           current?.request_id === id ? null : current,
         );
-        setBuildConfirm(null);
         setMessage(`未查到此构建的受理记录，可重新构建 · ${id}`);
       } else if (rejected(error)) {
         if (buildPending.current === id) buildPending.current = null;
@@ -546,7 +534,6 @@ export function DeploymentSettings({
       } else if (!ignoredBuilds.current.has(id)) {
         buildPending.current = id;
         watchRequest("build", id);
-        setBuildConfirm(null);
         setMessage(`构建结果待核对，正在读取原回执 · ${id}`);
       }
       state.reload();
@@ -564,7 +551,8 @@ export function DeploymentSettings({
     data.check?.conclusion === "success";
   const canRebuild =
     !state.error && canRestartBuild(data, buildPending.current);
-  const verifyOnly = verificationOnly(data?.jobs);
+  const jobs = orderedJobs(data?.jobs);
+  const verifyOnly = verificationOnly(jobs);
   const sourceCurrent =
     !!data?.source && data.release?.revision === data.source.sha;
   const runtime = deploymentRuntimeState(data);
@@ -637,8 +625,22 @@ export function DeploymentSettings({
     <main className="deploy-page">
       <div className="deploy-container">
         <header className="deploy-header">
-          <div>
-            <h1>发布与更新</h1>
+          <div className="deploy-heading">
+            <p className="deploy-brand">Alcor deployment</p>
+            <h1>
+              <span className="deploy-title-short">发布状态</span>
+              <span className="deploy-title-full">
+                GitHub main 到线上发布状态
+              </span>
+            </h1>
+            <p className="deploy-lede">
+              <span className="deploy-title-short">
+                检查通过后可手动构建镜像，再更新线上容器。
+              </span>
+              <span className="deploy-title-full">
+                GitHub main 是发布源。检查通过后可手动构建镜像，再更新线上容器。
+              </span>
+            </p>
           </div>
           <div className="deploy-toolbar">
             <button
@@ -748,7 +750,7 @@ export function DeploymentSettings({
                         className="text-button"
                         disabled={busy}
                         onClick={() =>
-                          setClosing({
+                          void closeUpdate({
                             request_id: r.request_id,
                             release: target,
                           })
@@ -825,7 +827,7 @@ export function DeploymentSettings({
                 (!buildPending.current && (sourceCurrent || !checkedSource))
               }
               onClick={() =>
-                buildPending.current ? void build(null) : confirmBuild()
+                void build(buildPending.current ? null : buildApproval())
               }
             >
               <i
@@ -850,9 +852,7 @@ export function DeploymentSettings({
               disabled={
                 busy || (!pending.current && !data?.can_update) || !!state.error
               }
-              onClick={() =>
-                pending.current ? void update() : setConfirm(true)
-              }
+              onClick={() => void update()}
             >
               <i
                 className={`deploy-dot ${runtime.current ? "good" : runtime.waiting ? "pending" : "neutral"}`}
@@ -883,7 +883,7 @@ export function DeploymentSettings({
               <button
                 className="button secondary small"
                 disabled={busy || state.refreshing}
-                onClick={() => confirmBuild(buildPending.current)}
+                onClick={() => void build(buildApproval(buildPending.current))}
               >
                 重新检查并构建
               </button>
@@ -907,7 +907,7 @@ export function DeploymentSettings({
               )}
               <p>
                 {data?.build
-                  ? `${data.build.sha.slice(0, 7)} · ${data.jobs?.filter((j) => j.status === "completed").length ?? "—"} / ${data.jobs?.length ?? "—"} 阶段 · ${formatDuration(data.build.started_at, data.build.status === "completed" ? data.build.updated_at : data.checked_at)}`
+                  ? `${data.build.sha.slice(0, 7)} · ${jobs?.filter((j) => j.status === "completed").length ?? "—"} / ${jobs?.length ?? "—"} 阶段 · ${formatDuration(data.build.started_at, data.build.status === "completed" ? data.build.updated_at : data.checked_at)}`
                   : data?.build_error || "暂无构建记录"}
               </p>
             </div>
@@ -928,8 +928,8 @@ export function DeploymentSettings({
             )}
           </div>
           <div className="deploy-jobs">
-            {data?.jobs?.length ? (
-              data.jobs.map((job, index) => (
+            {jobs?.length ? (
+              jobs.map((job, index) => (
                 <Fragment key={job.id}>
                   <details
                     className="deploy-job"
@@ -946,7 +946,7 @@ export function DeploymentSettings({
                           {runState(job.status, job.conclusion).label} ·{" "}
                           {formatDuration(
                             job.started_at,
-                            job.completed_at || data.checked_at,
+                            job.completed_at || data?.checked_at,
                           )}
                         </small>
                       </span>
@@ -963,14 +963,14 @@ export function DeploymentSettings({
                           <small>
                             {formatDuration(
                               step.started_at,
-                              step.completed_at || data.checked_at,
+                              step.completed_at || data?.checked_at,
                             )}
                           </small>
                         </div>
                       ))}
                     </div>
                   </details>
-                  {index < data.jobs!.length - 1 && (
+                  {index < jobs!.length - 1 && (
                     <ChevronRight className="deploy-seam" />
                   )}
                 </Fragment>
@@ -1001,7 +1001,12 @@ export function DeploymentSettings({
           </div>
           <p>
             {data?.release
-              ? data.release.revision.slice(0, 7)
+              ? [
+                  data.release.revision.slice(0, 7),
+                  formatShanghai(data.release_published_at),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
               : data?.release_error ||
                 (!data?.configured ? "尚未配置发布仓库" : "暂无发布记录")}
           </p>
@@ -1040,7 +1045,7 @@ export function DeploymentSettings({
                   className={`deploy-dot ${runState(run.status, run.conclusion).tone}`}
                 />
                 <span>
-                  <strong>{run.title}</strong>
+                  <strong>{visibleRunTitle(run.title)}</strong>
                   <small>
                     {run.sha.slice(0, 7)} ·{" "}
                     {runState(run.status, run.conclusion).label} ·{" "}
@@ -1078,105 +1083,6 @@ export function DeploymentSettings({
           </div>
         </section>
         <DeploymentHeatmap data={activity.data} error={activity.error} />
-        {closing && (
-          <Dialog
-            title="关闭更新记录"
-            onClose={() => !busy && setClosing(null)}
-          >
-            <p>
-              关闭 {closing.release.revision.slice(0, 7)} 的更新记录？
-              关闭记录不会中止已通知的
-              Watchtower；请先确认群晖更新已结束。关闭后可重新检查。
-            </p>
-            <div className="dialog-actions">
-              <button
-                className="button"
-                onClick={() => setClosing(null)}
-                disabled={busy}
-              >
-                取消
-              </button>
-              <button
-                className="button primary"
-                onClick={() => void closeUpdate()}
-                disabled={busy}
-              >
-                关闭记录
-              </button>
-            </div>
-          </Dialog>
-        )}
-        {buildConfirm && data && (
-          <Dialog
-            title="确认构建发布"
-            onClose={() => !busy && setBuildConfirm(null)}
-          >
-            <p>
-              使用 {buildConfirm.repository} 的 main ·{" "}
-              {buildConfirm.revision.slice(0, 7)} 构建并发布镜像？
-            </p>
-            {buildConfirm.previous && (
-              <p>
-                原请求结果仍未确认，回执保留。将重新检查 GitHub
-                发布状态后提交新请求。
-              </p>
-            )}
-            <div className="dialog-actions">
-              <button
-                className="button"
-                onClick={() => setBuildConfirm(null)}
-                disabled={busy}
-              >
-                取消
-              </button>
-              <button
-                className="button primary"
-                onClick={() => void build(buildConfirm)}
-                disabled={
-                  busy ||
-                  !data.can_build ||
-                  activeBuild ||
-                  !checkedSource ||
-                  sourceCurrent ||
-                  !!state.error ||
-                  !!data.source_error ||
-                  data.source?.sha !== buildConfirm.revision ||
-                  data.repository !== buildConfirm.repository ||
-                  (!!buildConfirm.previous && !canRebuild)
-                }
-              >
-                确认构建
-              </button>
-            </div>
-          </Dialog>
-        )}
-        {confirm && data?.can_update && (
-          <Dialog
-            title="确认更新群晖"
-            onClose={() => !busy && setConfirm(false)}
-          >
-            <p>
-              通知 Watchtower 更新到 {data.release?.revision.slice(0, 7)}
-              ？期间网页与后台任务会短暂中断，恢复后核对实际线上提交。
-            </p>
-            <div className="dialog-actions">
-              <button
-                className="button"
-                onClick={() => setConfirm(false)}
-                disabled={busy}
-              >
-                取消
-              </button>
-              <button
-                className="button primary"
-                onClick={() => void update()}
-                disabled={busy}
-              >
-                确认更新
-              </button>
-            </div>
-          </Dialog>
-        )}
       </div>
     </main>
   );

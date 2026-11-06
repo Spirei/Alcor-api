@@ -82,6 +82,17 @@ def github_json(settings, path, body=None):
     return json.loads(data)
 
 
+def release_published_at(raw):
+    value = raw.get("published_at") if isinstance(raw, dict) else None
+    if not isinstance(value, str):
+        return None
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return value
+
+
 async def discover(settings):
     if not configured(settings):
         raise HTTPException(409, "尚未配置独立发布仓库")
@@ -94,7 +105,7 @@ async def discover(settings):
             raise ValueError("wrong image target")
         if raw.get("target_commitish") != release.revision:
             raise ValueError("wrong revision")
-        return release
+        return release, release_published_at(raw)
     except (OSError, ValueError, KeyError, TypeError):
         raise HTTPException(503, "未取得有效发布记录，请检查仓库权限、发布结果与网络") from None
 
@@ -107,7 +118,7 @@ async def status(request: Request, who: Admin):
     await bridge.reconcile(db, settings, version=__version__, schema=schema_hash(settings.migration_dir))
     from .deployment_observations import observation, package_page
 
-    release, release_error = None, None
+    release, release_error, release_published_at = None, None, None
     observed = {
         "package_url": package_page(settings),
         "source": None,
@@ -121,9 +132,9 @@ async def status(request: Request, who: Admin):
     if configured(settings):
 
         async def latest():
-            nonlocal release, release_error
+            nonlocal release, release_error, release_published_at
             try:
-                release = await discover(settings)
+                release, release_published_at = await discover(settings)
             except HTTPException as exc:
                 release_error = exc.detail
 
@@ -163,6 +174,7 @@ async def status(request: Request, who: Admin):
         "runtime_matches_release": matches,
         "matches_release": matches and ready,
         "release": release,
+        "release_published_at": release_published_at,
         "release_error": release_error,
         **observed,
         "checked_at": datetime.now(UTC),
@@ -201,7 +213,7 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
         if any(old[k] != getattr(data.release, k) for k in ("image", "version", "revision", "schema_hash")):
             raise HTTPException(409, "此请求编号已用于不同版本")
         return public_receipt(old)
-    release = await discover(settings)
+    release, _published = await discover(settings)
     if release != data.release:
         raise HTTPException(409, "发布版本已变化，请重新检查")
     if release.schema_hash != schema_hash(settings.migration_dir):

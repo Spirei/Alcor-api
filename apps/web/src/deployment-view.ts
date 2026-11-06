@@ -101,6 +101,7 @@ export type Deployment = {
   runtime_ready: boolean;
   matches_release: boolean;
   release: Release | null;
+  release_published_at?: string | null;
   release_error: string | null;
   build_error: string | null;
   build: (WorkflowRun & { head_sha: string }) | null;
@@ -284,6 +285,50 @@ export function formatTime(value?: string | null) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+export function formatShanghai(value?: string | null) {
+  if (!value || !Number.isFinite(Date.parse(value))) return "";
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}/${Number(part("month"))}/${Number(part("day"))} ${part("hour")}:${part("minute")} 上海时间`;
+}
+export function visibleRunTitle(title: string) {
+  const cleaned = title
+    .replace(
+      /\s*·\s*(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{40})$/i,
+      "",
+    )
+    .trim();
+  return cleaned || title;
+}
+const STAGE_ORDER: Record<string, number> = {
+  "Check scheduled source changes": 0,
+  检查定时源码变更: 0,
+  核对发布条件: 0,
+  "TypeScript check": 1,
+  "TypeScript 检查": 1,
+  "Publish linux/amd64 image": 2,
+  "构建 linux/amd64 镜像": 2,
+  "发布 linux/amd64 镜像": 2,
+  发布不可变版本清单: 3,
+};
+export function orderedJobs<T extends { name: string; id: number }>(
+  jobs: T[] | null | undefined,
+) {
+  if (!jobs) return jobs;
+  return [...jobs].sort(
+    (a, b) =>
+      (STAGE_ORDER[a.name] ?? 50) - (STAGE_ORDER[b.name] ?? 50) || a.id - b.id,
+  );
 }
 export function formatDuration(start?: string | null, end?: string | null) {
   if (
