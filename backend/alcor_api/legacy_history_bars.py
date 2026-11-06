@@ -102,6 +102,10 @@ def aggregate_observed_days(items, frame):
 
 
 async def history_member(request, db, version=None):
+    from .legacy_optional_credentials import market_platform_session_selected
+
+    if version is None and market_platform_session_selected(request):
+        return await identity(request)
     header = request.headers.get("authorization")
     if version == 2 or header is not None and header.startswith("Bearer fat_"):
         who, grant = await native_identity(request, db, "portfolio.read")

@@ -30,6 +30,7 @@
   transition:
     background-color var(--control-duration) var(--control-ease),
     color var(--control-duration) var(--control-ease),
+    opacity var(--control-duration) var(--control-ease),
     border-color var(--control-duration) var(--control-ease),
     box-shadow var(--control-duration) var(--control-ease),
     transform var(--control-duration) var(--control-ease),

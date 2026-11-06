@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import "./fund-sources.css";
 import { SelectMenu } from "./select-menu";
 import { PrivateAmount } from "./financial-display";
@@ -438,7 +439,7 @@ function Content({
               条{kind === "real" ? "真实" : "模拟"}来源
             </p>
           ) : (
-            !error && <p role="status">正在读取资金来源…</p>
+            !error && <LoadingPlaceholder label="正在读取资金来源" compact />
           )}
         </div>
         <SelectMenu
@@ -736,7 +737,10 @@ function Content({
           }}
         />
       </label>
-      <button disabled={busy || !!pending || !state} onClick={() => void prepare()}>
+      <button
+        disabled={busy || !!pending || !state}
+        onClick={() => void prepare()}
+      >
         核对{retiring ? "反向入账" : "资金变更"}
       </button>
       {current && (

@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
 import { Dialog } from "./dialog";
@@ -209,7 +210,7 @@ export function CashHistory({
           </div>
         </>
       ) : !error ? (
-        <p role="status">正在读取流水…</p>
+        <LoadingPlaceholder label="正在读取流水" compact />
       ) : null}
     </section>
   );

@@ -35,12 +35,14 @@ export function WorkspaceNavigation({
   mobileOpen,
   preferInputOrder = false,
   onNavigate,
+  onIntent,
 }: {
   items: readonly Item[];
   collapsed: boolean;
   mobileOpen: boolean;
   preferInputOrder?: boolean;
   onNavigate: (path: string) => void;
+  onIntent?: (path: string) => void;
 }) {
   const location = useLocation();
   const { pathname } = location;
@@ -170,6 +172,8 @@ export function WorkspaceNavigation({
                     aria-label={name}
                     aria-current={connection ? "page" : undefined}
                     title={collapsed ? name : undefined}
+                    onPointerEnter={() => onIntent?.(path)}
+                    onFocus={() => onIntent?.(path)}
                     onClick={() => onNavigate(path)}
                   >
                     <ItemIcon size={19} aria-hidden="true" />

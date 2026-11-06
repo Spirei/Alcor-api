@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { api, ApiError } from "./api";
@@ -181,7 +182,7 @@ export function EmailChange({
           {resource.error}
         </p>
       )}
-      {loading && <p role="status">正在读取…</p>}
+      {loading && <LoadingPlaceholder label="正在读取" compact />}
       {!resource.data && !loading && (
         <button
           type="button"

@@ -1,5 +1,5 @@
 .workspace-ui {
-  --page-title-size: 18px;
+  --page-title-size: calc(var(--text-size, 14px) * 1.43);
   --page-section-gap: 24px;
   --panel-radius: 16px;
   --panel-padding: 20px;

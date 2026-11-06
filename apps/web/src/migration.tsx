@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { Minus, Plus, RefreshCw, Search } from "lucide-react";
@@ -273,7 +274,11 @@ export function MigrationPage() {
         </div>
       )}
       {!data ? (
-        <div role="status">{error ? "迁移清单不可用" : "正在读取…"}</div>
+        error ? (
+          <div role="status">迁移清单不可用</div>
+        ) : (
+          <LoadingPlaceholder />
+        )
       ) : (
         <>
           <div className="migration-progress-overview">

@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import {
   watchRecordsPath,
   allDisplayedRecordsSelected,
@@ -835,7 +836,7 @@ function PortfolioSession({ session }: { session: Session }) {
             )}
           {!records ? (
             !error ? (
-              <p role="status">正在读取…</p>
+              <LoadingPlaceholder label="正在读取" compact />
             ) : null
           ) : records.total === 0 ? (
             <p>暂无记录</p>
@@ -1052,7 +1053,7 @@ function PortfolioSession({ session }: { session: Session }) {
             </button>
           </div>
           {!brokers ? (
-            <p role="status">正在读取…</p>
+            <LoadingPlaceholder label="正在读取" compact />
           ) : brokers.length === 0 ? (
             <WorkspaceEmpty
               title="暂无账户"

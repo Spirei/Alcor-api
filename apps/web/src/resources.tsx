@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceEmpty, WorkspaceTabs, usePageReveal } from "./workspace-ui";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -714,11 +715,7 @@ function ResourceSession({
           搜索
         </button>
       </form>
-      {!page && !error && (
-        <p className="resource-loading" role="status">
-          正在读取…
-        </p>
-      )}
+      {!page && !error && <LoadingPlaceholder compact />}
       {page && (
         <>
           <ResourceRows

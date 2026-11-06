@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
@@ -495,7 +496,7 @@ function Content({
             </button>
           </div>
           {error && <p role="alert">{error}</p>}
-          {busy && <p role="status">正在读取…</p>}
+          {busy && <LoadingPlaceholder label="正在读取" compact />}
           {receipt && (
             <p role="status">
               {receipt.state}

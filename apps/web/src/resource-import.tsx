@@ -1,4 +1,10 @@
-import { sourceWindowActive, sourceWindowLabel, sourceReadFailure, type SourceWindow } from "./source-window-view";
+import { LoadingPlaceholder } from "./loading-placeholder";
+import {
+  sourceWindowActive,
+  sourceWindowLabel,
+  sourceReadFailure,
+  type SourceWindow,
+} from "./source-window-view";
 import {
   useCallback,
   useEffect,
@@ -589,7 +595,11 @@ export function ResourceImportPanel({
         </div>
       )}
       {!ready ? (
-        <p role="status">{locked ? "当前内容已撤下" : "正在读取…"}</p>
+        locked ? (
+          <p role="status">当前内容已撤下</p>
+        ) : (
+          <LoadingPlaceholder />
+        )
       ) : (
         <>
           {session.user.role === "admin" && (
@@ -680,14 +690,25 @@ export function ResourceImportPanel({
                 />
                 {selected && (
                   <>
-                    <p>{sourcePermissionLabel(selected.state)} · {sourceWindowLabel(selected.migrationWindow)}</p>
-                    {selected.state === "active" && !selected.effective && sourceWindowActive(selected.migrationWindow) && <p>来源或实例需重新核对</p>}
+                    <p>
+                      {sourcePermissionLabel(selected.state)} ·{" "}
+                      {sourceWindowLabel(selected.migrationWindow)}
+                    </p>
+                    {selected.state === "active" &&
+                      !selected.effective &&
+                      sourceWindowActive(selected.migrationWindow) && (
+                        <p>来源或实例需重新核对</p>
+                      )}
                     {["pending_owner", "active"].includes(selected.state) && (
                       <SourceConsentForm
                         key={secretVersion + selected.id}
                         idPrefix="resource-consent"
                         formRef={form}
-                        disabled={blocked || selected.state === "pending_owner" && !sourceWindowActive(selected.migrationWindow)}
+                        disabled={
+                          blocked ||
+                          (selected.state === "pending_owner" &&
+                            !sourceWindowActive(selected.migrationWindow))
+                        }
                         approve={selected.state === "pending_owner"}
                         onSubmit={(approve, password, code) =>
                           void submit(
@@ -704,7 +725,11 @@ export function ResourceImportPanel({
                     )}
                     <button
                       className="button"
-                      disabled={blocked || !selected.effective || !sourceWindowActive(selected.migrationWindow)}
+                      disabled={
+                        blocked ||
+                        !selected.effective ||
+                        !sourceWindowActive(selected.migrationWindow)
+                      }
                       onClick={() =>
                         void submit(
                           `${base}/authorizations/${selected.id}/snapshots`,

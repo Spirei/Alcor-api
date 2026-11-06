@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Dialog } from "./dialog";
@@ -49,7 +50,7 @@ function VersionDialog({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         ) : !resource.data ? (
-          <div role="status">正在读取…</div>
+          <LoadingPlaceholder label="正在读取" compact />
         ) : (
           resource.data.releases.map((release) => (
             <section

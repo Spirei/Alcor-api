@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import "./audit-activity.css";
 import "./portfolio.css";
 import { DailyActivitySummary } from "./daily-activity-summary";
@@ -240,7 +241,7 @@ export function ActivityPage({ session }: { session: Session }) {
           </label>
         </div>
         {error && <p role="alert">{error}</p>}
-        {!data && !error && <p role="status">正在读取…</p>}
+        {!data && !error && <LoadingPlaceholder label="正在读取" compact />}
         {data && (
           <ActivityTimeline
             rows={filtered}

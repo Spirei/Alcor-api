@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { requestId as newRequestId } from "./request-id";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Save, Zap } from "lucide-react";
@@ -342,7 +343,7 @@ export function ConnectionSettingsForm({
         className="connection-form-loading"
         role={resource.error ? "alert" : "status"}
       >
-        {resource.error || error || "正在读取…"}
+        {resource.error || error || <LoadingPlaceholder compact />}
         {(resource.error || error) && (
           <button className="text-button" onClick={resource.reload}>
             重新读取

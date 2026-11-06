@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
@@ -190,9 +191,12 @@ export function MarketDisplaySettings({
     <section className="market-display-settings" aria-label="行情显示设置">
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
-      {!head && (
-        <p role="status">{busy ? "正在读取行情设置…" : "未取得行情设置"}</p>
-      )}
+      {!head &&
+        (busy ? (
+          <LoadingPlaceholder label="正在读取行情设置" compact />
+        ) : (
+          <p role="status">未取得行情设置</p>
+        ))}
       {head && (
         <form
           onSubmit={(event) => {

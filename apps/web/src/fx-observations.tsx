@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 
@@ -136,7 +137,7 @@ export function FxObservations({
   return (
     <>
       {error && <p role="alert">{error}</p>}
-      {busy && <p role="status">正在读取…</p>}
+      {busy && <LoadingPlaceholder label="正在读取" compact />}
       {value && value.items.length > 0 && (
         <div className="fx-observation-list">
           {value.items.map((row) => (

@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { FormActions, SettingsSurface } from "./workspace-forms";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Mail, Monitor, RefreshCw, Smartphone } from "lucide-react";
@@ -581,7 +582,8 @@ function TemplateSession({
             )}
           </div>
         ) : (
-          !locked && !error && <p role="status">正在读取模板…</p>
+          !locked &&
+          !error && <LoadingPlaceholder label="正在读取模板" compact />
         )}
         <details
           className="mail-template-receipts"

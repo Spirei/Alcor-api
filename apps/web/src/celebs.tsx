@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceEmpty, PageHeader, WorkspaceTabs } from "./workspace-ui";
 import {
   RefreshCw,
@@ -904,7 +905,7 @@ function Page({ session, active }: { session: Session; active: boolean }) {
           </button>
         </div>
       )}
-      {!listing && !error && <p role="status">正在读取…</p>}
+      {!listing && !error && <LoadingPlaceholder label="正在读取" compact />}
       {listing && !selected && (
         <>
           {!!listing.celebs.length && (

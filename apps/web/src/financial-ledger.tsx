@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceTabs } from "./workspace-ui";
 import { Settings2 } from "lucide-react";
 import { PrivateAmount } from "./financial-display";
@@ -708,7 +709,11 @@ export function FinancialLedger({
             </button>
           </div>
           <Activity mode={fundsOpen ? "visible" : "hidden"}>
-            <Dialog title="资金来源" className="fund-sources-dialog" onClose={() => setFundsOpen(false)}>
+            <Dialog
+              title="资金来源"
+              className="fund-sources-dialog"
+              onClose={() => setFundsOpen(false)}
+            >
               <div className="dialog-content">
                 <FundSourcesPanel
                   session={session}
@@ -763,7 +768,7 @@ export function FinancialLedger({
           )}
           {accountId && !cash ? (
             error ? null : (
-              <p role="status">正在读取…</p>
+              <LoadingPlaceholder label="正在读取" compact />
             )
           ) : (
             cash && (

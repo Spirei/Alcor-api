@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useSearchParams } from "react-router-dom";
 import { MarketCalendar } from "./market-calendar";
 import {
@@ -734,7 +735,7 @@ function ReferenceSession({
               </table>
             </div>
             {!historyBusy && history?.items.length === 0 && <p>暂无刷新记录</p>}
-            {historyBusy && <p role="status">正在读取…</p>}
+            {historyBusy && <LoadingPlaceholder label="正在读取" compact />}
             {history?.nextCursor && (
               <button
                 className="button"

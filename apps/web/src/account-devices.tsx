@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
 import type { Session } from "./api";
@@ -160,7 +161,7 @@ export function AccountDevices({ session }: { session: Session }) {
   return (
     <section className="card padded settings-section">
       <h2>登录设备</h2>
-      {loading && <p role="status">正在读取…</p>}
+      {loading && <LoadingPlaceholder label="正在读取" compact />}
       {devices?.length === 0 && <p>暂无登录设备</p>}
       {devices?.map((device) => (
         <div className="security-setting-row" key={device.id}>

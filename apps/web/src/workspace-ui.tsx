@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import {
   Activity,
   Suspense,
@@ -124,21 +125,7 @@ export function WorkspaceView({
   return visited.current ? (
     <Activity mode={active ? "visible" : "hidden"}>
       <section className="workspace-view" aria-label={label}>
-        <Suspense
-          fallback={
-            <div
-              className="workspace-view-loading"
-              role="status"
-              aria-label="正在读取"
-            >
-              <i />
-              <i />
-              <i />
-            </div>
-          }
-        >
-          {children}
-        </Suspense>
+        <Suspense fallback={<LoadingPlaceholder />}>{children}</Suspense>
       </section>
     </Activity>
   ) : null;

@@ -21,6 +21,8 @@ body {
   font-size: var(--content-size);
   font-family: var(--content-font, inherit);
   font-weight: var(--content-weight, 400);
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 code,
 pre,

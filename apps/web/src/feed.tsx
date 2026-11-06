@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceTabs, WorkspaceView, WorkspaceEmpty } from "./workspace-ui";
 import { useState as useWorkspaceState } from "react";
 import { PublicPeopleFeed } from "./public-people-feed";
@@ -1198,7 +1199,7 @@ function FeedSession({
               </p>
             ),
         )}
-        {!data && !error && <p role="status">正在读取动态…</p>}
+        {!data && !error && <LoadingPlaceholder label="正在读取动态" compact />}
         {data && !posts.length && (
           <WorkspaceEmpty
             title="暂无符合筛选的动态"
@@ -1400,7 +1401,7 @@ function FeedSession({
         >
           {!jobs.length &&
             (busy ? (
-              <p role="status">正在读取更新记录…</p>
+              <LoadingPlaceholder label="正在读取更新记录" compact />
             ) : (
               <WorkspaceEmpty title="暂无更新记录" />
             ))}

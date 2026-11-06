@@ -2230,6 +2230,9 @@ input:not([type="range"]):not([type="color"]):focus {
 }
 .dialog-actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
   margin-top: 24px;
   padding-top: 18px;
@@ -2244,6 +2247,8 @@ dialog {
   width: min(640px, calc(100% - 32px));
   max-height: 85dvh;
   box-shadow: 0 12px 40px #0002;
+  overscroll-behavior: contain;
+  scroll-padding-block: 76px 24px;
 }
 dialog::backdrop {
   background: var(--overlay);
@@ -2262,6 +2267,18 @@ dialog::backdrop {
 }
 .dialog-head h2 {
   font-size: calc(var(--text-size, 14px) * 1.14286);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dialog-head > .icon-button {
+  flex-shrink: 0;
+}
+.confirmation-dialog {
+  width: min(440px, calc(100% - 32px));
+}
+.confirmation-dialog > p {
+  font-size: 13px;
+  line-height: 1.7;
 }
 .dialog-content {
   padding: 24px;
@@ -3199,6 +3216,10 @@ fieldset > legend {
   padding: 18px 24px;
   margin-top: 20px;
   gap: 12px;
+}
+.app-dialog > .workspace-form-actions {
+  margin: 20px 0 0;
+  padding: 18px 24px;
 }
 .app-dialog > .personal-profile {
   max-width: none;

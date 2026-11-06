@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
@@ -713,7 +714,9 @@ function Content({ session, active = true, initialAccountId = "" }: Props) {
                   )}
                 </div>
               ) : (
-                !sourceError && <p role="status">正在读取来源…</p>
+                !sourceError && (
+                  <LoadingPlaceholder label="正在读取来源" compact />
+                )
               )}
             </details>
           )}

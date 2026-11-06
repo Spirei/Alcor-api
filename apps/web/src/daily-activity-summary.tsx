@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { PrivateAmount, MarketBadge } from "./financial-display";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
@@ -190,7 +191,9 @@ function SummaryPanel({
         </p>
       )}
       {locked && <p role="status">会话已变化，请重新登录后核对。</p>}
-      {!value && !error && !locked && <p role="status">正在读取已保存证据…</p>}
+      {!value && !error && !locked && (
+        <LoadingPlaceholder label="正在读取已保存证据" compact />
+      )}
       {value && (
         <>
           {value.books.length === 0 && (

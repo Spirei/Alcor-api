@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useId, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { RefreshCw } from "lucide-react";
@@ -45,9 +46,11 @@ export function RequestHeatmap() {
         </div>
         <div
           role={result.error ? "alert" : "status"}
-          className={result.error ? "notice error" : "loading"}
+          className={result.error ? "notice error" : undefined}
         >
-          {result.error || "正在读取请求统计…"}
+          {result.error || (
+            <LoadingPlaceholder label="正在读取请求统计" compact />
+          )}
         </div>
       </section>
     );

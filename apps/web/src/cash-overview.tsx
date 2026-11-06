@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import "./cash-overview.css";
 import "./page-layout.css";
 import { SelectMenu } from "./select-menu";
@@ -131,7 +132,9 @@ function Content({
           {error}
         </p>
       )}
-      {!snapshot && !error && <p role="status">正在读取资金…</p>}
+      {!snapshot && !error && (
+        <LoadingPlaceholder label="正在读取资金" compact />
+      )}
       {rows && rows.length === 0 && (
         <WorkspaceEmpty
           title="暂无现金记录"
@@ -165,7 +168,9 @@ export function CashCurrencyCard({ row }: { row: Currency }) {
         <strong>{row.currency}</strong>
         <span>{row.complete ? "账本资料完整" : "待核对"}</span>
       </header>
-      <div className={`cash-balance${(row.ownerBalance?.length ?? 0) > 18 ? " cash-balance-precise" : ""}`}>
+      <div
+        className={`cash-balance${(row.ownerBalance?.length ?? 0) > 18 ? " cash-balance-precise" : ""}`}
+      >
         <PrivateAmount>{row.ownerBalance ?? "未知"}</PrivateAmount>
         <small>内部账本余额</small>
       </div>

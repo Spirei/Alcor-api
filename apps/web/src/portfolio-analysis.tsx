@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import {
   PrivateAmount,
   MarketBadge,
@@ -656,11 +657,14 @@ function Panel({
           {error}
         </p>
       )}
-      {!overview && (
-        <div className="analysis-loading" role="status">
-          {busy ? "正在读取资产分析…" : "暂未读到资产分析"}
-        </div>
-      )}
+      {!overview &&
+        (busy ? (
+          <LoadingPlaceholder label="正在读取资产分析" />
+        ) : (
+          <div className="analysis-loading" role="status">
+            暂未读到资产分析
+          </div>
+        ))}
       {overview && (
         <>
           <p className="analysis-asof">

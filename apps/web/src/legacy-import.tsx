@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { SimpleLedger } from "./simple-ledger";
 import { PersonalDataTransfer } from "./personal-data-transfer";
@@ -672,7 +673,11 @@ function ImportSession({
         </div>
       )}
       {!ready ? (
-        <p role="status">{locked ? "当前内容已撤下" : "正在读取…"}</p>
+        locked ? (
+          <p role="status">当前内容已撤下</p>
+        ) : (
+          <LoadingPlaceholder />
+        )
       ) : (
         <>
           <WorkspaceTabs

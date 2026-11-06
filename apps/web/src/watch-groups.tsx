@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { useState as useWorkspaceState } from "react";
 import {
@@ -662,7 +663,9 @@ function WatchGroupsSession({
             disabled={locked}
           />
         </label>
-        {!groups && !locked && <p role="status">正在读取分组…</p>}
+        {!groups && !locked && (
+          <LoadingPlaceholder label="正在读取分组" compact />
+        )}
         {groups && (
           <WatchGroupRows
             groups={shown}
@@ -746,7 +749,7 @@ function WatchGroupsSession({
             {directoryError && <p role="alert">{directoryError}</p>}
             {recordError && <p role="alert">{recordError}</p>}
             {!records && !recordError && !locked && (
-              <p role="status">正在读取记录…</p>
+              <LoadingPlaceholder label="正在读取记录" compact />
             )}
             {records && (
               <>

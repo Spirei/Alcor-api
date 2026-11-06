@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
@@ -237,7 +238,9 @@ function RequestDetails({ visible }: { visible: boolean }) {
           {error}
         </p>
       )}
-      {!data && !error && <p role="status">正在读取请求观察…</p>}
+      {!data && !error && (
+        <LoadingPlaceholder label="正在读取请求观察" compact />
+      )}
       {data && (
         <>
           <RequestObservationMetrics data={data} />

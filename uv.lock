@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "alcor-api"
-version = "0.1.180"
+version = "0.1.181"
 source = { editable = "." }
 dependencies = [
     { name = "brotli" },

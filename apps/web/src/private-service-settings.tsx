@@ -271,6 +271,11 @@ function Content({
     [visible, setVisible] = useState(!document.hidden),
     [head, setHead] = useState<Head | null>(null);
   const [repair, setRepair] = useState(false);
+  const [newerHead, setNewerHead] = useState<Head | null>(null);
+  const editing = useRef<{ head: Head | null; dirty: boolean }>({
+    head: null,
+    dirty: false,
+  });
   const [password, setPassword] = useState(""),
     [code, setCode] = useState("");
   const [nextGroup, setNextGroup] = useState<string | null>(null);
@@ -309,8 +314,6 @@ function Content({
         setPassword("");
         setCode("");
         setRepair(false);
-        setDraft({});
-        setHead(null);
         setMessage("");
         setBusy(false);
       }
@@ -328,11 +331,6 @@ function Content({
     setCode("");
     setRepair(false);
     setBusy(false);
-    if (!active || !open) {
-      setHead(null);
-      setDraft({});
-      setMessage("");
-    }
     return () => {
       live.current = false;
       epoch.current++;
@@ -357,6 +355,7 @@ function Content({
     ) {
       setLocked(true);
       setHead(null);
+      setNewerHead(null);
       setDraft({});
       setSecrets({});
       setPassword("");
@@ -371,6 +370,7 @@ function Content({
     setMessage(reason instanceof Error ? reason.message : "私有配置不可用");
   }
   function accept(value: Head, chosen = group) {
+    setNewerHead(null);
     setRepair(false);
     setHead(value);
     setDraft(value.groups[chosen]?.values ?? {});
@@ -385,7 +385,15 @@ function Content({
     setMessage("");
     try {
       const value = await api<Head>(root, {}, session.csrf);
-      if (current(generation)) accept(value);
+      if (current(generation)) {
+        const before = editing.current;
+        if (before.head && before.dirty) {
+          if (value.revision !== before.head.revision) {
+            setNewerHead(value);
+            setMessage("配置已在其他端更新，请放弃当前修改后重新编辑");
+          }
+        } else accept(value);
+      }
     } catch (reason) {
       if (current(generation)) fail(reason);
     } finally {
@@ -437,7 +445,7 @@ function Content({
     }
   }
   async function save() {
-    if (!live.current || busy || pending || !head) return;
+    if (!live.current || busy || pending || !head || newerHead) return;
     const generation = epoch.current;
     setBusy(true);
     setMessage("");
@@ -535,10 +543,14 @@ function Content({
     (repair ||
       JSON.stringify(draft) !== JSON.stringify(value?.values ?? {}) ||
       Object.values(secrets).some((value) => value.mode !== "keep"));
+  editing.current = { head, dirty };
   function changeGroup(chosen: string) {
+    const currentHead = newerHead || head;
+    if (currentHead) setHead(currentHead);
+    setNewerHead(null);
     setGroup(chosen);
     setRepair(false);
-    setDraft(head?.groups[chosen]?.values ?? {});
+    setDraft(currentHead?.groups[chosen]?.values ?? {});
     setSecrets({});
     setPassword("");
     setCode("");
@@ -679,20 +691,6 @@ function Content({
       <div className="private-settings">
         {open && (
           <>
-            <div className="private-settings-toolbar">
-              <h3>接口与服务</h3>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="重新读取配置"
-                disabled={
-                  busy || locked || !active || !visible || dirty || !!pending
-                }
-                onClick={() => void read()}
-              >
-                <RefreshCw size={17} aria-hidden="true" />
-              </button>
-            </div>
             {pending && (
               <button
                 type="button"
@@ -704,27 +702,60 @@ function Content({
               </button>
             )}
             {message && <p role="status">{message}</p>}
+            {!head && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy || locked || !active || !visible}
+                onClick={() => void read()}
+              >
+                重新读取配置
+              </button>
+            )}
             {head && (
               <>
-                <WorkspaceTabs
-                  label="服务分组"
-                  value={group}
-                  items={serviceGroups.filter((item) =>
-                    Object.hasOwn(head.groups, item.value),
-                  )}
-                  disabled={busy || !!pending || locked || !active || !visible}
-                  onChange={(chosen) => {
-                    if (dirty) setNextGroup(chosen);
-                    else changeGroup(chosen);
-                  }}
-                />
-                <p className="private-group-status">
-                  {{
-                    saved: "已保存配置",
-                    installation: "当前安装配置",
-                    unavailable: "当前配置无法读取",
-                  }[value?.state || ""] || "配置状态待核对"}
-                </p>
+                <div className="private-service-navigation">
+                  <WorkspaceTabs
+                    label="服务分组"
+                    value={group}
+                    items={serviceGroups.filter((item) =>
+                      Object.hasOwn(head.groups, item.value),
+                    )}
+                    disabled={
+                      busy || !!pending || locked || !active || !visible
+                    }
+                    onChange={(chosen) => {
+                      if (dirty) setNextGroup(chosen);
+                      else changeGroup(chosen);
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="重新读取配置"
+                    disabled={
+                      busy ||
+                      locked ||
+                      !active ||
+                      !visible ||
+                      dirty ||
+                      !!pending
+                    }
+                    onClick={() => void read()}
+                  >
+                    <RefreshCw size={17} aria-hidden="true" />
+                  </button>
+                </div>
+                {value?.state !== "installation" && (
+                  <p className="private-group-status">
+                    {{
+                      saved: "已保存配置",
+                      installation: "当前安装配置",
+                      unavailable: "当前配置无法读取",
+                    }[value?.state || ""] || "配置状态待核对"}
+                  </p>
+                )}
                 {value?.state === "unavailable" && (
                   <PrivateSettingFields
                     fields={[
@@ -1239,7 +1270,7 @@ function Content({
                         className="button"
                         disabled={blocked}
                         onClick={() => {
-                          if (head) accept(head);
+                          if (newerHead || head) accept((newerHead || head)!);
                           setMessage("");
                         }}
                       >
@@ -1249,10 +1280,10 @@ function Content({
                     <button
                       type="button"
                       className="button primary"
-                      disabled={blocked || !dirty}
+                      disabled={blocked || !dirty || !!newerHead}
                       onClick={() => void save()}
                     >
-                      {busy ? "保存中…" : "保存此分组"}
+                      {busy && pending ? "处理中…" : "保存此分组"}
                     </button>
                   </div>
                 )}

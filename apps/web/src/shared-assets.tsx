@@ -1,3 +1,4 @@
+import { LoadingPlaceholder } from "./loading-placeholder";
 import { MaterialAccessSettings } from "./asset-library-access";
 import { Dialog } from "./dialog";
 import { PageHeader } from "./workspace-ui";
@@ -683,7 +684,7 @@ function MaterialReader({
       ) : allowed === false ? (
         <p role="status">素材库暂未向注册用户开放</p>
       ) : allowed === null ? (
-        <p role="status">正在读取素材权限…</p>
+        <LoadingPlaceholder label="正在读取素材权限" compact />
       ) : (
         <AssetLibraryBrowser
           key={JSON.stringify([

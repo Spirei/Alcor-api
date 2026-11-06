@@ -3,16 +3,19 @@
   display: grid;
   gap: 22px;
 }
-.private-settings-toolbar {
+.private-service-navigation {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  min-width: 0;
 }
-.private-settings-toolbar h3 {
-  font-size: 14px;
-  font-weight: 550;
-  margin: 0;
+.private-service-navigation > .workspace-tabs-shell {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.private-service-navigation > .icon-button {
+  flex-shrink: 0;
 }
 .private-settings .form-grid {
   display: grid;

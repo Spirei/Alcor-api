@@ -51,6 +51,7 @@ export function useConfirmationDialog(scope: string) {
     dialog: confirmation ? (
       <Dialog
         title={confirmation.title || "确认操作"}
+        className="confirmation-dialog"
         onClose={() => finish(confirmation, false)}
       >
         <p>{confirmation.message}</p>

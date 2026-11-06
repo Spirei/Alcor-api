@@ -1,15 +1,17 @@
-const SyncStatusPage = lazy(() =>
+import { lazyView } from "./lazy-view";
+import { LoadingPlaceholder } from "./loading-placeholder";
+const SyncStatusPage = lazyView(() =>
   import("./sync-status").then((module) => ({
     default: module.SyncStatusPage,
   })),
 );
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
-const SystemOperationsPanel = lazy(() =>
+const SystemOperationsPanel = lazyView(() =>
   import("./system-operations").then((module) => ({
     default: module.SystemOperationsPanel,
   })),
 );
-const AgentRuntimeControls = lazy(() =>
+const AgentRuntimeControls = lazyView(() =>
   import("./agent-runtime").then((module) => ({
     default: module.AgentRuntimeControls,
   })),
@@ -29,7 +31,7 @@ import {
   registerSiteWorker,
 } from "./public-site";
 import { legacySitePath, loginDestination } from "./site-paths";
-const MarketAssetDetails = lazy(() =>
+const MarketAssetDetails = lazyView(() =>
   import("./market-asset-details").then((module) => ({
     default: module.MarketAssetDetails,
   })),
@@ -63,73 +65,72 @@ import React, {
   useLayoutEffect,
   useRef,
   useState,
-  lazy,
   Suspense,
 } from "react";
 import type { ReactNode } from "react";
-const SimpleApp = lazy(() =>
+const SimpleApp = lazyView(() =>
   import("./simple-app").then((module) => ({ default: module.SimpleApp })),
 );
-const CelebsPage = lazy(() =>
+const CelebsPage = lazyView(() =>
   import("./celebs").then((module) => ({ default: module.CelebsPage })),
 );
-const FeedPage = lazy(() =>
+const FeedPage = lazyView(() =>
   import("./feed").then((module) => ({ default: module.FeedPage })),
 );
-const WatchGroupsPage = lazy(() =>
+const WatchGroupsPage = lazyView(() =>
   import("./watch-groups").then((module) => ({
     default: module.WatchGroupsPage,
   })),
 );
-const PortfolioPage = lazy(() =>
+const PortfolioPage = lazyView(() =>
   import("./portfolio").then((module) => ({ default: module.PortfolioPage })),
 );
-const MigrationPage = lazy(() =>
+const MigrationPage = lazyView(() =>
   import("./migration").then((module) => ({ default: module.MigrationPage })),
 );
-const ActivityPage = lazy(() =>
+const ActivityPage = lazyView(() =>
   import("./audit-activity").then((module) => ({
     default: module.ActivityPage,
   })),
 );
-const LegacyImportPage = lazy(() =>
+const LegacyImportPage = lazyView(() =>
   import("./legacy-import").then((module) => ({
     default: module.LegacyImportPage,
   })),
 );
-const FirePage = lazy(() =>
+const FirePage = lazyView(() =>
   import("./fire").then((module) => ({ default: module.FirePage })),
 );
-const SharedAssetsPage = lazy(() =>
+const SharedAssetsPage = lazyView(() =>
   import("./shared-assets").then((module) => ({
     default: module.SharedAssetsPage,
   })),
 );
-const AdminAttachmentsPage = lazy(() =>
+const AdminAttachmentsPage = lazyView(() =>
   import("./admin-attachments").then((module) => ({
     default: module.AdminAttachmentsPage,
   })),
 );
-const ResourcesPage = lazy(() =>
+const ResourcesPage = lazyView(() =>
   import("./resources").then((module) => ({ default: module.ResourcesPage })),
 );
-const FinancialReportsPage = lazy(() =>
+const FinancialReportsPage = lazyView(() =>
   import("./financial-reports").then((module) => ({
     default: module.FinancialReportsPage,
   })),
 );
-const CardCatalogPage = lazy(() =>
+const CardCatalogPage = lazyView(() =>
   import("./card-catalog").then((module) => ({
     default: module.CardCatalogPage,
   })),
 );
-const FeesPage = lazy(() =>
+const FeesPage = lazyView(() =>
   import("./fees").then((module) => ({ default: module.FeesPage })),
 );
-const ReferencePage = lazy(() =>
+const ReferencePage = lazyView(() =>
   import("./reference").then((module) => ({ default: module.ReferencePage })),
 );
-const MarketHistoryPage = lazy(() =>
+const MarketHistoryPage = lazyView(() =>
   import("./market-history").then((module) => ({
     default: module.MarketHistoryPage,
   })),
@@ -191,11 +192,11 @@ import type {
 } from "./api";
 import { ResourceProvider, useResource, useTaskInvalidation } from "./hooks";
 import { VersionHistory } from "./version-history";
-const BackupsPage = lazy(() =>
+const BackupsPage = lazyView(() =>
   import("./backups").then((module) => ({ default: module.BackupsPage })),
 );
 import { AccountPreferencesProvider } from "./account-preferences";
-const AccountClosureSettings = lazy(() =>
+const AccountClosureSettings = lazyView(() =>
   import("./account-removal").then((module) => ({
     default: module.AccountClosureSettings,
   })),
@@ -208,10 +209,10 @@ import {
   EmailRegistrationBoundary,
   EmailRegistrationLink,
 } from "./email-registration";
-const AccountPage = lazy(() =>
+const AccountPage = lazyView(() =>
   import("./accounts").then((module) => ({ default: module.AccountPage })),
 );
-const UsersPage = lazy(() =>
+const UsersPage = lazyView(() =>
   import("./accounts").then((module) => ({ default: module.UsersPage })),
 );
 import { AuthorizePage } from "./client-access";
@@ -223,27 +224,27 @@ import { ProfilePage } from "./profile";
 import { AccountMenu } from "./account-menu";
 import { SelectMenu } from "./select-menu";
 import { ServiceIllustration } from "./service-illustration";
-const DeploymentSettings = lazy(() =>
+const DeploymentSettings = lazyView(() =>
   import("./deployment").then((module) => ({
     default: module.DeploymentSettings,
   })),
 );
-const ConnectionSettingsForm = lazy(() =>
+const ConnectionSettingsForm = lazyView(() =>
   import("./connection-settings").then((module) => ({
     default: module.ConnectionSettingsForm,
   })),
 );
-const ApiReferenceSettings = lazy(() =>
+const ApiReferenceSettings = lazyView(() =>
   import("./api-reference-settings").then((module) => ({
     default: module.ApiReferenceSettings,
   })),
 );
-const MailTemplateSettings = lazy(() =>
+const MailTemplateSettings = lazyView(() =>
   import("./mail-template-settings").then((module) => ({
     default: module.MailTemplateSettings,
   })),
 );
-const PrivateServiceSettings = lazy(() =>
+const PrivateServiceSettings = lazyView(() =>
   import("./private-service-settings").then((module) => ({
     default: module.PrivateServiceSettings,
   })),
@@ -255,7 +256,7 @@ import "./appearance-runtime.css";
 import "./interaction.css";
 import "./workspace-forms.css";
 import "./page-layout.css";
-const AppearancePage = lazy(() =>
+const AppearancePage = lazyView(() =>
   import("./appearance").then((module) => ({ default: module.AppearancePage })),
 );
 import { useAppearance } from "./use-appearance";
@@ -477,6 +478,36 @@ const modulePaths = [
   "/authorize",
   "/app/authorize",
 ];
+const workspaceModules: Record<string, { preload: () => void }> = {
+  "/sync": SyncStatusPage,
+  "/portfolio": PortfolioPage,
+  "/market": MarketHistoryPage,
+  "/watch-groups": WatchGroupsPage,
+  "/reference": ReferencePage,
+  "/celebs": CelebsPage,
+  "/fire": FirePage,
+  "/fees": FeesPage,
+  "/simple": SimpleApp,
+  "/feed": FeedPage,
+  "/shared-assets": SharedAssetsPage,
+  "/resources": ResourcesPage,
+  "/attachments": AdminAttachmentsPage,
+  "/financial-reports": FinancialReportsPage,
+  "/cards": CardCatalogPage,
+  "/activity": ActivityPage,
+  "/legacy-import": LegacyImportPage,
+  "/migration": MigrationPage,
+  "/backups": BackupsPage,
+  "/users": UsersPage,
+  "/account": AccountPage,
+  "/appearance": AppearancePage,
+  "/settings": PrivateServiceSettings,
+  "/connections/postgresql": ConnectionSettingsForm,
+  "/connections/redis": ConnectionSettingsForm,
+};
+function preloadWorkspacePath(path: string) {
+  workspaceModules[path]?.preload();
+}
 const memberPaths = [
   "/sync",
   "/shared-assets",
@@ -578,12 +609,7 @@ function Empty({
   );
 }
 function Loading() {
-  return (
-    <div className="loading" role="status">
-      <RefreshCw size={18} className="spin" />
-      正在读取…
-    </div>
-  );
+  return <LoadingPlaceholder />;
 }
 function ReadPending({ error }: { error: string }) {
   return error ? null : <Loading />;
@@ -2003,6 +2029,7 @@ function Workspace({
           preferInputOrder={
             mobileViewport && publicSite.mobileNavigationOrder.length > 0
           }
+          onIntent={preloadWorkspacePath}
           onNavigate={(path) => {
             beginNavigation(path);
             setMobile(false);
@@ -2015,6 +2042,8 @@ function Workspace({
               "sidebar-appearance " + (isActive ? "active" : "")
             }
             aria-label="外观"
+            onPointerEnter={() => preloadWorkspacePath("/appearance")}
+            onFocus={() => preloadWorkspacePath("/appearance")}
             title={collapsed ? "外观" : undefined}
             onClick={() => {
               beginNavigation("/appearance");
@@ -2091,13 +2120,7 @@ function Workspace({
                       path={path}
                       active={location.pathname === path}
                     >
-                      <Suspense
-                        fallback={
-                          <div className="workspace-loading" role="status">
-                            <Loading />
-                          </div>
-                        }
-                      >
+                      <Suspense fallback={<LoadingPlaceholder />}>
                         <WorkspaceRoutes path={path}>
                           <Route
                             path="/backups"
@@ -2106,9 +2129,7 @@ function Workspace({
                           <Route
                             path="/reference"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <ReferencePage
                                   session={session}
                                   active={location.pathname === "/reference"}
@@ -2119,9 +2140,7 @@ function Workspace({
                           <Route
                             path="/celebs"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <CelebsPage
                                   session={session}
                                   active={location.pathname === "/celebs"}
@@ -2132,9 +2151,7 @@ function Workspace({
                           <Route
                             path="/feed"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <FeedPage
                                   session={session}
                                   active={location.pathname === "/feed"}
@@ -2145,9 +2162,7 @@ function Workspace({
                           <Route
                             path="/market"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <MarketHistoryPage
                                   session={session}
                                   active={location.pathname === "/market"}
@@ -2158,9 +2173,7 @@ function Workspace({
                           <Route
                             path="/fire"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <FirePage
                                   session={session}
                                   active={location.pathname === "/fire"}
@@ -2171,9 +2184,7 @@ function Workspace({
                           <Route
                             path="/shared-assets"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <SharedAssetsPage
                                   session={session}
                                   active={
@@ -2186,9 +2197,7 @@ function Workspace({
                           <Route
                             path="/attachments"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <AdminAttachmentsPage
                                   session={session}
                                   active={location.pathname === "/attachments"}
@@ -2199,9 +2208,7 @@ function Workspace({
                           <Route
                             path="/watch-groups"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <WatchGroupsPage
                                   session={session}
                                   active={location.pathname === "/watch-groups"}
@@ -2212,9 +2219,7 @@ function Workspace({
                           <Route
                             path="/activity"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <ActivityPage session={session} />
                               </Suspense>
                             }
@@ -2222,9 +2227,7 @@ function Workspace({
                           <Route
                             path="/legacy-import"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <LegacyImportPage
                                   session={session}
                                   active={
@@ -2237,9 +2240,7 @@ function Workspace({
                           <Route
                             path="/cards"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <CardCatalogPage
                                   key={JSON.stringify([
                                     session.instance_id,
@@ -2258,9 +2259,7 @@ function Workspace({
                           <Route
                             path="/financial-reports"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <FinancialReportsPage
                                   session={session}
                                   active={
@@ -2273,9 +2272,7 @@ function Workspace({
                           <Route
                             path="/resources"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <ResourcesPage
                                   session={session}
                                   active={location.pathname === "/resources"}
@@ -2286,9 +2283,7 @@ function Workspace({
                           <Route
                             path="/fees"
                             element={
-                              <Suspense
-                                fallback={<div role="status">正在读取…</div>}
-                              >
+                              <Suspense fallback={<LoadingPlaceholder />}>
                                 <FeesPage
                                   session={session}
                                   active={location.pathname === "/fees"}
