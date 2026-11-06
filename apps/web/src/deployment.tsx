@@ -17,6 +17,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { api, ApiError, base, type Session } from "./api";
+import { apiSessionSnapshot, isCurrentApiSession } from "./api-session";
 import { useResource } from "./hooks";
 import { usePanelReady } from "./transition-qa";
 import { requestId } from "./request-id";
@@ -32,6 +33,9 @@ import {
   formatDuration,
   workflowLabel,
   buildReceiptMessage,
+  buildReceiptPending,
+  originalBuildPublished,
+  resumeBuildReceipt,
   canRestartBuild,
   receiptCloseTarget,
   deploymentRuntimeState,
@@ -42,7 +46,16 @@ import {
   type Release,
   type Receipt,
   type WorkflowRun,
+  type BuildReceipt,
 } from "./deployment-view";
+import {
+  observationActive,
+  createRequestLifetime,
+  observeOriginalRequest,
+  requestObservation,
+  sendObservedRequest,
+  type RequestObservation,
+} from "./deployment-observation";
 import {
   DeploymentConfigForm,
   useDeploymentConfig,
@@ -58,6 +71,16 @@ const states: Record<string, string> = {
   unknown: "结果待核对",
   cancelled: "记录已关闭",
 };
+function observeVisibility(resume: () => void) {
+  document.addEventListener("visibilitychange", resume);
+  return () => document.removeEventListener("visibilitychange", resume);
+}
+const rejected = (error: unknown): error is ApiError =>
+  error instanceof ApiError &&
+  error.status >= 400 &&
+  error.status < 500 &&
+  error.status !== 408;
+type ScopedObservation = RequestObservation & { scope: string };
 export function DeploymentSettings({
   session,
   appearance,
@@ -69,7 +92,21 @@ export function DeploymentSettings({
   const [busy, setBusy] = useState(false),
     [confirm, setConfirm] = useState(false);
   const [message, setMessage] = useState("");
-  const [watchingUpdate, setWatchingUpdate] = useState<string | null>(null);
+  const identity = [
+    session.instance_id,
+    session.user.id,
+    session.user.role,
+    session.receipt_scope,
+    session.csrf,
+  ].join(":");
+  const lifetime = useRef(createRequestLifetime());
+  const previousIdentity = useRef(identity);
+  const [watchingUpdate, setWatchingUpdate] =
+    useState<ScopedObservation | null>(null);
+  const [watchingBuild, setWatchingBuild] = useState<ScopedObservation | null>(
+    null,
+  );
+  const observationStarts = useRef(new Map<string, ScopedObservation>());
   const [closing, setClosing] = useState<{
     request_id: string;
     release: Release;
@@ -85,6 +122,43 @@ export function DeploymentSettings({
   // Keep the UUID after a timeout: only query that receipt; never submit a new request implicitly.
   const pending = useRef<string | null>(null);
   useEffect(() => {
+    if (previousIdentity.current !== identity) {
+      previousIdentity.current = identity;
+      pending.current = buildPending.current = null;
+      observationStarts.current.clear();
+      ignoredUpdates.current.clear();
+      ignoredBuilds.current.clear();
+      setWatchingUpdate(null);
+      setWatchingBuild(null);
+      setConfirm(false);
+      setBuildConfirm(null);
+      setClosing(null);
+      setMessage("");
+    }
+    setBusy(false);
+    return lifetime.current.activate();
+  }, [identity]);
+  function currentRequest() {
+    const active = lifetime.current.capture(),
+      scope = apiSessionSnapshot();
+    return () => active() && isCurrentApiSession(scope);
+  }
+  function watchRequest(
+    kind: "update" | "build",
+    id: string,
+    created_at?: string,
+  ) {
+    const key = identity + ":" + kind + ":" + id;
+    const observed = observationStarts.current.get(key) || {
+      ...requestObservation(undefined, id, created_at),
+      scope: identity,
+    };
+    observationStarts.current.set(key, observed);
+    const setWatching =
+      kind === "update" ? setWatchingUpdate : setWatchingBuild;
+    setWatching(observationActive(observed) ? observed : null);
+  }
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("verify") === "github") {
       window.history.replaceState(null, "", "/deploy-status");
@@ -97,10 +171,24 @@ export function DeploymentSettings({
   }, []);
   const data = state.data;
   useEffect(() => {
-    if (data?.source && data.release?.revision === data.source.sha) {
+    const sourcePublished =
+      !!data?.source && data.release?.revision === data.source.sha;
+    if (
+      sourcePublished ||
+      originalBuildPublished(buildPending.current, {
+        build: data?.build || null,
+        release: data?.release || null,
+      })
+    ) {
       if (buildPending.current) {
+        ignoredBuilds.current.add(buildPending.current);
         buildPending.current = null;
-        setMessage("当前 main 已有可用镜像，原构建回执保留在详情中");
+        setWatchingBuild(null);
+        setMessage(
+          sourcePublished
+            ? "当前 main 已有可用镜像，原构建回执保留在详情中"
+            : "原构建镜像已发布，原回执保留在详情中",
+        );
       }
       return;
     }
@@ -109,12 +197,24 @@ export function DeploymentSettings({
       !buildPending.current &&
       last &&
       !ignoredBuilds.current.has(last.request_id) &&
-      ["dispatching", "unknown"].includes(last.status)
+      resumeBuildReceipt(last, {
+        source: data?.source || null,
+        build: data?.build || null,
+      })
     ) {
       buildPending.current = last.request_id;
+      watchRequest("build", last.request_id, last.created_at);
       setMessage((previous) => previous || buildReceiptMessage(last));
     }
-  }, [data?.build_requests, data?.release?.revision, data?.source?.sha]);
+  }, [
+    data?.build_requests,
+    data?.release?.revision,
+    data?.source?.sha,
+    data?.build?.sha,
+    data?.build?.title,
+    data?.build?.status,
+    data?.build?.conclusion,
+  ]);
   useEffect(() => {
     const receipt = pending.current
       ? data?.receipts.find((r) => r.request_id === pending.current)
@@ -126,20 +226,42 @@ export function DeploymentSettings({
     if (receipt) observeUpdate(receipt);
   }, [data?.receipts]);
   function observeUpdate(receipt: Receipt) {
+    if (
+      ignoredUpdates.current.has(receipt.request_id) &&
+      ["queued", "running", "unknown"].includes(receipt.status)
+    )
+      return;
     setMessage(
       `${receipt.status === "running" ? "已通知 Watchtower，等待容器恢复" : states[receipt.status] || receipt.status} · ${receipt.request_id}`,
     );
     if (["queued", "running", "unknown"].includes(receipt.status)) {
       pending.current = receipt.request_id;
-      setWatchingUpdate(
-        updateNeedsObservation(receipt) ? receipt.request_id : null,
-      );
+      watchRequest("update", receipt.request_id, receipt.created_at);
     } else {
       if (pending.current === receipt.request_id) pending.current = null;
       ignoredUpdates.current.add(receipt.request_id);
       setWatchingUpdate((current) =>
-        current === receipt.request_id ? null : current,
+        current?.request_id === receipt.request_id ? null : current,
       );
+    }
+  }
+  function observeBuild(receipt: BuildReceipt) {
+    if (
+      ignoredBuilds.current.has(receipt.request_id) &&
+      buildReceiptPending(receipt)
+    )
+      return;
+    setMessage(`${buildReceiptMessage(receipt)} · ${receipt.request_id}`);
+    if (!buildReceiptPending(receipt)) {
+      ignoredBuilds.current.add(receipt.request_id);
+      if (buildPending.current === receipt.request_id)
+        buildPending.current = null;
+      setWatchingBuild((current) =>
+        current?.request_id === receipt.request_id ? null : current,
+      );
+    } else {
+      buildPending.current = receipt.request_id;
+      watchRequest("build", receipt.request_id, receipt.created_at);
     }
   }
   const config = useDeploymentConfig();
@@ -172,31 +294,97 @@ export function DeploymentSettings({
     document.title = "发布状态 · Alcor";
   }, []);
   usePanelReady("/deploy-status", !!data || !!state.error);
+  useEffect(() => {
+    function start(kind: "update" | "build", observed: ScopedObservation) {
+      if (observed.scope !== identity) return () => {};
+      const current = currentRequest();
+      const label = kind === "update" ? "更新" : "构建";
+      const original = kind === "update" ? pending : buildPending;
+      const ignored = kind === "update" ? ignoredUpdates : ignoredBuilds;
+      const setWatching =
+        kind === "update" ? setWatchingUpdate : setWatchingBuild;
+      return observeOriginalRequest<Receipt | BuildReceipt>(observed, {
+        read: (id, signal) =>
+          api(
+            `/deployment/${kind === "update" ? "requests" : "builds"}/${id}`,
+            { signal },
+          ),
+        result: (receipt) => {
+          if (receipt.request_id !== observed.request_id)
+            throw new Error("回执编号不匹配");
+          if (kind === "update") observeUpdate(receipt as Receipt);
+          else observeBuild(receipt as BuildReceipt);
+          state.reload();
+          return original.current === observed.request_id;
+        },
+        error: (error) => {
+          // A POST can still be in preflight; an early read 404 is not permission to send again.
+          if (rejected(error) && (error as ApiError).status !== 404) {
+            ignored.current.add(observed.request_id);
+            if (original.current === observed.request_id)
+              original.current = null;
+            setWatching(null);
+            setMessage((error as Error).message);
+            state.reload();
+            return false;
+          }
+          setMessage(
+            `${label}结果待核对，正在读取原回执 · ${observed.request_id}`,
+          );
+          state.reload();
+          return true;
+        },
+        expired: (id) => {
+          setWatching((current) =>
+            current?.request_id === id ? null : current,
+          );
+          setMessage(`自动核对已暂停，请手动查询原${label}回执 · ${id}`);
+        },
+        hidden: () => document.hidden,
+        visibility: observeVisibility,
+        current,
+      });
+    }
+    const stopUpdate = watchingUpdate && start("update", watchingUpdate);
+    const stopBuild = watchingBuild && start("build", watchingBuild);
+    return () => {
+      stopUpdate && stopUpdate();
+      stopBuild && stopBuild();
+    };
+  }, [watchingUpdate, watchingBuild, state.reload, identity]);
   async function update(original?: string) {
     if ((!original && !pending.current && !data?.release) || busy) return;
     const checking = original || pending.current;
     const id = checking || requestId();
+    const current = currentRequest();
     setBusy(true);
     setMessage("");
     try {
       if (checking) {
         const result = await api<Receipt>(`/deployment/requests/${id}`);
+        if (!current()) return;
         if (result.request_id !== id)
           throw new Error("更新回执编号不匹配，请核对原请求");
         observeUpdate(result);
       } else {
         pending.current = id;
-        const result = await api<Receipt>(
-          "/deployment/requests",
-          {
-            method: "POST",
-            body: JSON.stringify({
-              request_id: id,
-              release: data!.release,
-            }),
-          },
-          session.csrf,
+        const result = await sendObservedRequest(
+          id,
+          (id) => watchRequest("update", id),
+          () =>
+            api<Receipt>(
+              "/deployment/requests",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  request_id: id,
+                  release: data!.release,
+                }),
+              },
+              session.csrf,
+            ),
         );
+        if (!current()) return;
         if (result.request_id !== id)
           throw new Error("更新回执编号不匹配，请核对原请求");
         observeUpdate(result);
@@ -204,28 +392,38 @@ export function DeploymentSettings({
       setConfirm(false);
       state.reload();
     } catch (error) {
+      if (!current()) return;
       if (error instanceof ApiError && error.status === 404 && checking) {
         ignoredUpdates.current.add(id);
         if (pending.current === id) pending.current = null;
-        setWatchingUpdate(null);
+        setWatchingUpdate((current) =>
+          current?.request_id === id ? null : current,
+        );
         setMessage(`未查到此更新回执，未再次通知 Watchtower · ${id}`);
       } else {
-        setMessage(error instanceof Error ? error.message : "更新请求失败");
-        if (
-          error instanceof ApiError &&
-          error.status >= 400 &&
-          error.status < 500 &&
-          error.status !== 408
-        )
-          pending.current = null;
+        if (rejected(error)) {
+          if (pending.current === id) pending.current = null;
+          ignoredUpdates.current.add(id);
+          setWatchingUpdate((current) =>
+            current?.request_id === id ? null : current,
+          );
+          setMessage((error as Error).message);
+        } else if (!ignoredUpdates.current.has(id)) {
+          pending.current = id;
+          watchRequest("update", id);
+          setConfirm(false);
+          setMessage(`更新结果待核对，正在读取原回执 · ${id}`);
+        }
       }
+      state.reload();
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   }
   async function closeUpdate() {
     if (!closing || busy) return;
     const approval = closing;
+    const current = currentRequest();
     setBusy(true);
     setMessage("");
     try {
@@ -237,6 +435,7 @@ export function DeploymentSettings({
         },
         session.csrf,
       );
+      if (!current()) return;
       if (
         result.request_id !== approval.request_id ||
         result.status !== "cancelled"
@@ -246,13 +445,10 @@ export function DeploymentSettings({
       setMessage(result.message || `更新记录已关闭 · ${result.request_id}`);
       state.reload();
     } catch (error) {
-      if (
-        !(error instanceof ApiError) ||
-        error.status >= 500 ||
-        error.status === 408
-      ) {
+      if (!current()) return;
+      if (!rejected(error)) {
         pending.current = approval.request_id;
-        setWatchingUpdate(approval.request_id);
+        watchRequest("update", approval.request_id);
         setMessage(`关闭结果待核对，请查询原回执 · ${approval.request_id}`);
         state.reload();
       } else {
@@ -260,8 +456,10 @@ export function DeploymentSettings({
         state.reload();
       }
     } finally {
-      setClosing(null);
-      setBusy(false);
+      if (current()) {
+        setClosing(null);
+        setBusy(false);
+      }
     }
   }
   function confirmBuild(previous: string | null = null) {
@@ -298,55 +496,62 @@ export function DeploymentSettings({
     if (approval?.previous) ignoredBuilds.current.add(approval.previous);
     if (!checking) buildPending.current = requestId();
     const id = buildPending.current!;
+    const current = currentRequest();
     setBusy(true);
     setMessage("");
     try {
       setMessage(checking ? "正在查询原构建回执…" : "正在提交构建请求…");
-      const result = await api<{
-        status: string;
-        request_id: string;
-        message?: string;
-      }>(
-        checking ? `/deployment/builds/${id}` : "/deployment/builds",
-        checking
-          ? {}
-          : {
-              method: "POST",
-              body: JSON.stringify({
-                request_id: id,
-                expected_revision: approval!.revision,
-              }),
-            },
-        session.csrf,
-        120000,
-      );
+      const result = checking
+        ? await api<BuildReceipt>(`/deployment/builds/${id}`)
+        : await sendObservedRequest(
+            id,
+            (id) => watchRequest("build", id),
+            () =>
+              api<BuildReceipt>(
+                "/deployment/builds",
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    request_id: id,
+                    expected_revision: approval!.revision,
+                  }),
+                },
+                session.csrf,
+                120000,
+              ),
+          );
+      if (!current()) return;
       if (result.request_id !== id)
         throw new Error("构建回执编号不匹配，请核对原请求");
-      setMessage(`${buildReceiptMessage(result)} · ${result.request_id}`);
-      if (["submitted", "failed"].includes(result.status)) {
-        ignoredBuilds.current.add(result.request_id);
-        buildPending.current = null;
-      }
+      observeBuild(result);
       setBuildConfirm(null);
       state.reload();
     } catch (error) {
+      if (!current()) return;
       if (checking && error instanceof ApiError && error.status === 404) {
         ignoredBuilds.current.add(id);
         buildPending.current = null;
+        setWatchingBuild((current) =>
+          current?.request_id === id ? null : current,
+        );
         setBuildConfirm(null);
         setMessage(`未查到此构建的受理记录，可重新构建 · ${id}`);
-        state.reload();
-      } else
-        setMessage(error instanceof Error ? error.message : "构建请求失败");
-      if (
-        error instanceof ApiError &&
-        error.status >= 400 &&
-        error.status < 500 &&
-        ![404, 408].includes(error.status)
-      )
-        buildPending.current = null;
+      } else if (rejected(error)) {
+        if (buildPending.current === id) buildPending.current = null;
+        ignoredBuilds.current.add(id);
+        setWatchingBuild((current) =>
+          current?.request_id === id ? null : current,
+        );
+        setMessage((error as Error).message);
+      } else if (!ignoredBuilds.current.has(id)) {
+        buildPending.current = id;
+        watchRequest("build", id);
+        setBuildConfirm(null);
+        setMessage(`构建结果待核对，正在读取原回执 · ${id}`);
+      }
+      state.reload();
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   }
   const buildState = runState(data?.build?.status, data?.build?.conclusion);
@@ -367,7 +572,7 @@ export function DeploymentSettings({
     data,
     state.refreshing,
     !!state.error,
-    !!watchingUpdate,
+    !!watchingUpdate || !!watchingBuild,
   );
   useEffect(() => {
     if (pollDelay === null) return;

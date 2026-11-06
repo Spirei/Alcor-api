@@ -51,6 +51,44 @@ export type BuildReceipt = {
   created_at: string;
   message?: string;
 };
+export function buildReceiptPending(receipt: Pick<BuildReceipt, "status">) {
+  return receipt.status !== "failed";
+}
+export function originalBuildPublished(
+  original: string | null,
+  context: {
+    build: Pick<WorkflowRun, "sha" | "title" | "status" | "conclusion"> | null;
+    release: { revision: string } | null;
+  },
+) {
+  return (
+    !!original &&
+    context.build?.status === "completed" &&
+    context.build.conclusion === "success" &&
+    context.build.title.includes(original) &&
+    context.release?.revision === context.build.sha
+  );
+}
+export function resumeBuildReceipt(
+  receipt: BuildReceipt,
+  context: {
+    source: { sha: string } | null;
+    build: { sha: string; title: string } | null;
+  },
+  now = Date.now(),
+) {
+  if (["unknown", "dispatching"].includes(receipt.status)) return true;
+  const age = now - Date.parse(receipt.created_at);
+  return (
+    receipt.status === "submitted" &&
+    !!context.source &&
+    context.build?.sha === context.source.sha &&
+    context.build.title.includes(receipt.request_id) &&
+    Number.isFinite(age) &&
+    age >= -60000 &&
+    age < 15 * 60000
+  );
+}
 export type Deployment = {
   can_build: boolean;
   build_requests: BuildReceipt[];
@@ -148,10 +186,9 @@ export function updateNeedsObservation(
   receipt: Pick<Receipt, "status" | "created_at">,
   now = Date.now(),
 ) {
-  if (["queued", "running"].includes(receipt.status)) return true;
   const age = now - Date.parse(receipt.created_at);
   return (
-    receipt.status === "unknown" &&
+    ["queued", "running", "unknown"].includes(receipt.status) &&
     Number.isFinite(age) &&
     age >= -60000 &&
     age < 15 * 60000
