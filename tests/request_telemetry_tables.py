@@ -12,3 +12,16 @@ REQUEST_TELEMETRY_TABLES = frozenset({
     "account_request_activity_batches",
     "account_request_activity_state",
 })
+
+
+async def business_table_hashes(conn):
+    """Hashes for a read-only business proof.
+
+    The request collector flushes on its own timer. Those rows are not business
+    state, so a flush during the proof must not fail the comparison. Proofs
+    about telemetry itself must keep using tables_and_hashes.
+    """
+    from alcor_api.backups import tables_and_hashes
+
+    values = await tables_and_hashes(conn)
+    return {name: value for name, value in values.items() if name not in REQUEST_TELEMETRY_TABLES}

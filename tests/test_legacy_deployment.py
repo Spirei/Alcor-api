@@ -9,17 +9,16 @@ import pytest_asyncio
 from alcor_api import deployment_config as configuration
 from alcor_api import deployment_watchtower as bridge
 from alcor_api import deployments
-from alcor_api.backups import tables_and_hashes
 from alcor_api.cli import create_user
 from alcor_api.legacy_deployment import PREFIX as P
 from alcor_api.legacy_deployment import mount_legacy_deployment
 from alcor_api.security import digest
 from pydantic import SecretStr
+from request_telemetry_tables import business_table_hashes
 
 
 async def business_hashes(conn):
-    values=await tables_and_hashes(conn)
-    return {key:value for key,value in values.items() if key not in {'request_observations','request_observation_producers','request_rollup_state','account_request_activity','account_request_activity_batches','account_request_activity_state'}}
+    return await business_table_hashes(conn)
 
 
 @pytest_asyncio.fixture

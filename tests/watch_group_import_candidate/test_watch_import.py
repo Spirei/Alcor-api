@@ -3,9 +3,9 @@
 import json
 from uuid import uuid4
 
-from alcor_api.backups import tables_and_hashes
 from legacy_source.test_financial_mapping import imported
 from legacy_source.test_source_authority import authorized
+from request_telemetry_tables import business_table_hashes
 
 
 async def capture(client,grant,uid=None):
@@ -30,12 +30,7 @@ async def apply(client,captured,proof,uid=None):
 
 async def hashes(db):
     async with db.connection() as conn,conn.transaction():
-        values=await tables_and_hashes(conn)
-        # Authenticated request observation is independent of source and financial state.
-        return {key:value for key,value in values.items() if key not in {
-            "account_request_activity", "account_request_activity_batches", "account_request_activity_state",
-            "request_observations", "request_observation_producers", "request_rollup_state"
-        }}
+        return await business_table_hashes(conn)
 
 
 async def test_capture_establishes_same_permanent_claim_without_financial_head_or_fake_member_mapping(client,admin,old_pg,app):

@@ -8,11 +8,11 @@ from uuid import uuid4
 import httpx
 import psycopg
 import pytest
-from alcor_api.backups import tables_and_hashes
 from alcor_api.source_registry import load_registry
 from alcor_api.source_snapshot import canonical, sha
 from alcor_api.watch_group_source_display import aggregate, project
 from legacy_source.test_source_authority import authorized
+from request_telemetry_tables import business_table_hashes
 from watch_group_import_candidate.test_watch_import import apply, capture, preview
 
 
@@ -25,9 +25,7 @@ async def imported(client, admin, old_pg):
 
 async def hashes(db):
     async with db.connection() as conn, conn.transaction():
-        values=await tables_and_hashes(conn)
-        # Independent request observation is outside source and financial state.
-        return {key:value for key,value in values.items() if key not in {'request_observations','request_observation_producers','request_rollup_state','account_request_activity','account_request_activity_batches','account_request_activity_state'}}
+        return await business_table_hashes(conn)
 
 
 async def test_source_creation_is_separate_from_actual_platform_creation_and_every_GET_is_read_only(client, admin, old_pg, app):

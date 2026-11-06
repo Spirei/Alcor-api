@@ -7,10 +7,10 @@ from fractions import Fraction
 from uuid import uuid4
 
 import pytest
-from alcor_api.backups import tables_and_hashes
 from alcor_api.fx_reference import persist
 from alcor_api.market_calendar import Calendars
 from alcor_api.reference_integrity import fx_observation
+from request_telemetry_tables import business_table_hashes
 
 
 async def test_inserted_fx_value_without_original_evidence_is_unavailable_not_quoted(client,app,db,admin):
@@ -24,7 +24,7 @@ async def test_inserted_fx_value_without_original_evidence_is_unavailable_not_qu
         # Simulate an incoherent restored/partially imported projection using a
         # new append-only row; no trigger or financial authority is disabled.
         await conn.execute("INSERT INTO fx_values(observation_id,currency,rate) VALUES(%s,'JPY',150)",(observation,))
-        before=await tables_and_hashes(conn)
+        before=await business_table_hashes(conn)
     response=await client.get('/api/reference/rates')
     assert response.status_code==200 and response.json()['state']=='retained_unavailable',response.text
     assert response.json()['rates']=={'USD':'1'} and response.json()['quoted']==[]
@@ -44,7 +44,7 @@ async def test_inserted_fx_value_without_original_evidence_is_unavailable_not_qu
         response=await client.get(path+'?refresh=1')
         assert response.status_code==502 and response.json()['code']==50002,response.text
     async with db.connection() as conn,conn.transaction():
-        assert await tables_and_hashes(conn)==before
+        assert await business_table_hashes(conn)==before
         kept=await(await conn.execute('SELECT original_bytes,raw_sha256 FROM fx_observations WHERE id=%s',(observation,))).fetchone()
         assert bytes(kept['original_bytes'])==raw and kept['raw_sha256']==hashlib.sha256(raw).hexdigest()
 
@@ -59,13 +59,13 @@ async def test_retained_calendar_original_corruption_cannot_publish_verified_day
         await conn.execute('ALTER TABLE market_calendar_releases DISABLE TRIGGER retain_calendar_release')
         await conn.execute("UPDATE market_calendar_releases SET original_bytes=original_bytes || ' '::bytea")
         await conn.execute('ALTER TABLE market_calendar_releases ENABLE TRIGGER retain_calendar_release')
-        before=await tables_and_hashes(conn)
+        before=await business_table_hashes(conn)
     for suffix in ('?market=HK&year=2026','/batch?year=2026','/batch?year=2028'):
         bad=await client.get('/api/v2/market-calendar'+suffix,headers={'If-None-Match':normal.headers['etag']})
         assert bad.status_code==503 and 'etag' not in bad.headers,bad.text
     assert await Calendars(db).discovery() is None
     async with db.connection() as conn,conn.transaction():
-        assert await tables_and_hashes(conn)==before
+        assert await business_table_hashes(conn)==before
 
 
 def test_custom_non_usd_exact_fraction_reparse_and_mismatched_projection_rejected():

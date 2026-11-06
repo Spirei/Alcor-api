@@ -36,10 +36,10 @@ async def test_old_cookie_directory_projects_real_metadata_sessions_and_unknown_
         await conn.execute(
             "INSERT INTO identity_security(user_id,email_verified,totp_enabled) VALUES(%s,true,true)", (peer,)
         )
-    from alcor_api.backups import tables_and_hashes
+    from request_telemetry_tables import business_table_hashes
 
     async with db.connection() as conn, conn.transaction():
-        before = await tables_and_hashes(conn)
+        before = await business_table_hashes(conn)
     response = await legacy.get(P)
     assert response.status_code == 200, response.text
     result = response.json()
@@ -56,7 +56,7 @@ async def test_old_cookie_directory_projects_real_metadata_sessions_and_unknown_
     assert native.status_code == 200 and "items" in native.json() and "users" not in native.json()
     assert "Synthetic9Pass" not in response.text and "password_hash" not in response.text
     async with db.connection() as conn, conn.transaction():
-        assert await tables_and_hashes(conn) == before
+        assert await business_table_hashes(conn) == before
 
 
 async def test_legacy_put_requires_explicit_uuid_cas_actor_password_and_returns_original_snapshot(

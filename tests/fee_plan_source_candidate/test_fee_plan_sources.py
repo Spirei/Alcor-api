@@ -11,10 +11,10 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from alcor_api.backups import tables_and_hashes
 from alcor_api.fee_plan_sources import original
 from alcor_api.fee_plans import calculate_component, validate_rule
 from alcor_api.native_app_auth import issue_grant
+from request_telemetry_tables import business_table_hashes
 
 HERE = Path(__file__).parent
 
@@ -117,7 +117,7 @@ async def test_existing_unknown_market_not_projected_as_empty_fields(client,admi
         user=await (await conn.execute("SELECT * FROM users WHERE id=%s",(admin,))).fetchone()
         pair=await issue_grant(conn,user,"portfolio.read","Synthetic reader")
     before={}
-    async with db.connection() as conn,conn.transaction():before=await tables_and_hashes(conn)
+    async with db.connection() as conn,conn.transaction():before=await business_table_hashes(conn)
     response=await client.get("/api/v2/app-state?namespace=fees",headers={"authorization":"Bearer "+pair["access_token"]})
     assert response.status_code==409 and "未知" in response.json()["message"]
-    async with db.connection() as conn,conn.transaction():assert await tables_and_hashes(conn)==before
+    async with db.connection() as conn,conn.transaction():assert await business_table_hashes(conn)==before
