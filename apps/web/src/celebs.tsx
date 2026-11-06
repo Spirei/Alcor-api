@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceEmpty, PageHeader, WorkspaceTabs } from "./workspace-ui";
 import {
@@ -2176,7 +2177,7 @@ function CelebSourceControls({
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(
+      const response = await requestResponse(
         "/api" + root + "/originals/" + encodeURIComponent(page),
         {
           credentials: "same-origin",

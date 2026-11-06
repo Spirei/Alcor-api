@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { safeReturnPath } from "./site-paths";
@@ -14,7 +15,7 @@ export function PublicSiteProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let controller = new AbortController();
     const load=()=>{controller.abort();controller=new AbortController();const current=controller;
-    void fetch("/api/settings/public", { credentials: "same-origin", cache: "no-store", signal: controller.signal })
+    void requestResponse("/api/settings/public", { credentials: "same-origin", cache: "no-store", signal: controller.signal })
       .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
       .then(({ settings }) => {
         if (current.signal.aborted || !settings || typeof settings !== "object") return;

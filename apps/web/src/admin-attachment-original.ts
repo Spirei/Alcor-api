@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { ApiError } from "./api";
 import {
   apiSessionSnapshot,
@@ -29,7 +30,7 @@ export async function attachmentOriginal(
     item.size > 50 * 1024 * 1024
   )
     throw new Error("原文件大小待核对");
-  const response = await fetch(
+  const response = await requestResponse(
     "/api/admin/attachments?" +
       new URLSearchParams({ action: "download", path: item.rel }),
     {

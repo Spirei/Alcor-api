@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { WorkspaceTabs } from "./workspace-ui";
 import { ArrowLeft, Code2, Files, RefreshCw } from "lucide-react";
 import { SelectMenu } from "./select-menu";
@@ -189,7 +190,7 @@ function SimpleAppEditor({
       headers.set("x-simple-ledger-user", session.user.id);
       if (typeof init.body === "string")
         headers.set("content-type", "application/json");
-      const response = await fetch(base + path, {
+      const response = await requestResponse(base + path, {
         ...init,
         headers,
         signal: controller.signal,
@@ -415,7 +416,7 @@ function SimpleAppEditor({
           setLocked(true);
           throw Error("当前登录身份已变化");
         }
-        const response = await fetch(base + "/tool/export", {
+        const response = await requestResponse(base + "/tool/export", {
           method: "POST",
           credentials: "same-origin",
           cache: "no-store",

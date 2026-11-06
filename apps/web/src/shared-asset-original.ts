@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { ApiError } from "./api";
 import {
   apiSessionSnapshot,
@@ -25,7 +26,7 @@ export async function sharedAssetOriginal(
       );
   };
   check();
-  const response = await fetch(
+  const response = await requestResponse(
     "/api/admin/shared-assets/versions/" + receipt.version + "/original",
     {
       credentials: "same-origin",

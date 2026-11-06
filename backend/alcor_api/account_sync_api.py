@@ -33,7 +33,7 @@ def mount_account_sync(app, settings, db, rate_limit):
             headers["X-Alcor-API-Version"] = "2"
         try:
             from .legacy_optional_credentials import credentials_present
-            credentials_present(request)
+            credentials_present(request, platform=not native)
             assert_native_origin(request, settings)
             if native:
                 who, grant = await native_identity(request, db, "portfolio.write" if request.method == "POST" else "portfolio.read")

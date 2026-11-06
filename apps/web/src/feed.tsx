@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { LoadingPlaceholder } from "./loading-placeholder";
 import { WorkspaceTabs, WorkspaceView, WorkspaceEmpty } from "./workspace-ui";
 import { useState as useWorkspaceState } from "react";
@@ -917,7 +918,7 @@ function FeedSession({
     controllers.current.add(c);
     setBusy(true);
     try {
-      const response = await fetch(
+      const response = await requestResponse(
         "/api" + base + "/originals/" + encodeURIComponent(pageId),
         {
           credentials: "same-origin",

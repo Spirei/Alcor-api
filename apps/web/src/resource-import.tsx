@@ -228,6 +228,7 @@ export function ResourceImportPanel({
     const generation = epoch.current,
       read = ++listRead.current;
     setReady(false);
+    setError("");
     try {
       const [gs, ms, os, ss] = await Promise.all([
         api<{ items: Grant[] }>(base + "/authorizations"),
@@ -597,9 +598,9 @@ export function ResourceImportPanel({
       {!ready ? (
         locked ? (
           <p role="status">当前内容已撤下</p>
-        ) : (
+        ) : !error ? (
           <LoadingPlaceholder />
-        )
+        ) : null
       ) : (
         <>
           {session.user.role === "admin" && (

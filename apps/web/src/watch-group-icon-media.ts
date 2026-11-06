@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { apiSessionSnapshot } from "./api-session";
 import { ApiError } from "./api";
 import { groupIcon, type GroupIcon } from "./watch-group-icon-state";
@@ -13,7 +14,7 @@ export async function iconBlob(
     context.current() &&
     apiSessionSnapshot().csrf === context.csrf;
   if (!current()) throw new Error("登录身份已变化");
-  const response = await fetch(
+  const response = await requestResponse(
     original ? media.originalPath : media.contentPath,
     {
       credentials: "same-origin",

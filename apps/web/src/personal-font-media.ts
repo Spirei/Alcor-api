@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { ApiError } from "./api";
 import { apiSessionSnapshot, bindApiSession } from "./api-session";
 import { personalFont, type PersonalFont } from "./personal-font-state";
@@ -22,7 +23,7 @@ export async function personalFontBytes(
     timer = setTimeout(abort, 15000);
   signal.addEventListener("abort", abort, { once: true });
   try {
-    const response = await fetch(font.originalPath, {
+    const response = await requestResponse(font.originalPath, {
       credentials: "same-origin",
       headers: { "X-CSRF-Token": context.csrf },
       signal: controller.signal,

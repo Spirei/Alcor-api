@@ -1,3 +1,5 @@
+import { ApiError, requestResponse, responseJson } from "./api-response";
+export { ApiError } from "./api-response";
 import { httpFailureMessage } from "./http-failure";
 import { delayRead, readStarted } from "./transition-qa";
 import {
@@ -23,16 +25,6 @@ export type TaskDetail = components["schemas"]["TaskDetail"];
 export type TaskList = components["schemas"]["TaskList"];
 export const base = "/api";
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public requestId = "",
-    public code = "",
-  ) {
-    super(message);
-  }
-}
 export async function api<T>(
   path: string,
   options: RequestInit = {},
@@ -71,12 +63,16 @@ export async function api<T>(
       headers.set("Content-Type", "application/json");
     if (csrf || (boundRead && session.csrf))
       headers.set("X-CSRF-Token", csrf || session.csrf!);
-    const response = await fetch(base + path, {
-      credentials: "same-origin",
-      ...options,
-      signal: controller.signal,
-      headers,
-    });
+    const response = await requestResponse(
+      base + path,
+      {
+        credentials: "same-origin",
+        ...options,
+        signal: controller.signal,
+        headers,
+      },
+      read,
+    );
     assertCurrent();
     if (response.headers.get("X-Alcor-Session-Changed") === "true") {
       bindApiSession(null);
@@ -109,7 +105,7 @@ export async function api<T>(
       );
     }
     if (response.status === 204) return undefined as T;
-    const result = (await response.json()) as T;
+    const result = (await responseJson(response, read)) as T;
     if (
       (options.method || "GET") === "GET" &&
       path !== "/meta" &&
@@ -120,7 +116,12 @@ export async function api<T>(
     return result;
   } catch (e) {
     if (controller.signal.aborted && !options.signal?.aborted)
-      throw new ApiError(0, "等待超时，请核对操作状态后重试");
+      throw new ApiError(
+        0,
+        read
+          ? "读取超时，请稍后重试"
+          : "等待超时，操作结果尚未确认，请核对原操作",
+      );
     throw e;
   } finally {
     clearTimeout(timer);

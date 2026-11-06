@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
 import { requestId } from "./request-id";
@@ -20,7 +21,7 @@ function Content({session,account,onChanged}: {session: Session; account: Broker
   function report(failure:unknown){if(failure instanceof ApiError && [401,403].includes(failure.status)){epoch.current++;clearFile();clearImage();setPending(null);try{sessionStorage.removeItem(key);}catch{/* Retire local view. */}}setError(failure instanceof Error?failure.message:"图标操作失败");}
   useEffect(()=>{
     alive.current=true; const controller=new AbortController();const generation=epoch.current;
-    if(account.icon_version) void fetch('/api'+root+'/'+encodeURIComponent(account.id)+'/content',{credentials:'same-origin',headers:{'X-CSRF-Token':session.csrf},signal:controller.signal}).then(async response=>{if(!response.ok)throw new ApiError(response.status,"图标暂时无法读取");const data=await response.blob();if(alive.current && generation===epoch.current && !document.hidden){const next=URL.createObjectURL(data);blob.current=next;setUrl(next);}}).catch(failure=>{if(alive.current && generation===epoch.current && !controller.signal.aborted)report(failure);});
+    if(account.icon_version) void requestResponse('/api'+root+'/'+encodeURIComponent(account.id)+'/content',{credentials:'same-origin',headers:{'X-CSRF-Token':session.csrf},signal:controller.signal}).then(async response=>{if(!response.ok)throw new ApiError(response.status,"图标暂时无法读取");const data=await response.blob();if(alive.current && generation===epoch.current && !document.hidden){const next=URL.createObjectURL(data);blob.current=next;setUrl(next);}}).catch(failure=>{if(alive.current && generation===epoch.current && !controller.signal.aborted)report(failure);});
     const hide=()=>{epoch.current++;clearFile();clearImage();controller.abort();if(!document.hidden)setRefreshImage(value=>value+1);};document.addEventListener('visibilitychange',hide);
     return()=>{alive.current=false;epoch.current++;controller.abort();if(blob.current)URL.revokeObjectURL(blob.current);blob.current=null;document.removeEventListener('visibilitychange',hide);};
   },[account.id,account.icon_version,session.csrf,refreshImage]);

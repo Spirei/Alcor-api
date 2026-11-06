@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { LoadingPlaceholder } from "./loading-placeholder";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
@@ -96,7 +97,7 @@ export function FxObservations({
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(
+      const response = await requestResponse(
         "/api/reference/rates/observations/" +
           encodeURIComponent(id) +
           "/original",

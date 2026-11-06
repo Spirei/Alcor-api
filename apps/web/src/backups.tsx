@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { WorkspaceTabs, WorkspaceView } from "./workspace-ui";
 import { BackupScheduleControls } from "./backup-schedule-controls";
 import { useLocation } from "react-router-dom";
@@ -248,7 +249,7 @@ export function BackupsPage({ session }: { session: Session }) {
     if (backup.download_available === false) return;
     setError("");
     try {
-      const response = await fetch(`${base}/backups/${backup.id}/download`, {
+      const response = await requestResponse(`${base}/backups/${backup.id}/download`, {
         credentials: "same-origin",
       });
       if (!response.ok) {

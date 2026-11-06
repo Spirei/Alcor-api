@@ -1053,7 +1053,7 @@ function PortfolioSession({ session }: { session: Session }) {
             </button>
           </div>
           {!brokers ? (
-            <LoadingPlaceholder label="正在读取" compact />
+            !error && <LoadingPlaceholder label="正在读取" compact />
           ) : brokers.length === 0 ? (
             <WorkspaceEmpty
               title="暂无账户"

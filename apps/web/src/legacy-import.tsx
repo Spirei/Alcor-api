@@ -382,6 +382,7 @@ function ImportSession({
       epoch.current === generation &&
       reads.current === read;
     setReady(false);
+    setError("");
     setDetail(null);
     const manifests = new URLSearchParams({ limit: "20" }),
       operations = new URLSearchParams({ limit: "20" });
@@ -675,9 +676,9 @@ function ImportSession({
       {!ready ? (
         locked ? (
           <p role="status">当前内容已撤下</p>
-        ) : (
+        ) : !error ? (
           <LoadingPlaceholder />
-        )
+        ) : null
       ) : (
         <>
           <WorkspaceTabs

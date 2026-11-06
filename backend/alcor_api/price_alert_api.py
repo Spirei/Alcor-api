@@ -6,10 +6,10 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from .legacy_identity import assert_native_origin, body, envelope, native_identity, native_version
-from .price_alert_contract import visible
-from .security import identity
 from .legacy_optional_credentials import credentials_present
 from .native_app_auth import CLIENT
+from .price_alert_contract import visible
+from .security import identity
 
 
 def filtered(value, negotiated):
@@ -37,7 +37,7 @@ def mount(app, service):
             raise HTTPException(429, "请求过于频繁，请稍后再试")
 
     async def perform(request, action, request_id=None, legacy=False):
-        credentials_present(request)
+        credentials_present(request, platform=not legacy)
         if request.url.query:
             raise HTTPException(400, "不支持查询参数")
         if legacy:
@@ -92,7 +92,7 @@ def mount(app, service):
         )
 
     async def owner(request):
-        credentials_present(request)
+        credentials_present(request, platform=True)
         if "authorization" in request.headers:
             assert_native_origin(request, service.db.settings)
             who,grant = await native_identity(

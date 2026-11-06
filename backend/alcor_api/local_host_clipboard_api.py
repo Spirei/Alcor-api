@@ -18,7 +18,7 @@ def mount_local_host_clipboard(app, db):
     app.state.local_host_clipboard = service
 
     async def resolve_member(request):
-        credentials_present(request)
+        credentials_present(request, platform=True)
         # Explicit Authorization retains legacy priority; it cannot inherit a
         # separate browser cookie's host approval.
         if "authorization" in request.headers:

@@ -3329,3 +3329,17 @@ fieldset > legend {
     font-size: 12px;
   }
 }
+
+.profile-editor-content .profile-editor {
+  padding: 0;
+}
+.profile-editor-content .personal-profile {
+  margin: 0;
+}
+
+.personal-profile-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}

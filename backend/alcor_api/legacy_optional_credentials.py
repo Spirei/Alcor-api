@@ -21,11 +21,15 @@ def market_platform_session_selected(request):
     )
 
 
-def credentials_present(request):
+def credentials_present(request, *, platform=False):
     if 'authorization' in request.headers:
         values=request.headers.getlist('authorization')
         if len(values)!=1 or re.fullmatch(r'Bearer [A-Za-z0-9._~+/=-]+',values[0]) is None:
             raise HTTPException(401,'身份凭据格式无效')
+        return True
+    # Explicit Web handlers select this cookie themselves and validate it with
+    # identity(). Unselected legacy cookies must not override that selection.
+    if platform and COOKIE in request.cookies:
         return True
     if market_platform_session_selected(request):
         return True

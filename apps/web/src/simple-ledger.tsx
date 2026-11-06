@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, type Session } from "./api";
 import { apiSessionSnapshot } from "./api-session";
@@ -28,7 +29,7 @@ function Editor({session,active}:{session:Session;active:boolean}){
  async function response(path:string,init:RequestInit,signal:AbortSignal){
   if(apiSessionSnapshot().csrf!==session.csrf)throw new ApiError(409,'当前登录身份已变化','','session_changed');
   const headers=new Headers(init.headers);headers.set('X-CSRF-Token',session.csrf);headers.set('X-Simple-Ledger-User',session.user.id);if(typeof init.body==='string')headers.set('Content-Type','application/json');
-  const result=await fetch(root+path,{...init,headers,credentials:'same-origin',cache:'no-store',signal});
+  const result=await requestResponse(root+path,{...init,headers,credentials:'same-origin',cache:'no-store',signal});
   if(apiSessionSnapshot().csrf!==session.csrf||result.headers.get('X-Alcor-Session-Changed')==='true')throw new ApiError(409,'当前登录身份已变化','','session_changed');
   if(!result.ok){const value=await result.clone().json().catch(()=>null);if(value?.state==='rejected'&&typeof value?.requestId==='string')return result;throw new ApiError(result.status,typeof value?.detail==='string'?value.detail:typeof value?.error==='string'?value.error:value?.error?.message||value?.message||'独立账本操作失败');}
   return result;

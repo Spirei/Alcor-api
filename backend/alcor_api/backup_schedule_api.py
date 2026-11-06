@@ -7,8 +7,8 @@ from fastapi import HTTPException, Request
 
 from .backup_schedule import BackupSchedule
 from .card_preferences_protocol import card_member, wire_response
-from .profile_http import bounded_body
 from .legacy_optional_credentials import credentials_present
+from .profile_http import bounded_body
 from .security import identity
 
 
@@ -17,7 +17,7 @@ def mount_backup_schedule(app, db):
     app.state.backup_schedule = service
 
     async def member(request, legacy=False):
-        credentials_present(request)
+        credentials_present(request, platform=not legacy)
         if legacy:
             who = await card_member(request, db)
         else:

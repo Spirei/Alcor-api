@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { ApiError } from "./api";
 import { apiSessionSnapshot } from "./api-session";
 import {
@@ -24,7 +25,7 @@ export async function sourceIconOriginal(
       binding.csrf === context.csrf &&
       apiSessionSnapshot().epoch === binding.epoch;
   if (!current()) throw Error("登录身份已变化");
-  const response = await fetch(captured.originalPath, {
+  const response = await requestResponse(captured.originalPath, {
     credentials: "same-origin",
     headers: { "X-CSRF-Token": context.csrf },
     signal,

@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { ApiError } from "./api";
 import { apiSessionSnapshot } from "./api-session";
 import {
@@ -30,7 +31,7 @@ export async function attachmentArchiveOriginal(
   )
     throw new Error("该项尚无已归档原件");
   if (!current()) throw new Error("登录身份已变化");
-  const response = await fetch(
+  const response = await requestResponse(
     "/api/admin/attachment-import/snapshots/" +
       id +
       "/items/" +

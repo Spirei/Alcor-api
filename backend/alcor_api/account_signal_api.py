@@ -18,7 +18,7 @@ def mount_account_signals(app, settings, db):
         headers = {"Cache-Control": "no-store, private", "Vary": "Authorization, Cookie, X-Alcor-Context"}
         try:
             from .legacy_optional_credentials import credentials_present
-            credentials_present(request)
+            credentials_present(request, platform=not native)
             assert_native_origin(request, settings)
             if request.query_params:
                 raise HTTPException(400, "不支持查询参数")

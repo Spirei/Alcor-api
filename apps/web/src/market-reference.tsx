@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { LoadingPlaceholder } from "./loading-placeholder";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type Session } from "./api";
@@ -348,7 +349,7 @@ function Content({
             encodeURIComponent(id) +
             "?" +
             params;
-      const response = await fetch(safePath, {
+      const response = await requestResponse(safePath, {
         credentials: "same-origin",
         headers: { "X-CSRF-Token": session.csrf },
         signal: controller.signal,

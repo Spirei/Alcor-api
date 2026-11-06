@@ -1,17 +1,13 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Pencil, Upload, ImagePlus } from "lucide-react";
 import { api, base } from "./api";
 import type { Profile, Session } from "./api";
 import { useProfileInvalidation, useResource } from "./hooks";
 import { Dialog } from "./dialog";
 import { RequestHeatmap } from "./request-heatmap";
+import { WorkspaceTabs } from "./workspace-ui";
+import { LoadingPlaceholder } from "./loading-placeholder";
+import type { Personal } from "./personal-profile";
 const PersonalProfile = lazy(() =>
   import("./personal-profile").then((module) => ({
     default: module.PersonalProfile,
@@ -91,14 +87,16 @@ function ProfileEditor({
   profile,
   onClose,
   onSaved,
-  extra,
+  onPersonalValue,
 }: {
   session: Session;
   profile: Profile;
   onClose: () => void;
   onSaved: () => void;
-  extra?: ReactNode;
+  onPersonalValue: (value: Personal | null) => void;
 }) {
+  const [section, setSection] = useState<"identity" | "personal">("identity");
+  const [personalBusy, setPersonalBusy] = useState(false);
   const [name, setName] = useState(profile.display_name);
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState<string | null | undefined>();
@@ -157,105 +155,136 @@ function ProfileEditor({
     }
   }
   return (
-    <Dialog title="编辑资料" onClose={saving ? () => {} : onClose}>
-      <form className="profile-editor" onSubmit={(e) => void save(e)}>
-        <div
-          className={`avatar-dropzone${dragging ? " dragging" : ""}`}
-          role="group"
-          aria-label="头像上传，可拖入图片或点击上传头像"
-          onDragOver={(event) => {
-            if (!event.dataTransfer.types.includes("Files")) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect =
-              saving || processing ? "none" : "copy";
-            if (!saving && !processing) setDragging(true);
-          }}
-          onDragLeave={(event) => {
-            if (
-              !event.currentTarget.contains(event.relatedTarget as Node | null)
-            )
-              setDragging(false);
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            if (saving || processing) return;
-            const files = event.dataTransfer.files;
-            if (files.length > 1) {
-              setError("每次请选择一张头像图片");
-              return;
-            }
-            void select(files[0]);
-          }}
-        >
-          <div className="editor-avatar">
-            <ProfileAvatar
-              profile={profile}
-              username={session.user.username}
-              preview={preview}
-            />
-          </div>
-          <input
-            ref={input}
-            type="file"
-            hidden
-            accept="image/png,image/jpeg,image/webp"
-            aria-label="选择头像图片"
-            disabled={saving}
-            onChange={(e) => {
-              void select(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
-          <div className="avatar-actions">
-            <button
-              type="button"
-              className="button secondary"
-              disabled={saving || processing}
-              onClick={() => input.current?.click()}
+    <Dialog
+      title="编辑资料"
+      className="profile-edit-dialog"
+      onClose={saving || personalBusy ? () => {} : onClose}
+    >
+      <div className="dialog-content profile-editor-content">
+        <WorkspaceTabs
+          label="资料编辑分类"
+          value={section}
+          onChange={setSection}
+          disabled={saving || processing || personalBusy}
+          items={[
+            { value: "identity", label: "头像与名称" },
+            { value: "personal", label: "简介与背景" },
+          ]}
+        />
+        <section hidden={section !== "identity"} aria-label="头像与名称">
+          <form className="profile-editor" onSubmit={(e) => void save(e)}>
+            <div
+              className={`avatar-dropzone${dragging ? " dragging" : ""}`}
+              role="group"
+              aria-label="头像上传，可拖入图片或点击上传头像"
+              onDragOver={(event) => {
+                if (!event.dataTransfer.types.includes("Files")) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect =
+                  saving || processing ? "none" : "copy";
+                if (!saving && !processing) setDragging(true);
+              }}
+              onDragLeave={(event) => {
+                if (
+                  !event.currentTarget.contains(
+                    event.relatedTarget as Node | null,
+                  )
+                )
+                  setDragging(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragging(false);
+                if (saving || processing) return;
+                const files = event.dataTransfer.files;
+                if (files.length > 1) {
+                  setError("每次请选择一张头像图片");
+                  return;
+                }
+                void select(files[0]);
+              }}
             >
-              <Upload size={16} />
-              {processing ? "正在处理…" : "上传头像"}
-            </button>
-            {(preview ||
-              (preview === undefined && profile.avatar_revision)) && (
+              <div className="editor-avatar">
+                <ProfileAvatar
+                  profile={profile}
+                  username={session.user.username}
+                  preview={preview}
+                />
+              </div>
+              <input
+                ref={input}
+                type="file"
+                hidden
+                accept="image/png,image/jpeg,image/webp"
+                aria-label="选择头像图片"
+                disabled={saving}
+                onChange={(e) => {
+                  void select(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <div className="avatar-actions">
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={saving || processing}
+                  onClick={() => input.current?.click()}
+                >
+                  <Upload size={16} />
+                  {processing ? "正在处理…" : "上传头像"}
+                </button>
+                {(preview ||
+                  (preview === undefined && profile.avatar_revision)) && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={saving || processing}
+                    onClick={() => setPreview(null)}
+                  >
+                    移除头像
+                  </button>
+                )}
+              </div>
+            </div>
+            <label className="profile-name-field">
+              显示名称
+              <input
+                value={name}
+                maxLength={80}
+                disabled={saving}
+                placeholder={session.user.username}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <ErrorLine message={error} />
+            <div className="dialog-actions">
               <button
                 type="button"
-                className="text-button"
-                disabled={saving || processing}
-                onClick={() => setPreview(null)}
+                className="button secondary"
+                disabled={saving}
+                onClick={onClose}
               >
-                移除头像
+                取消
               </button>
-            )}
-          </div>
-        </div>
-        <label className="profile-name-field">
-          显示名称
-          <input
-            value={name}
-            maxLength={80}
-            disabled={saving}
-            placeholder={session.user.username}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <ErrorLine message={error} />
-        <div className="dialog-actions">
-          <button
-            type="button"
-            className="button secondary"
-            disabled={saving}
-            onClick={onClose}
-          >
-            取消
-          </button>
-          <button className="button primary" disabled={saving || processing}>
-            {saving ? "保存中…" : "保存"}
-          </button>
-        </div>
-      </form>
-      {extra}
+              <button
+                className="button primary"
+                disabled={saving || processing}
+              >
+                {saving ? "保存中…" : "保存"}
+              </button>
+            </div>
+          </form>
+        </section>
+        <section hidden={section !== "personal"} aria-label="简介与背景">
+          <Suspense fallback={<LoadingPlaceholder />}>
+            <PersonalProfile
+              session={session}
+              onValue={onPersonalValue}
+              onBusyChange={setPersonalBusy}
+            />
+          </Suspense>
+        </section>
+      </div>
     </Dialog>
   );
 }
@@ -370,11 +399,7 @@ export function ProfilePage({ session }: { session: Session }) {
         <ProfileEditor
           session={session}
           profile={profile.data}
-          extra={
-            <Suspense fallback={null}>
-              <PersonalProfile session={session} onValue={setPersonal} />
-            </Suspense>
-          }
+          onPersonalValue={setPersonal}
           onClose={() => setEditing(false)}
           onSaved={() => {
             invalidate();

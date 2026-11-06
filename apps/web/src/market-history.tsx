@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { MarketDisplaySettings } from "./market-display-settings";
 import {
   useCallback,
@@ -580,7 +581,7 @@ function HistorySession({
       const params = new URLSearchParams({
         source_revision: facts.sourceRevision,
       });
-      const response = await fetch(
+      const response = await requestResponse(
         `/api/market/history/originals/${pageId}?${params}`,
         {
           credentials: "same-origin",

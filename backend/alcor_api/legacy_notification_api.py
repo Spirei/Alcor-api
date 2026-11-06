@@ -6,13 +6,13 @@ from uuid import UUID
 from fastapi import HTTPException, Request, Response
 
 from .legacy_identity import assert_native_origin, body, envelope, native_identity
-from .security import identity
 from .legacy_optional_credentials import credentials_present
+from .security import identity
 
 
 def mount_legacy_notifications(app, settings, service):
     async def actor(request, *, legacy=False, write=False):
-        credentials_present(request)
+        credentials_present(request, platform=not legacy)
         if request.url.query:
             raise HTTPException(400, "不支持查询参数")
         if legacy or request.headers.get("authorization") is not None:

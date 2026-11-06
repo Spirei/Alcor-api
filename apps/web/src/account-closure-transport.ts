@@ -1,10 +1,11 @@
+import { requestResponse } from "./api-response.ts";
 import {
   closureObservation,
   type ClosurePending,
 } from "./account-closure-state.ts";
 
 async function publicRead(path: string, body: unknown, signal?: AbortSignal) {
-  const result = await fetch("/api/account/closure/" + path, {
+  const result = await requestResponse("/api/account/closure/" + path, {
     method: body === undefined ? "GET" : "POST",
     credentials: "omit",
     referrerPolicy: "no-referrer",

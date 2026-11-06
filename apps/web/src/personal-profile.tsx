@@ -4,7 +4,7 @@ import { SelectMenu } from "./select-menu";
 import { requestId } from "./request-id";
 import { restorePersonalProfileRequest } from "./personal-profile-state";
 
-type Personal = {
+export type Personal = {
   userId: string;
   revision: number;
   bio: string;
@@ -24,9 +24,11 @@ const path = "/account/personal-profile";
 export function PersonalProfile({
   session,
   onValue,
+  onBusyChange,
 }: {
   session: Session;
   onValue?: (value: Personal | null) => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const key = `alcor.personal-profile.${JSON.stringify([session.instance_id, session.user.id, session.user.role, session.receipt_scope])}`;
   const [value, setValue] = useState<Personal | null>(null);
@@ -45,6 +47,10 @@ export function PersonalProfile({
     latestRead = useRef(0),
     dirty = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
 
   useEffect(() => {
     if (value) onValue?.(value);
@@ -277,7 +283,7 @@ export function PersonalProfile({
         </div>
       )}
       {conflict && (
-        <div className="reference-actions">
+        <div className="personal-profile-actions">
           <button
             className="button secondary"
             onClick={() => {
@@ -366,7 +372,7 @@ export function PersonalProfile({
           onChange={(event) => setFile(event.target.files?.[0] || null)}
         />
       </label>
-      <div className="reference-actions">
+      <div className="personal-profile-actions">
         <button
           className="button secondary"
           disabled={!file || !journalReady || busy || !!pending || !!conflict}

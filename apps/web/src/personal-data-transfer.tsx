@@ -1,3 +1,4 @@
+import { requestResponse } from "./api-response.ts";
 import { PersonalDataAdministration, type AdministrationMaps } from "./personal-data-administration";
 import { PasswordField } from "./password-fields";
 import { useEffect, useRef, useState } from "react";
@@ -49,7 +50,7 @@ function Panel({session,active}:{session:Session;active:boolean}){
   }catch(reason){if(current(generation)){if(action==='preview'&&reason instanceof ApiError&&[400,413,422,429].includes(reason.status))remember(null);fail(reason);}}
   finally{if(current(generation)){setBusy(false);request.current=null;}}
  }
- async function exportFile(){if(!live.current||busy||document.hidden)return;const generation=epoch.current,controller=new AbortController();request.current=controller;setBusy(true);setMessage('');setExported(null);try{const response=await fetch('/api'+root+'/export',{credentials:'same-origin',cache:'no-store',headers:{'X-CSRF-Token':session.csrf},signal:controller.signal});if(apiSessionSnapshot().csrf!==session.csrf)throw new ApiError(409,'登录身份已变化','','session_changed');if(!response.ok)throw new ApiError(response.status,'个人 JSON 导出不可用');const blob=await response.blob();if(blob.size>10*1024*1024)throw new Error('导出超过个人 JSON 安全预算');const metadata:Payload=JSON.parse(await blob.text());if(current(generation))setExported({blob,manifest:metadata.manifest});}catch(reason){if(current(generation))fail(reason);}finally{if(current(generation)){setBusy(false);request.current=null;}}}
+ async function exportFile(){if(!live.current||busy||document.hidden)return;const generation=epoch.current,controller=new AbortController();request.current=controller;setBusy(true);setMessage('');setExported(null);try{const response=await requestResponse('/api'+root+'/export',{credentials:'same-origin',cache:'no-store',headers:{'X-CSRF-Token':session.csrf},signal:controller.signal});if(apiSessionSnapshot().csrf!==session.csrf)throw new ApiError(409,'登录身份已变化','','session_changed');if(!response.ok)throw new ApiError(response.status,'个人 JSON 导出不可用');const blob=await response.blob();if(blob.size>10*1024*1024)throw new Error('导出超过个人 JSON 安全预算');const metadata:Payload=JSON.parse(await blob.text());if(current(generation))setExported({blob,manifest:metadata.manifest});}catch(reason){if(current(generation))fail(reason);}finally{if(current(generation)){setBusy(false);request.current=null;}}}
  function download(blob:Blob,name:string){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  const sourceRows=(Array.isArray(payload?.data.records)?payload.data.records:[]) as Row[];
  const orders=(Array.isArray(payload?.data.tradeOrders)?payload.data.tradeOrders:[]) as Row[];
