@@ -242,27 +242,16 @@ def mount_legacy_deployment(app, settings, db):
     async def updater(request: Request):
         await admin(request, db)
         effective = await configuration.effective(request)
-        async with db.connection() as conn:
-            runner = await (
-                await conn.execute(
-                    "SELECT observed_at,observed_at>clock_timestamp()-interval '3 minutes' AS online FROM deployment_runner WHERE singleton"
-                )
-            ).fetchone()
-        configured = bool(
-            effective.deployment_runner_token
-            and len(effective.deployment_runner_token.get_secret_value()) >= 32
-        )
-        reachable = bool(runner and runner["online"])
+        from .deployment_watchtower import probe
+
+        runner = await asyncio.to_thread(probe, effective)
+        await admin(request, db)
         return {
-            "available": configured and reachable,
-            "configured": configured,
-            "reachable": reachable,
-            "observedAt": runner["observed_at"] if runner else None,
-            "reason": "更新执行器在线"
-            if configured and reachable
-            else "尚未配置更新执行器"
-            if not configured
-            else "尚未收到有效执行器心跳",
+            "available": runner["configured"] and runner["online"],
+            "configured": runner["configured"],
+            "reachable": runner["online"],
+            "observedAt": runner["observed_at"],
+            "reason": runner["reason"],
         }
 
     @app.post(PREFIX)
@@ -295,8 +284,8 @@ def mount_legacy_deployment(app, settings, db):
         return JSONResponse(
             jsonable_encoder(
                 {
-                    "ok": False,
-                    "pending": True,
+                    "ok": result["status"] == "succeeded",
+                    "pending": result["status"] in {"queued", "running", "unknown"},
                     **result,
                     "receiptUrl": PREFIX + "/requests/" + str(result["request_id"]),
                 }

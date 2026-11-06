@@ -4,6 +4,7 @@ import time
 from uuid import uuid4
 
 import httpx
+from alcor_api import deployment_watchtower as bridge
 from alcor_api.connections import Vault
 from alcor_api.native_identity import totp_code
 from alcor_api.security import COOKIE
@@ -103,8 +104,11 @@ async def test_stale_admin_oauth_starts_directly_and_keeps_session_bound_state(c
 
 
 async def test_admin_deployment_without_password_keeps_original_uuid_and_does_not_redispatch(client, admin, app, db, monkeypatch):
-    release, calls, headers = configure(app, monkeypatch)
-    await client.post(P + "/runner/claim", headers=headers)
+    release, calls, _headers = configure(app, monkeypatch)
+    app.state.settings.deployment_updater_url = "http://alcor-watchtower:8080/v1/update"
+    monkeypatch.setattr(bridge, "probe", lambda _settings: {"configured": True, "online": True, "kind": "watchtower", "observed_at": None, "reason": "synthetic port"})
+    notifications = []
+    monkeypatch.setattr(bridge, "notify", lambda _settings: notifications.append(True) or {"status": "running", "message": "notified"})
     await age(db)
     build_id, update_id = str(uuid4()), str(uuid4())
     update = {"request_id": update_id, "release": release.model_dump()}
@@ -114,4 +118,6 @@ async def test_admin_deployment_without_password_keeps_original_uuid_and_does_no
     assert sum(path.endswith("/dispatches") for path, _ in calls) == 1
     first = await client.post(P + "/requests", json=update)
     assert first.status_code == 202 and "x-alcor-reauthentication" not in first.headers, first.text
+    assert first.json()["status"] == "running"
     assert (await client.post(P + "/requests", json=update)).json()["id"] == first.json()["id"]
+    assert len(notifications) == 1

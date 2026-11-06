@@ -1,7 +1,8 @@
-# App and its private updater. Existing PostgreSQL and Redis remain external dependencies.
+# Application only. PostgreSQL, Redis and Watchtower are independently managed.
 name: alcor-api
 services:
   app:
+    container_name: alcor-api
     platform: ${ALCOR_PLATFORM:-linux/amd64}
     image: ${ALCOR_APP_IMAGE:?Set the application latest image reference}
     restart: unless-stopped
@@ -9,15 +10,13 @@ services:
     env_file:
       - ./app.env
     environment:
-      ALCOR_DEPLOYMENT_UPDATER_URL: http://alcor-api-updater:8081
+      ALCOR_DEPLOYMENT_UPDATER_URL: ${ALCOR_DEPLOYMENT_UPDATER_URL:-}
     ports:
       - "127.0.0.1:${ALCOR_HOST_PORT:-8088}:8080"
     networks:
       - existing-data
-      - update-control
     labels:
-      com.alcor.update.scope: alcor-api
-      com.centurylinklabs.watchtower.enable: "false"
+      com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.scope: alcor-api
     read_only: true
     volumes:
@@ -56,33 +55,7 @@ services:
       - no-new-privileges:true
     cap_drop: [ALL]
     stop_grace_period: 45s
-  alcor-api-updater:
-    image: ${ALCOR_DEPLOYMENT_IMAGE:?Set the application image repository}-updater:latest
-    platform: ${ALCOR_PLATFORM:-linux/amd64}
-    container_name: alcor-api-updater
-    restart: unless-stopped
-    environment:
-      ALCOR_UPDATER_ORIGIN: http://app:8080
-      ALCOR_UPDATER_TOKEN: ${ALCOR_DEPLOYMENT_RUNNER_TOKEN:?Set the private updater token}
-      ALCOR_UPDATER_APP_IMAGE: ${ALCOR_DEPLOYMENT_IMAGE:?Set the application image repository}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOCKER_CONFIG_DIR:?Set the registry login configuration directory}:/config:ro
-      - updater-state:/state
-    networks: [update-control]
-    read_only: true
-    tmpfs: ["/tmp:mode=1777"]
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    labels:
-      com.centurylinklabs.watchtower.enable: "false"
-      com.centurylinklabs.watchtower.scope: alcor-api
 networks:
-  update-control:
-    internal: true
   existing-data:
     external: true
     name: ${ALCOR_EXISTING_NETWORK:?Set the verified existing PostgreSQL/Redis network}
-
-volumes:
-  updater-state:

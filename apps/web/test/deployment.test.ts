@@ -8,7 +8,166 @@ import {
   buildReceiptMessage,
   verificationOnly,
   deploymentPollDelay,
+  canRestartBuild,
+  receiptCloseTarget,
+  updateNeedsObservation,
 } from "../src/deployment-view.ts";
+test("only unresolved receipts with an immutable complete target can be explicitly closed", () => {
+  const receipt = {
+    id: "record",
+    request_id: "original",
+    image: "ghcr.io/synthetic/alcor-api@sha256:" + "a".repeat(64),
+    version: "0.1.99",
+    revision: "b".repeat(40),
+    schema_hash: "c".repeat(64),
+    status: "unknown",
+    created_at: "2026-11-05T00:00:00Z",
+  };
+  const target = {
+    image: receipt.image,
+    version: receipt.version,
+    revision: receipt.revision,
+    schema_hash: receipt.schema_hash,
+  };
+  for (const status of ["queued", "running", "unknown"])
+    assert.deepEqual(receiptCloseTarget({ ...receipt, status }), target);
+  for (const status of ["succeeded", "failed", "cancelled", "other"])
+    assert.equal(receiptCloseTarget({ ...receipt, status }), null);
+  for (const change of [
+    { revision: undefined },
+    { schema_hash: undefined },
+    { revision: "b".repeat(7) },
+    { schema_hash: "bad" },
+    { image: "ghcr.io/synthetic/alcor-api:latest" },
+    { version: "" },
+  ])
+    assert.equal(receiptCloseTarget({ ...receipt, ...change }), null);
+  const approved = receiptCloseTarget(receipt);
+  receipt.revision = "d".repeat(40);
+  assert.deepEqual(approved, target);
+});
+test("an overdue build gets an explicit recovery option only with complete current-source evidence", () => {
+  const now = Date.parse("2026-11-06T00:30:00Z"),
+    sha = "a".repeat(40);
+  const run = {
+    id: 1,
+    name: "checks",
+    title: "源码检查",
+    sha,
+    status: "completed",
+    conclusion: "success",
+    event: "push",
+    workflow_path: ".github/workflows/checks.yml",
+    started_at: null,
+    updated_at: null,
+    url: "https://example.invalid/checks/1",
+  };
+  const original = {
+    request_id: "original",
+    status: "unknown",
+    created_at: new Date(now - 15 * 60000).toISOString(),
+  };
+  const data = {
+    can_build: true,
+    source: { sha, url: "https://example.invalid/commit/" + sha },
+    source_error: null,
+    check: run,
+    release: null,
+    build: null,
+    build_error: null,
+    build_requests: [original],
+  };
+  assert.equal(canRestartBuild(data, "original", now), true);
+  assert.equal(
+    canRestartBuild(
+      { ...data, build_requests: [{ ...original, status: "dispatching" }] },
+      "original",
+      now,
+    ),
+    true,
+  );
+  assert.equal(canRestartBuild(data, "other-request", now), false);
+  assert.equal(canRestartBuild(data, "original", now - 1), false);
+  for (const created_at of ["bad", new Date(now + 60000).toISOString()])
+    assert.equal(
+      canRestartBuild(
+        { ...data, build_requests: [{ ...original, created_at }] },
+        "original",
+        now,
+      ),
+      false,
+    );
+  for (const status of ["submitted", "failed"])
+    assert.equal(
+      canRestartBuild(
+        { ...data, build_requests: [{ ...original, status }] },
+        "original",
+        now,
+      ),
+      false,
+    );
+  for (const change of [
+    { can_build: false },
+    { source_error: "源码读取失败" },
+    { build_error: "发布状态读取失败" },
+    { source: { ...data.source, sha: "b".repeat(40) } },
+    { check: { ...run, status: "in_progress" } },
+    { check: { ...run, conclusion: "failure" } },
+    { check: { ...run, conclusion: "skipped" } },
+    { check: null },
+    { build: { ...run, head_sha: sha, status: "queued", conclusion: null } },
+    {
+      release: {
+        version: "0.1.1",
+        image: "synthetic",
+        revision: sha,
+        schema_hash: "synthetic",
+      },
+    },
+  ])
+    assert.equal(
+      canRestartBuild({ ...data, ...change }, "original", now),
+      false,
+    );
+});
+test("a Watchtower notification remains an observation until the original result is confirmed", () => {
+  const now = Date.parse("2026-11-06T00:30:00Z"),
+    created_at = new Date(now).toISOString();
+  for (const status of ["queued", "running", "unknown"])
+    assert.equal(updateNeedsObservation({ status, created_at }, now), true);
+  for (const status of ["succeeded", "failed", "cancelled"])
+    assert.equal(updateNeedsObservation({ status, created_at }, now), false);
+  assert.equal(
+    updateNeedsObservation({ status: "unknown", created_at: "bad" }, now),
+    false,
+  );
+  assert.equal(
+    updateNeedsObservation({ status: "unknown", created_at }, now + 15 * 60000),
+    false,
+  );
+  const data = {
+    source: { sha: "a", url: "#" },
+    release: null,
+    check: null,
+    build: null,
+    build_requests: [],
+    receipts: [
+      {
+        id: "id",
+        request_id: "original",
+        version: "0.1.1",
+        image: "synthetic",
+        status: "unknown",
+        created_at,
+      },
+    ],
+  };
+  assert.equal(deploymentPollDelay(data, false, false, false, now), 5000);
+  assert.equal(
+    deploymentPollDelay(data, false, false, false, now + 15 * 60000),
+    null,
+  );
+});
 test("deployment polling retries transient reads but never a withdrawn identity or completed idle state", () => {
   const now = Date.parse("2026-11-04T00:00:00Z");
   const idle = {

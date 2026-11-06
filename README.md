@@ -42,14 +42,14 @@ python3 tools/audit-source.py
 
 1. 将 `deploy/compose.synology.yaml` 保存为群晖项目目录的 `compose.yaml`。
 2. 将根目录 `.env.example` 保存为同目录的 `.env`，按注释填写必填项；可选发布/OAuth 配置可以留空。
-3. 先手动运行 GitHub Actions 的 **Publish AlcorApi**，成功后使用应用和更新器的 `latest` 镜像。无需手填 Git 提交、digest 或软件版本。实际版本由镜像自身提供。
+3. 先手动运行 GitHub Actions 的 **Publish AlcorApi**，成功后使用应用的 `latest` 镜像。无需手填 Git 提交、digest 或软件版本。实际版本由镜像自身提供。
 4. 准备独立数据库与账号、Redis 权限及共同的自建 Docker 网络；准备持久目录，并在核对目标后单独完成首次数据库初始化。仅填 `.env` 或启动容器不会自动初始化数据库。
 
 `deploy/synology.env.example` 保留同内容副本。真实 `.env` 保留在部署机器，不上传 Git。
 
-镜像构建定义位于 `deploy/Dockerfile`，运行模板为 `deploy/compose.yaml`。包含应用与独立的 `alcor-api-updater` 两个容器；PostgreSQL 和 Redis 是外部依赖。使用独立数据库、账号和缓存权限，不重建已有数据卷。
+镜像构建定义位于 `deploy/Dockerfile`，运行模板为 `deploy/compose.yaml`。仅包含应用容器；PostgreSQL、Redis 和 Watchtower 由宿主机独立管理。使用独立数据库、账号和缓存权限，不重建已有数据卷。
 
-`deploy/app.env.example`、`deploy/compose.env.example` 和 `deploy/runner.config.example.json` 只提供无秘密占位值。正式配置、凭据、数据和备份不得提交到仓库。
+`deploy/app.env.example`和 `deploy/compose.env.example` 只提供无秘密占位值。正式配置、凭据、数据和备份不得提交到仓库。
 
 `/deploy-status` 提供管理员发布状态及配置入口。源码推送触发检查；镜像发布工作流需手动触发。应用启动和镜像更新均不自动执行数据库迁移，首次部署及迁移须明确核对目标后单独进行。
 
@@ -65,27 +65,20 @@ python3 tools/audit-source.py
 
 既有数据库头像保留；新增个人背景与旧协议原样头像位于 `ALCOR_FILE_ROOT/profile-media`，PG 保存本人归属、摘要、版本与操作回执。此私有目录随同一数据库快照加密备份，不直接公开为静态目录。内置前端素材仍随镜像发布。用户文件和已配置素材一并加密备份，素材恢复到隔离目标的assets目录，旧备份保持可恢复。新增目录不自动搬迁旧state/files，不执行PG迁移。已有部署更换路径前须单独核对并转移原文件；本项目不会静默复制或删除它们。
 
-## 配置网页一键更新（独立更新器容器）
+## 配置网页一键更新（独立 Watchtower）
 
-`alcor-api-updater` 常驻运行，网页提交更新后通过私有内网接口立即唤醒；不需要 DSM 任务计划、宿主机 Python 或群晖 git pull。更新器仅选择 Compose 项目 `alcor-api` 下带 `com.alcor.update.scope=alcor-api` 的 `app` 服务，不触碰其他项目，也不自动更新自身。
+发布与旧 Web 使用同一流程：GitHub Actions 构建应用镜像，构建成功后点击“通知群晖更新”，由独立 Watchtower 拉取并替换容器。此仓库不构建 Watchtower 镜像，不在应用 Compose 项目中编排更新服务。
 
-1. `.env` 中配置 `ALCOR_APP_IMAGE=ghcr.io/自己的账号/仓库:latest`；更新器镜像自动使用同仓库名加 `-updater:latest`，两个镜像由同一个发布工作流提供。`ALCOR_DEPLOYMENT_REPOSITORY` 填源码仓库，`ALCOR_DEPLOYMENT_IMAGE` 填不带标签的应用镜像仓库。
-2. 设置至少 32 个随机字符的 `ALCOR_DEPLOYMENT_RUNNER_TOKEN`。Compose 将同一密钥传给应用和更新器；更新器接口没有宿主机端口映射，只在内部控制网络可见。Docker socket 仅挂入更新器，应用没有 Docker 权限。更新器拥有该宿主机 Docker 控制权限，须与应用一同由受信任操作员管理。
-3. 更新器状态使用独立 Docker 持久卷，自动以 root、0700 初始化，不挂入应用；保存中断状态、回执和含私有环境配置的更新前快照。保留此卷，不上传 Git。
-4. 使用有私有镜像读取权限的账号执行 `docker login ghcr.io`；PAT classic 至少具有 `read:packages`。`DOCKER_CONFIG_DIR` 指向该次登录的 `config.json` 所在目录，仅更新器只读挂载。支持 Docker config 的内联 auth/identitytoken；使用外部 credential helper 的部署须先为更新器配置独立内联登录文件。
-5. 首次单独完成数据库初始化并启动应用和更新器。网页发布配置填写 GitHub 授权或仓库专用 Token；手动 Token 使用 Contents 读取、Actions 读写、Metadata 读取。之后在 `/deploy-status` 点击“构建发布”，成功后点击“更新群晖”。源码 push 仍只触发检查，不自动发布或部署。
+- Watchtower 由宿主机单独部署，使用 HTTP API 模式，仅监控 `alcor-api` 范围；应用模板已设置 `com.centurylinklabs.watchtower.enable=true` 与 `com.centurylinklabs.watchtower.scope=alcor-api`。
+- 应用与 Watchtower 加入经过核对的共同私有 Docker 网络。应用中的 `ALCOR_DEPLOYMENT_UPDATER_URL` 填该私网服务的 `/v1/update` 地址，`ALCOR_DEPLOYMENT_RUNNER_TOKEN` 沿用为其 HTTP API 令牌，与 Watchtower 的本机配置一致；不用网页更新时两项留空。应用没有 Docker socket 权限。
+- 私有镜像的登录配置只放宿主机和 Watchtower 的本机配置。不开启删除数据卷选项；替换应用容器保留原端口、环境与持久挂载。已有自建更新器须先停止，避免两个更新服务同时操作同一应用。
+- 通知请求先保存原 UUID；通知返回成功仅表示更新服务接受，不表示新容器已经健康。页面继续核对实际运行提交，只有目标版本、提交、数据库结构及 Worker 就绪匹配才报告成功。中断后查询原回执，不自动重复通知。
 
-配置一直使用 `latest`，不必每次改 `.env`。每次更新先在平台持久化批准的版本、提交、数据库结构摘要和实际镜像 digest；更新器拉取 `latest` 后核对同一镜像与标签，再以解析出的镜像 ID 创建容器，避免标签变化换成另一个版本。数据库结构不同则停止，须先单独安排备份和迁移。不会随更新执行数据库迁移。
+源码 push 只触发检查，不自动发布镜像或通知 Watchtower。发布工作流核对同一 main 提交的完整检查，并在运行标题中关联原构建回执。历史未知请求保留，重新构建须由用户明确确认且再次核对 main 与活跃发布。
 
-更新保留现有环境、持久目录、端口、网络和资源限制；实际软件版本与源码标识从新镜像取值；`.env` 不设置 `ALCOR_RELEASE_VERSION`、`ALCOR_SOURCE_REVISION` 或 `ALCOR_DEPLOYMENT_RUNNING_IMAGE`。只有新应用的 Docker 健康检查、镜像 ID、版本及提交均匹配，才报告成功。旧镜像保留，不删除数据卷；旧容器仅在新容器健康后移除。更新不自动同步新的 Compose 文件、挂载、秘密或更新器脚本；这些变更仍须单独核对后重建。
+应用更新不会执行数据库迁移。手动或 Watchtower 更新前，必须核对新镜像与目标数据库结构；结构不兼容时先安排可恢复备份和独立升级演练。不要通过清空数据库或跳过结构检查解决启动失败。
 
-健康检查统一使用镜像中的 `deploy/healthcheck.py`：API 必须同时通过数据库结构校验和 Worker 心跳检查，更新器必须近期成功联系 API。失败时返回非零退出码和简短中文提示，不输出响应正文或连接异常详情；成功不会把仅存活的进程误报为就绪。HTTP 503 需要进一步核对启动日志，不能单凭此状态认定数据库需要升级。
-
-手动重建也不会升级数据库结构。跨结构版本更新前，先核对目标实例和迁移记录，完成加密备份、独立恢复及升级演练，再安排实际结构升级与重建的维护窗口。验收须核对实际版本、数据库就绪、Worker 和更新器健康；不能通过清空库、跳过结构校验或写入测试数据解决启动失败。
-
-页面关闭不影响已受理的请求。进程中断后只核对原 UUID 和容器，不自动再次替换；回执发送失败只重传同一回执。没有待执行请求时，更新器仅报告在线状态。既有 `deploy/update-runner.py` 和配置模板继续供旧宿主机执行器兼容使用，同一项目只启用一种执行方式。
-
-本机与 CI 隔离检查不等同群晖现场安装或更新验收。
+镜像健康检查使用 `deploy/healthcheck.py api`，同时核对数据库与 Worker。独立 Watchtower 的实际配置及群晖安装结果以宿主机验收为准，不以本机测试或 HTTP 200 代替。
 
 ## 更新前检查
 

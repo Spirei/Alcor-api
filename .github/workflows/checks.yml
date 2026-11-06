@@ -47,14 +47,3 @@ jobs:
           docker build --build-arg APP_VERSION="$(node -p 'require("./package.json").version')" --build-arg SOURCE_REVISION="$REVISION" --build-arg PG_MAJOR="$PG_MAJOR" -f deploy/Dockerfile -t alcor-api:ci .
           docker run --rm --network none --entrypoint "/usr/lib/postgresql/$PG_MAJOR/bin/pg_dump" alcor-api:ci --version
         if: matrix.shard == 0
-  updater:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          version: '0.12.23'
-          enable-cache: true
-      - run: uv sync --locked
-      - run: docker build --build-arg SOURCE_REVISION="${{ github.sha }}" -f deploy/Dockerfile.updater -t alcor-api-updater:ci .
-      - run: ALCOR_TEST_DOCKER=1 uv run pytest -q --tb=short tests/test_updater_docker.py

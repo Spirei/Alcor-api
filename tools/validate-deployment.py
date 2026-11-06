@@ -47,7 +47,7 @@ def validate(root):
         is not None,
         "backend version mismatch",
     )
-    check(set(compose["services"]) == {"app", "alcor-api-updater"}, "only app and its dedicated updater are permitted")
+    check(set(compose["services"]) == {"app"}, "only the application belongs in this project")
     check(
         "ALCOR_APP_IMAGE:?" in app["image"] and "build" not in app,
         "runtime must use an explicitly configured latest image",
@@ -86,13 +86,11 @@ def validate(root):
     check("docker.sock" not in str(app) and "privileged" not in app, "unsafe application capability")
     for name in ["compose.yaml", "compose.synology.yaml"]:
         template = yaml.safe_load((root / "deploy" / name).read_text())
-        updater = template["services"]["alcor-api-updater"]
-        check(set(template["services"]) == {"app", "alcor-api-updater"}, "unexpected update target")
-        check(not updater.get("ports") and updater["networks"] == ["update-control"], "updater must use only its control network")
-        check(template["networks"]["update-control"].get("internal") is True, "private control network missing")
-        check("docker.sock" not in str(template["services"]["app"]), "Docker socket must not enter app")
-        check(updater.get("read_only") is True and "privileged" not in updater, "unsafe updater configuration")
-        check(template["services"]["app"]["labels"].get("com.alcor.update.scope") == "alcor-api", "fixed update scope missing")
+        target = template["services"]["app"]
+        check(set(template["services"]) == {"app"}, "Watchtower must be independently managed")
+        check("docker.sock" not in str(target), "Docker socket must not enter app")
+        check(target["labels"].get("com.centurylinklabs.watchtower.enable") == "true", "application update label missing")
+        check(target["labels"].get("com.centurylinklabs.watchtower.scope") == "alcor-api", "application update scope missing")
         check("ALCOR_RELEASE_VERSION" not in template["services"]["app"].get("environment", {}), "version must come from the image")
     check(
         "migrate" not in (root / "deploy/entrypoint.py").read_text()

@@ -3,7 +3,8 @@ import io
 import urllib.error
 from uuid import uuid4
 
-from alcor_api import deployments
+from alcor_api import __version__, deployments
+from alcor_api import deployment_watchtower as bridge
 from alcor_api.config import ROOT
 from pydantic import SecretStr
 
@@ -16,8 +17,11 @@ def configure(app, monkeypatch):
     settings.deployment_image = "ghcr.io/synthetic/alcor-api"
     settings.deployment_github_token = SecretStr("synthetic-github-token")
     settings.deployment_runner_token = SecretStr("synthetic-runner-token-" + "x" * 32)
+    settings.deployment_updater_url = "http://alcor-watchtower:8080"
+    monkeypatch.setattr(bridge, "probe", lambda _: {"configured": True, "online": True, "kind": "watchtower"})
+    monkeypatch.setattr(bridge, "notify", lambda _: {"status": "running", "message": "accepted"})
     release = deployments.Release(
-        version="0.1.99",
+        version=__version__,
         image=settings.deployment_image + "@sha256:" + "a" * 64,
         revision="b" * 40,
         schema_hash=deployments.schema_hash(ROOT / "migrations"),
@@ -60,48 +64,41 @@ async def test_admin_only_csrf_and_no_unconfigured_dispatch(client, admin):
     assert (await client.get(P)).status_code == 403
 
 
-async def test_request_uuid_concurrency_and_runner_ack_survive_github_failure(
-    client, admin, app, monkeypatch
-):
+async def test_request_uuid_concurrency_and_runtime_recovery_survive_github_failure(client, admin, app, monkeypatch):
     release, _calls, headers = configure(app, monkeypatch)
-    assert (await client.post(P + "/runner/claim")).status_code == 403
-    assert (await client.post(P + "/runner/claim", headers=headers)).json() == {"request": None}
-    before = await client.get(P)
-    assert before.json()["can_update"]
+    sent = []
+    monkeypatch.setattr(bridge, "notify", lambda _: sent.append(True) or {"status": "running", "message": "accepted"})
+    assert (await client.post(P + "/runner/claim", headers=headers)).status_code == 410
+    assert (await client.post(P + "/runner/finish", headers=headers)).status_code == 410
+    assert (await client.get(P)).json()["can_update"]
     data = {"request_id": str(uuid4()), "release": release.model_dump()}
     responses = await asyncio.gather(*[client.post(P + "/requests", json=data) for _ in range(2)])
     assert all(r.status_code == 202 for r in responses), [r.text for r in responses]
-    assert responses[0].json()["id"] == responses[1].json()["id"]
-    other = await client.post(P + "/requests", json={**data, "request_id": str(uuid4())})
-    assert other.status_code == 409
-    claim = (await client.post(P + "/runner/claim", headers=headers)).json()["request"]
-    assert claim["image"] == release.image
-    assert (await client.post(P + "/runner/claim", headers=headers)).json()["request"] is None
+    assert responses[0].json()["id"] == responses[1].json()["id"] and sent == [True]
+    assert responses[0].json()["revision"] == release.revision
+    assert (await client.post(P + "/requests", json={**data, "request_id": str(uuid4())})).status_code == 409
 
-    def offline(*args, **kwargs):
+    def offline(*_args, **_kwargs):
         raise OSError("synthetic network failure")
 
     monkeypatch.setattr(deployments, "github_json", offline)
-    repeated = await client.post(P + "/requests", json=data)
-    assert repeated.status_code == 202 and repeated.json()["status"] == "running"
-    finish = {"id": claim["id"], "status": "succeeded"}
-    assert (await client.post(P + "/runner/finish", headers=headers, json=finish)).status_code == 200
-    assert (await client.post(P + "/runner/finish", headers=headers, json=finish)).status_code == 200
-    assert (
-        await client.post(P + "/runner/finish", headers=headers, json={**finish, "status": "failed"})
-    ).status_code == 409
-    receipt = await client.get(P + "/requests/" + data["request_id"])
-    assert receipt.json()["status"] == "succeeded"
-    with_secret = (await client.get(P)).text
-    assert "synthetic-github-token" not in with_secret and "synthetic-runner-token" not in with_secret
-    assert (await client.get(P)).json()["release_error"]
+    assert (await client.post(P + "/requests", json=data)).json()["status"] == "running"
+    assert (await client.get(P + "/requests/" + data["request_id"])).json()["status"] == "running"
+    app.state.settings.source_revision = release.revision
+    async with app.state.db.connection() as conn:
+        await conn.execute("INSERT INTO worker_heartbeats(worker_id,version) VALUES(%s,%s)", (uuid4(), __version__))
+    assert (await client.get(P + "/requests/" + data["request_id"])).json()["status"] == "succeeded"
+    observed = await client.get(P)
+    assert observed.json()["release_error"] and sent == [True]
+    assert "synthetic-github-token" not in observed.text and "synthetic-runner-token" not in observed.text
 
 
 async def test_no_runner_schema_mismatch_stale_release_and_csrf(client, admin, app, monkeypatch):
-    release, _calls, headers = configure(app, monkeypatch)
+    release, _calls, _headers = configure(app, monkeypatch)
     data = {"request_id": str(uuid4()), "release": release.model_dump()}
+    app.state.settings.deployment_updater_url = None
     assert (await client.post(P + "/requests", json=data)).status_code == 409
-    await client.post(P + "/runner/claim", headers=headers)
+    app.state.settings.deployment_updater_url = "http://alcor-watchtower:8080"
     client.headers["x-csrf-token"] = "wrong"
     assert (await client.post(P + "/requests", json=data)).status_code == 403
     login = await client.post("/api/session/login", json={"login": "AdminOne", "password": "Synthetic9Pass"})
@@ -179,17 +176,41 @@ async def test_github_server_error_keeps_uncertainty_and_prevents_redispatch(cli
     assert sum(path.endswith("/dispatches") for path, _ in calls) == 1
 
 
-async def test_revoked_admin_queued_update_cannot_execute(client, admin, app, monkeypatch):
-    release, _calls, headers = configure(app, monkeypatch)
-    await client.post(P + "/runner/claim", headers=headers)
-    data = {"request_id": str(uuid4()), "release": release.model_dump()}
-    assert (await client.post(P + "/requests", json=data)).status_code == 202
+async def test_unknown_update_requires_explicit_target_bound_close_before_new_notification(client, admin, app, monkeypatch):
+    release, _calls, _headers = configure(app, monkeypatch)
+    sent = []
+    monkeypatch.setattr(bridge, "notify", lambda _: sent.append(True) or {"status": "unknown", "message": "uncertain"})
+    payload = {"request_id": str(uuid4()), "release": release.model_dump()}
+    first = await client.post(P + "/requests", json=payload)
+    assert first.status_code == 202 and first.json()["status"] == "unknown"
+    assert not (await client.get(P)).json()["can_update"]
+    assert (await client.post(P + "/requests", json={**payload, "request_id": str(uuid4())})).status_code == 409
+    path = P + "/requests/" + payload["request_id"] + "/close"
+    wrong = {"release": {**release.model_dump(), "revision": "f" * 40}}
+    assert (await client.post(path, json=wrong)).status_code == 409
+    closed = await client.post(path, json={"release": release.model_dump()})
+    assert closed.status_code == 200 and closed.json()["status"] == "cancelled"
+    assert (await client.post(path, json={"release": release.model_dump()})).json()["status"] == "cancelled"
+    assert sent == [True] and (await client.get(P)).json()["can_update"]
+    replay = await client.post(P + "/requests", json=payload)
+    assert replay.json()["status"] == "cancelled" and sent == [True]
     async with app.state.db.connection() as conn:
-        await conn.execute("UPDATE users SET active=false WHERE id=%s", (admin,))
-    assert (await client.post(P + "/runner/claim", headers=headers)).json()["request"] is None
+        audit = await (await conn.execute("SELECT count(*) AS n FROM audit_events WHERE action='deployment.observation_closed' AND request_id=%s", (payload["request_id"],))).fetchone()
+    assert audit["n"] == 1
+    assert (await client.post(P + "/requests", json={**payload, "request_id": str(uuid4())})).status_code == 202
+    assert sent == [True, True]
+
+
+async def test_build_confirmation_rejects_changed_main_before_dispatch(client, admin, app, monkeypatch):
+    _release, calls, _headers = configure(app, monkeypatch)
+    payload = {"request_id": str(uuid4()), "expected_revision": "d" * 40}
+    assert (await client.post(P + "/builds", json=payload)).status_code == 409
+    assert not any(path.endswith("/dispatches") for path, _ in calls)
     async with app.state.db.connection() as conn:
-        row = await (await conn.execute("SELECT status FROM deployment_requests")).fetchone()
-    assert row["status"] == "cancelled"
+        assert not await (await conn.execute("SELECT 1 FROM deployment_builds")).fetchone()
+    payload["expected_revision"] = "c" * 40
+    assert (await client.post(P + "/builds", json=payload)).status_code == 202
+    assert next(body for path, body in calls if path.endswith("/dispatches"))["inputs"]["expected_revision"] == "c" * 40
 
 
 async def test_discovery_rejects_other_image_repository(client, admin, app, monkeypatch):
@@ -197,3 +218,19 @@ async def test_discovery_rejects_other_image_repository(client, admin, app, monk
     release.image = "ghcr.io/other/project@sha256:" + "a" * 64
     result = (await client.get(P)).json()
     assert result["release"] is None and result["release_error"] and not result["can_update"]
+
+
+async def test_failed_original_github_run_recovers_without_dispatch(client, admin, app, monkeypatch):
+    _release, calls, _headers = configure(app, monkeypatch)
+    request_id = uuid4()
+    async with app.state.db.connection() as conn:
+        await conn.execute("INSERT INTO deployment_builds(owner_id,request_id,status,repository) VALUES(%s,%s,'unknown',%s)",
+                           (admin, request_id, app.state.settings.deployment_repository))
+    def github(_settings, path, body=None):
+        assert body is None and "/runs?" in path
+        return {"workflow_runs": [{"event": "workflow_dispatch", "path": ".github/workflows/docker-publish.yml",
+                "head_branch": "main", "display_title": "发布 · " + str(request_id), "status": "completed", "conclusion": "failure"}]}
+    monkeypatch.setattr(deployments, "github_json", github)
+    result = await client.get(P + "/builds/" + str(request_id))
+    assert result.json()["status"] == "failed" and "未成功" in result.json()["message"]
+    assert not calls

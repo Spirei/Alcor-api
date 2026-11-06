@@ -32,6 +32,9 @@ import {
   formatDuration,
   workflowLabel,
   buildReceiptMessage,
+  canRestartBuild,
+  receiptCloseTarget,
+  updateNeedsObservation,
   verificationOnly,
   deploymentPollDelay,
   type Deployment,
@@ -52,7 +55,7 @@ const states: Record<string, string> = {
   succeeded: "更新成功",
   failed: "更新失败",
   unknown: "结果待核对",
-  cancelled: "已取消",
+  cancelled: "记录已关闭",
 };
 export function DeploymentSettings({
   session,
@@ -66,10 +69,20 @@ export function DeploymentSettings({
     [confirm, setConfirm] = useState(false);
   const [message, setMessage] = useState("");
   const [watchingUpdate, setWatchingUpdate] = useState<string | null>(null);
+  const [closing, setClosing] = useState<{
+    request_id: string;
+    release: Release;
+  } | null>(null);
   const buildPending = useRef<string | null>(null);
-  const [buildConfirm, setBuildConfirm] = useState(false);
+  const ignoredBuilds = useRef(new Set<string>());
+  const ignoredUpdates = useRef(new Set<string>());
+  const [buildConfirm, setBuildConfirm] = useState<{
+    repository: string;
+    revision: string;
+    previous: string | null;
+  } | null>(null);
   // Keep the UUID after a timeout: only query that receipt; never submit a new request implicitly.
-  const pending = useRef<{ id: string; release: Release } | null>(null);
+  const pending = useRef<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("verify") === "github") {
@@ -94,6 +107,7 @@ export function DeploymentSettings({
     if (
       !buildPending.current &&
       last &&
+      !ignoredBuilds.current.has(last.request_id) &&
       ["dispatching", "unknown"].includes(last.status)
     ) {
       buildPending.current = last.request_id;
@@ -101,24 +115,31 @@ export function DeploymentSettings({
     }
   }, [data?.build_requests, data?.release?.revision, data?.source?.sha]);
   useEffect(() => {
-    if (!watchingUpdate) return;
-    const receipt = data?.receipts.find((r) => r.request_id === watchingUpdate);
-    if (!receipt) return;
-    setMessage(
-      `${states[receipt.status] || receipt.status} · ${receipt.request_id}`,
-    );
-    if (!["queued", "running"].includes(receipt.status))
-      setWatchingUpdate(null);
-  }, [watchingUpdate, data?.receipts]);
+    const receipt = pending.current
+      ? data?.receipts.find((r) => r.request_id === pending.current)
+      : data?.receipts.find(
+          (r) =>
+            !ignoredUpdates.current.has(r.request_id) &&
+            updateNeedsObservation(r),
+        );
+    if (receipt) observeUpdate(receipt);
+  }, [data?.receipts]);
   function observeUpdate(receipt: Receipt) {
     setMessage(
-      `${states[receipt.status] || receipt.status} · ${receipt.request_id}`,
+      `${receipt.status === "running" ? "已通知 Watchtower，等待容器恢复" : states[receipt.status] || receipt.status} · ${receipt.request_id}`,
     );
-    setWatchingUpdate(
-      ["queued", "running"].includes(receipt.status)
-        ? receipt.request_id
-        : null,
-    );
+    if (["queued", "running", "unknown"].includes(receipt.status)) {
+      pending.current = receipt.request_id;
+      setWatchingUpdate(
+        updateNeedsObservation(receipt) ? receipt.request_id : null,
+      );
+    } else {
+      if (pending.current === receipt.request_id) pending.current = null;
+      ignoredUpdates.current.add(receipt.request_id);
+      setWatchingUpdate((current) =>
+        current === receipt.request_id ? null : current,
+      );
+    }
   }
   const config = useDeploymentConfig();
   const [page, setPage] = useState(1),
@@ -150,48 +171,50 @@ export function DeploymentSettings({
     document.title = "发布状态 · Alcor";
   }, []);
   usePanelReady("/deploy-status", !!data || !!state.error);
-  async function update(resume?: { id: string; release: Release }) {
-    if (!data?.release || busy) return;
+  async function update(original?: string) {
+    if ((!original && !pending.current && !data?.release) || busy) return;
+    const checking = original || pending.current;
+    const id = checking || requestId();
     setBusy(true);
     setMessage("");
     try {
-      if (pending.current && !resume) {
-        const result = await api<Receipt>(
-          `/deployment/requests/${pending.current.id}`,
-        );
+      if (checking) {
+        const result = await api<Receipt>(`/deployment/requests/${id}`);
+        if (result.request_id !== id)
+          throw new Error("更新回执编号不匹配，请核对原请求");
         observeUpdate(result);
-        pending.current = null;
       } else {
-        pending.current = resume || { id: requestId(), release: data.release };
+        pending.current = id;
         const result = await api<Receipt>(
           "/deployment/requests",
           {
             method: "POST",
             body: JSON.stringify({
-              request_id: pending.current.id,
-              release: pending.current.release,
+              request_id: id,
+              release: data!.release,
             }),
           },
           session.csrf,
         );
+        if (result.request_id !== id)
+          throw new Error("更新回执编号不匹配，请核对原请求");
         observeUpdate(result);
-        pending.current = null;
       }
       setConfirm(false);
       state.reload();
     } catch (error) {
-      if (
-        error instanceof ApiError &&
-        error.status === 404 &&
-        pending.current
-      ) {
-        setMessage(`尚未查到回执，请稍后核对：${pending.current.id}`);
+      if (error instanceof ApiError && error.status === 404 && checking) {
+        ignoredUpdates.current.add(id);
+        if (pending.current === id) pending.current = null;
+        setWatchingUpdate(null);
+        setMessage(`未查到此更新回执，未再次通知 Watchtower · ${id}`);
       } else {
         setMessage(error instanceof Error ? error.message : "更新请求失败");
         if (
           error instanceof ApiError &&
           error.status >= 400 &&
-          error.status < 500
+          error.status < 500 &&
+          error.status !== 408
         )
           pending.current = null;
       }
@@ -199,44 +222,126 @@ export function DeploymentSettings({
       setBusy(false);
     }
   }
-  async function build(resumeId?: string) {
-    if (busy) return;
+  async function closeUpdate() {
+    if (!closing || busy) return;
+    const approval = closing;
     setBusy(true);
     setMessage("");
     try {
-      const checking = !resumeId && !!buildPending.current;
-      if (resumeId || !buildPending.current)
-        buildPending.current = resumeId || requestId();
+      const result = await api<Receipt & { message?: string }>(
+        `/deployment/requests/${approval.request_id}/close`,
+        {
+          method: "POST",
+          body: JSON.stringify({ release: approval.release }),
+        },
+        session.csrf,
+      );
+      if (
+        result.request_id !== approval.request_id ||
+        result.status !== "cancelled"
+      )
+        throw new Error("关闭结果不匹配，请核对原请求");
+      observeUpdate(result);
+      setMessage(result.message || `更新记录已关闭 · ${result.request_id}`);
+      state.reload();
+    } catch (error) {
+      if (
+        !(error instanceof ApiError) ||
+        error.status >= 500 ||
+        error.status === 408
+      ) {
+        pending.current = approval.request_id;
+        setWatchingUpdate(approval.request_id);
+        setMessage(`关闭结果待核对，请查询原回执 · ${approval.request_id}`);
+        state.reload();
+      } else {
+        setMessage(error.message);
+        state.reload();
+      }
+    } finally {
+      setClosing(null);
+      setBusy(false);
+    }
+  }
+  function confirmBuild(previous: string | null = null) {
+    if (!data?.source) return;
+    setBuildConfirm({
+      repository: data.repository,
+      revision: data.source.sha,
+      previous,
+    });
+  }
+  async function build(approval = buildConfirm) {
+    if (busy) return;
+    const checking = !approval && !!buildPending.current;
+    if (
+      !checking &&
+      (!approval ||
+        !data?.can_build ||
+        !checkedSource ||
+        sourceCurrent ||
+        activeBuild ||
+        !!state.error ||
+        !!data.source_error ||
+        data?.repository !== approval.repository ||
+        data?.source?.sha !== approval.revision ||
+        (approval.previous &&
+          (approval.previous !== buildPending.current ||
+            !canRestartBuild(data, approval.previous))))
+    ) {
+      setBuildConfirm(null);
+      setMessage("构建状态已变化，请刷新后重新确认");
+      state.reload();
+      return;
+    }
+    if (approval?.previous) ignoredBuilds.current.add(approval.previous);
+    if (!checking) buildPending.current = requestId();
+    const id = buildPending.current!;
+    setBusy(true);
+    setMessage("");
+    try {
       setMessage(checking ? "正在查询原构建回执…" : "正在提交构建请求…");
       const result = await api<{
         status: string;
         request_id: string;
         message?: string;
       }>(
-        checking
-          ? `/deployment/builds/${buildPending.current}`
-          : "/deployment/builds",
+        checking ? `/deployment/builds/${id}` : "/deployment/builds",
         checking
           ? {}
           : {
               method: "POST",
-              body: JSON.stringify({ request_id: buildPending.current }),
+              body: JSON.stringify({
+                request_id: id,
+                expected_revision: approval!.revision,
+              }),
             },
         session.csrf,
         120000,
       );
+      if (result.request_id !== id)
+        throw new Error("构建回执编号不匹配，请核对原请求");
       setMessage(`${buildReceiptMessage(result)} · ${result.request_id}`);
-      if (["submitted", "failed"].includes(result.status))
+      if (["submitted", "failed"].includes(result.status)) {
+        ignoredBuilds.current.add(result.request_id);
         buildPending.current = null;
-      setBuildConfirm(false);
+      }
+      setBuildConfirm(null);
       state.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "构建请求失败");
+      if (checking && error instanceof ApiError && error.status === 404) {
+        ignoredBuilds.current.add(id);
+        buildPending.current = null;
+        setBuildConfirm(null);
+        setMessage(`未查到此构建的受理记录，可重新构建 · ${id}`);
+        state.reload();
+      } else
+        setMessage(error instanceof Error ? error.message : "构建请求失败");
       if (
         error instanceof ApiError &&
         error.status >= 400 &&
         error.status < 500 &&
-        error.status !== 404
+        ![404, 408].includes(error.status)
       )
         buildPending.current = null;
     } finally {
@@ -249,7 +354,10 @@ export function DeploymentSettings({
   const checkedSource =
     !!data?.source &&
     data.check?.sha === data.source.sha &&
+    data.check.status === "completed" &&
     data.check?.conclusion === "success";
+  const canRebuild =
+    !state.error && canRestartBuild(data, buildPending.current);
   const verifyOnly = verificationOnly(data?.jobs);
   const sourceCurrent =
     !!data?.source && data.release?.revision === data.source.sha;
@@ -411,15 +519,41 @@ export function DeploymentSettings({
                   <dd>{data?.release?.image || "—"}</dd>
                 </div>
                 <div>
-                  <dt>群晖执行器</dt>
+                  <dt>Watchtower</dt>
                   <dd>{data?.runner?.online ? "已连接" : "未连接"}</dd>
                 </div>
               </dl>
-              {data?.receipts.map((r) => (
-                <p key={r.id}>
-                  {states[r.status] || r.status} · {r.request_id}
-                </p>
-              ))}
+              {data?.receipts.map((r) => {
+                const target = receiptCloseTarget(r);
+                return (
+                  <p key={r.id}>
+                    {states[r.status] || r.status} · {r.request_id}
+                    {["unknown", "running", "queued"].includes(r.status) && (
+                      <button
+                        className="text-button"
+                        disabled={busy}
+                        onClick={() => void update(r.request_id)}
+                      >
+                        核对原回执
+                      </button>
+                    )}
+                    {target && (
+                      <button
+                        className="text-button"
+                        disabled={busy}
+                        onClick={() =>
+                          setClosing({
+                            request_id: r.request_id,
+                            release: target,
+                          })
+                        }
+                      >
+                        关闭记录
+                      </button>
+                    )}
+                  </p>
+                );
+              })}
               {data?.build_requests.map((r) => (
                 <p key={r.request_id}>
                   {buildReceiptMessage(r)} · {r.request_id}
@@ -435,7 +569,9 @@ export function DeploymentSettings({
           <div className="deploy-section-head">
             <h2 id="flow-title">发布流程</h2>
             <NavLink className="deploy-runtime" to="/settings">
-              <i className={`deploy-dot ${data?.running_revision ? "good" : "neutral"}`} />
+              <i
+                className={`deploy-dot ${data?.running_revision ? "good" : "neutral"}`}
+              />
               线上 {data?.running_revision?.slice(0, 7) || "待核对"}
             </NavLink>
           </div>
@@ -483,7 +619,7 @@ export function DeploymentSettings({
                 (!buildPending.current && (sourceCurrent || !checkedSource))
               }
               onClick={() =>
-                buildPending.current ? void build() : setBuildConfirm(true)
+                buildPending.current ? void build(null) : confirmBuild()
               }
             >
               <i
@@ -523,9 +659,9 @@ export function DeploymentSettings({
                     ? "容器已是最新"
                     : "等待新镜像"
                   : !data?.runner?.online
-                    ? "执行器未连接"
+                    ? "Watchtower 未连接"
                     : data?.release
-                      ? "有新镜像"
+                      ? "通知更新容器"
                       : "暂无镜像"}
             </button>
           </div>
@@ -533,6 +669,17 @@ export function DeploymentSettings({
             <p role="status" className="deploy-message">
               {data.source_error}
             </p>
+          )}
+          {canRebuild && (
+            <div className="deploy-message">
+              <button
+                className="button secondary small"
+                disabled={busy || state.refreshing}
+                onClick={() => confirmBuild(buildPending.current)}
+              >
+                重新检查并构建
+              </button>
+            </div>
           )}
           {data?.release && !data.schema_compatible && (
             <p role="status" className="deploy-message">
@@ -723,22 +870,71 @@ export function DeploymentSettings({
           </div>
         </section>
         <DeploymentHeatmap data={activity.data} error={activity.error} />
-        {buildConfirm && data && (
-          <Dialog title="确认构建发布" onClose={() => setBuildConfirm(false)}>
-            <p>使用 {data.repository} 的 main 分支源码构建并发布镜像？</p>
+        {closing && (
+          <Dialog
+            title="关闭更新记录"
+            onClose={() => !busy && setClosing(null)}
+          >
+            <p>
+              关闭 {closing.release.revision.slice(0, 7)} 的更新记录？
+              关闭记录不会中止已通知的
+              Watchtower；请先确认群晖更新已结束。关闭后可重新检查。
+            </p>
             <div className="dialog-actions">
               <button
                 className="button"
-                onClick={() => setBuildConfirm(false)}
+                onClick={() => setClosing(null)}
                 disabled={busy}
               >
                 取消
               </button>
               <button
                 className="button primary"
-                onClick={() => void build()}
+                onClick={() => void closeUpdate()}
+                disabled={busy}
+              >
+                关闭记录
+              </button>
+            </div>
+          </Dialog>
+        )}
+        {buildConfirm && data && (
+          <Dialog
+            title="确认构建发布"
+            onClose={() => !busy && setBuildConfirm(null)}
+          >
+            <p>
+              使用 {buildConfirm.repository} 的 main ·{" "}
+              {buildConfirm.revision.slice(0, 7)} 构建并发布镜像？
+            </p>
+            {buildConfirm.previous && (
+              <p>
+                原请求结果仍未确认，回执保留。将重新检查 GitHub
+                发布状态后提交新请求。
+              </p>
+            )}
+            <div className="dialog-actions">
+              <button
+                className="button"
+                onClick={() => setBuildConfirm(null)}
+                disabled={busy}
+              >
+                取消
+              </button>
+              <button
+                className="button primary"
+                onClick={() => void build(buildConfirm)}
                 disabled={
-                  busy || !data.can_build || activeBuild || !!state.error
+                  busy ||
+                  !data.can_build ||
+                  activeBuild ||
+                  !checkedSource ||
+                  sourceCurrent ||
+                  !!state.error ||
+                  !!data.source_error ||
+                  data.source?.sha !== buildConfirm.revision ||
+                  data.repository !== buildConfirm.repository ||
+                  (!!buildConfirm.previous && !canRebuild)
                 }
               >
                 确认构建
@@ -747,9 +943,13 @@ export function DeploymentSettings({
           </Dialog>
         )}
         {confirm && data?.can_update && (
-          <Dialog title="确认更新群晖" onClose={() => setConfirm(false)}>
+          <Dialog
+            title="确认更新群晖"
+            onClose={() => !busy && setConfirm(false)}
+          >
             <p>
-              更新到 {data.release?.revision.slice(0, 7)}？期间网页与后台任务会短暂中断。
+              通知 Watchtower 更新到 {data.release?.revision.slice(0, 7)}
+              ？期间网页与后台任务会短暂中断，恢复后核对实际线上提交。
             </p>
             <div className="dialog-actions">
               <button

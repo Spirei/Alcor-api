@@ -124,7 +124,9 @@ def test_synology_template_uses_requested_folder_and_read_only_images():
     import yaml
     compose=yaml.safe_load((ROOT/'deploy/compose.synology.yaml').read_text())
     app=compose['services']['app']
-    assert set(compose['services'])=={'app', 'alcor-api-updater'}
+    assert set(compose['services'])=={'app'}
+    assert app['labels']['com.centurylinklabs.watchtower.enable']=='true'
+    assert app['labels']['com.centurylinklabs.watchtower.scope']=='alcor-api'
     assert app['environment']['ALCOR_FILE_ROOT']=='/var/lib/alcor/uploads'
     assert app['environment']['ALCOR_ASSET_ROOT']=='/var/lib/alcor/assets'
     mounts=app['volumes']

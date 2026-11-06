@@ -122,7 +122,7 @@ async def save_config(data: ConfigInput, request: Request, who: Admin):
                 raise HTTPException(409, "此请求编号已用于其他配置")
             return old["result"]
         active = await (
-            await conn.execute("SELECT 1 FROM deployment_requests WHERE status IN ('queued','running')")
+            await conn.execute("SELECT 1 FROM deployment_requests WHERE status IN ('queued','running','unknown')")
         ).fetchone()
         if active:
             raise HTTPException(409, "更新执行期间不能更改发布配置")

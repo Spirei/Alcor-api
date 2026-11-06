@@ -1,5 +1,5 @@
-import os
 import ipaddress
+import os
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -147,14 +147,14 @@ class Settings(BaseSettings):
             if bool(self.mail_username) != bool(self.mail_password):
                 raise ValueError("mail username and password must be configured together")
         if self.deployment_runner_token and len(self.deployment_runner_token.get_secret_value()) < 32:
-            raise ValueError("deployment runner token requires at least 32 characters")
+            raise ValueError("Watchtower token requires at least 32 characters")
         if bool(self.deployment_repository) != bool(self.deployment_image):
             raise ValueError("deployment repository and image must be configured together")
         if self.deployment_updater_url:
             updater = urlsplit(self.deployment_updater_url)
-            if (updater.scheme != "http" or updater.hostname not in {"alcor-api-updater", "localhost", "127.0.0.1", "::1"}
-                    or not updater.netloc or updater.path or updater.query or updater.fragment or updater.username):
-                raise ValueError("updater must use the private control network or loopback")
+            if (updater.scheme != "http" or updater.hostname not in {"alcor-watchtower", "alcor-api-watchtower", "watchtower", "alcor-api-updater", "localhost", "127.0.0.1", "::1"}
+                    or not updater.netloc or updater.path not in {"", "/v1/update"} or updater.query or updater.fragment or updater.username):
+                raise ValueError("Watchtower must use the private Docker network or loopback and fixed update endpoint")
         return self
 
     @property

@@ -15,8 +15,7 @@ def evidence():
            "path": ".github/workflows/checks.yml", "repository": {"full_name": "example/project"},
            "status": "completed", "conclusion": "success"}
     jobs = [{"name": name, "status": "completed", "conclusion": "success", "steps": [
-        {"name": "Run ALCOR_TEST_DOCKER=1 uv run pytest -q" if name == "updater"
-         else "Run uv run python tools/test-shard.py --index "
+        {"name": "Run uv run python tools/test-shard.py --index "
          + name.removeprefix("foundation (").removesuffix(")") + " --count 8",
          "status": "completed", "conclusion": "success"}]} for name in sorted(gate.EXPECTED)]
     return run, jobs

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Alcor Platform",
-    "version": "0.1.182"
+    "version": "0.1.183"
   },
   "paths": {
     "/api/profile/requests": {
@@ -24552,6 +24552,58 @@
         }
       }
     },
+    "/api/deployment/requests/{request_id}/close": {
+      "post": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Close Request",
+        "description": "Explicitly close observation; never cancels or repeats a Watchtower action.",
+        "operationId": "close_request_api_deployment_requests__request_id__close_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/deployment/builds": {
       "post": {
         "tags": [
@@ -33374,6 +33426,18 @@
             "type": "string",
             "format": "uuid",
             "title": "Request Id"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{40}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
           }
         },
         "additionalProperties": false,
@@ -33511,6 +33575,19 @@
           "expected_kind"
         ],
         "title": "CloseAccountAction"
+      },
+      "CloseInput": {
+        "properties": {
+          "release": {
+            "$ref": "#/components/schemas/Release"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "release"
+        ],
+        "title": "CloseInput"
       },
       "CloseSiteSettings": {
         "properties": {

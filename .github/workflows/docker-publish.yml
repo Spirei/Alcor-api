@@ -1,10 +1,14 @@
 name: Publish AlcorApi
-run-name: "${{ inputs.verify_only && 'ci: 验证 AlcorApi 发布流程' || 'feat: 发布 AlcorApi 统一迁移版本' }}"
+run-name: "${{ inputs.verify_only && 'ci: 验证 AlcorApi 发布流程' || 'feat: 发布 AlcorApi 统一迁移版本' }} · ${{ inputs.request_id || github.sha }}"
 on:
   workflow_dispatch:
     inputs:
       request_id:
         description: 部署请求回执，保留在运行详情中
+        required: false
+        type: string
+      expected_revision:
+        description: 本次确认的 main 提交，变化时停止发布
         required: false
         type: string
       verify_only:
@@ -27,6 +31,17 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 核对本次确认的提交
+        env:
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
+          REVISION: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          expected=os.environ['EXPECTED_REVISION']
+          if expected and (not re.fullmatch('[a-f0-9]{40}', expected) or expected!=os.environ['REVISION']):
+              raise SystemExit('main 已变化，请重新确认构建目标')
+          PY
       - name: 核实同一提交的完整检查
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -85,21 +100,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: 构建更新器镜像
-        if: steps.existing.outputs.reuse != 'true'
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: deploy/Dockerfile.updater
-          platforms: linux/amd64
-          push: ${{ !inputs.verify_only }}
-          load: ${{ inputs.verify_only }}
-          tags: |
-            ${{ steps.identity.outputs.image }}-updater:latest
-            ${{ steps.identity.outputs.image }}-updater:sha-${{ github.sha }}
-          build-args: |
-            APP_VERSION=${{ steps.identity.outputs.version }}
-            SOURCE_REVISION=${{ github.sha }}
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         if: steps.existing.outputs.reuse != 'true'
         id: image

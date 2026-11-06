@@ -11858,6 +11858,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/deployment/requests/{request_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close Request
+         * @description Explicitly close observation; never cancels or repeats a Watchtower action.
+         */
+        post: operations["close_request_api_deployment_requests__request_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/deployment/builds": {
         parameters: {
             query?: never;
@@ -16407,6 +16427,8 @@ export interface components {
              * Format: uuid
              */
             request_id: string;
+            /** Expected Revision */
+            expected_revision?: string | null;
         };
         /** Capture */
         Capture: {
@@ -16455,6 +16477,10 @@ export interface components {
              * @constant
              */
             expected_kind: "account-action";
+        };
+        /** CloseInput */
+        CloseInput: {
+            release: components["schemas"]["Release"];
         };
         /** CloseSiteSettings */
         CloseSiteSettings: {
@@ -39428,6 +39454,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_request_api_deployment_requests__request_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloseInput"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

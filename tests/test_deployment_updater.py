@@ -1,79 +1,69 @@
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from uuid import uuid4
+"""Core identity checks shared with the independent Watchtower bridge.
 
-import psycopg
+Notification transport, commit-before-wire and original-UUID replay coverage is
+in test_deployment_watchtower_bridge.py; the retired executor has no wake API.
+"""
+
+from types import SimpleNamespace
+
 import pytest
-from alcor_api import __version__
+from alcor_api import __version__, deployments
 from alcor_api.config import Settings
-from test_deployment_requests import P, configure
 
 
-async def test_web_click_wakes_updater_only_after_queue_commit_and_same_uuid_is_not_resent(
-    client, admin, app, monkeypatch
-):
-    release, _calls, headers = configure(app, monkeypatch)
-    seen = []
-
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *_):
-            pass
-
-        def do_POST(self):
-            with psycopg.connect(app.state.settings.database_url.get_secret_value()) as conn:
-                rows = conn.execute("SELECT status FROM deployment_requests").fetchall()
-            seen.append((self.path, self.headers.get("Authorization"), rows))
-            self.send_response(202)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    app.state.settings.deployment_updater_url = "http://127.0.0.1:" + str(server.server_port)
-    try:
-        await client.post(P + "/runner/claim", headers=headers)
-        data = {"request_id": str(uuid4()), "release": release.model_dump()}
-        first = await client.post(P + "/requests", json=data)
-        assert first.status_code == 202 and first.json()["status"] == "queued"
-        assert seen == [("/v1/update", headers["authorization"], [("queued",)])]
-        assert (await client.post(P + "/requests", json=data)).json()["id"] == first.json()["id"]
-        assert len(seen) == 1
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+def runtime(tmp_path):
+    (tmp_path / "0001_synthetic.sql").write_text("SELECT 1;\n")
+    settings = SimpleNamespace(
+        migration_dir=tmp_path,
+        deployment_image="ghcr.io/synthetic/alcor-api",
+        deployment_running_image="",
+        source_revision="b" * 40,
+    )
+    release = deployments.Release(
+        version=__version__,
+        image=settings.deployment_image + "@sha256:" + "a" * 64,
+        revision=settings.source_revision,
+        schema_hash=deployments.schema_hash(settings.migration_dir),
+    )
+    return settings, release
 
 
-async def test_image_baked_identity_recognizes_latest_running_without_a_pinned_env(
-    client, admin, app, monkeypatch
-):
-    release, _calls, headers = configure(app, monkeypatch)
-    app.state.settings.deployment_running_image = ""
-    release.version = __version__
-    await client.post(P + "/runner/claim", headers=headers)
-    assert not (await client.get(P)).json()["matches_release"]  # Same version alone is insufficient.
-    app.state.settings.source_revision = release.revision
-    status = (await client.get(P)).json()
-    assert status["matches_release"] and not status["can_update"]
-    assert status["running_revision"] == release.revision
-    assert (
-        await client.post(P + "/requests", json={"request_id": str(uuid4()), "release": release.model_dump()})
-    ).status_code == 409
-    app.state.settings.deployment_running_image = release.image
-    app.state.settings.source_revision = "a" * 40
-    assert not (await client.get(P)).json()["matches_release"]  # A stale .env digest cannot override image identity.
+def test_image_baked_identity_requires_a_commit_even_with_an_old_pinned_digest(tmp_path):
+    settings, release = runtime(tmp_path)
+    assert deployments.already_running(settings, release)
+    settings.source_revision = ""
+    assert not deployments.already_running(settings, release)
+    settings.deployment_running_image = release.image
+    assert not deployments.already_running(settings, release)
+    assert not deployments.already_running(settings, None)
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        "http://untrusted.example",
-        "http://alcor-api-updater:8081/other",
-        "http://user@alcor-api-updater:8081",
-        "http://alcor-api-updater:8081?target=fire",
-    ],
-)
-def test_updater_wake_target_cannot_be_an_external_service_or_browser_command(url):
+def test_stale_environment_digest_cannot_override_baked_commit(tmp_path):
+    settings, release = runtime(tmp_path)
+    settings.deployment_running_image = release.image
+    settings.source_revision = "c" * 40
+    assert not deployments.already_running(settings, release)
+    settings.source_revision = release.revision
+    settings.deployment_running_image = settings.deployment_image + "@sha256:" + "d" * 64
+    assert deployments.already_running(settings, release)
+
+
+@pytest.mark.parametrize("change", [
+    {"version": "0.0.0"},
+    {"schema_hash": "c" * 64},
+    {"image": "ghcr.io/synthetic/other@sha256:" + "a" * 64},
+])
+def test_current_commit_alone_cannot_prove_another_release_is_running(tmp_path, change):
+    settings, release = runtime(tmp_path)
+    assert not deployments.already_running(settings, release.model_copy(update=change))
+
+
+@pytest.mark.parametrize("url", [
+    "http://outside.invalid/v1/update",
+    "http://watchtower:8080/other",
+    "http://user@watchtower:8080/v1/update",
+    "http://watchtower:8080/v1/update?target=other",
+])
+def test_watchtower_configuration_rejects_external_services_and_browser_commands(url):
     with pytest.raises(ValueError):
         Settings(deployment_updater_url=url)

@@ -40,12 +40,20 @@ export type Receipt = {
   request_id: string;
   version: string;
   image: string;
+  revision?: string;
+  schema_hash?: string;
   status: string;
   created_at: string;
 };
+export type BuildReceipt = {
+  request_id: string;
+  status: string;
+  created_at: string;
+  message?: string;
+};
 export type Deployment = {
   can_build: boolean;
-  build_requests: { request_id: string; status: string; created_at: string }[];
+  build_requests: BuildReceipt[];
   configured: boolean;
   repository: string;
   package_url: string | null;
@@ -69,6 +77,70 @@ export type Deployment = {
   runner: { online: boolean; observed_at: string } | null;
   receipts: Receipt[];
 };
+export function receiptCloseTarget(receipt: Receipt): Release | null {
+  if (
+    !["queued", "running", "unknown"].includes(receipt.status) ||
+    !/^\d+\.\d+\.\d+$/.test(receipt.version) ||
+    !/^ghcr\.io\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/.test(receipt.image) ||
+    !/^[a-f0-9]{40}$/.test(receipt.revision || "") ||
+    !/^[a-f0-9]{64}$/.test(receipt.schema_hash || "")
+  )
+    return null;
+  return {
+    image: receipt.image,
+    version: receipt.version,
+    revision: receipt.revision!,
+    schema_hash: receipt.schema_hash!,
+  };
+}
+export function canRestartBuild(
+  data: Pick<
+    Deployment,
+    | "can_build"
+    | "source"
+    | "source_error"
+    | "check"
+    | "release"
+    | "build"
+    | "build_error"
+    | "build_requests"
+  > | null,
+  original: string | null,
+  now = Date.now(),
+) {
+  if (
+    !data?.can_build ||
+    !original ||
+    !data.source ||
+    data.source_error ||
+    data.build_error ||
+    data.check?.sha !== data.source.sha ||
+    data.check.status !== "completed" ||
+    data.check.conclusion !== "success" ||
+    data.release?.revision === data.source.sha ||
+    (data.build && data.build.status !== "completed")
+  )
+    return false;
+  const receipt = data.build_requests.find((r) => r.request_id === original);
+  if (!receipt || !["unknown", "dispatching"].includes(receipt.status))
+    return false;
+  const age = now - Date.parse(receipt.created_at);
+  return Number.isFinite(age) && age >= 15 * 60000;
+}
+export function updateNeedsObservation(
+  receipt: Pick<Receipt, "status" | "created_at">,
+  now = Date.now(),
+) {
+  if (["queued", "running"].includes(receipt.status)) return true;
+  const age = now - Date.parse(receipt.created_at);
+  return (
+    receipt.status === "unknown" &&
+    Number.isFinite(age) &&
+    age >= -60000 &&
+    age < 15 * 60000
+  );
+}
+
 export function deploymentPollDelay(
   data: Pick<
     Deployment,
@@ -93,7 +165,7 @@ export function deploymentPollDelay(
     age < 15 * 60000;
   const active =
     watchingUpdate ||
-    data.receipts.some((r) => ["queued", "running"].includes(r.status)) ||
+    data.receipts.some((r) => updateNeedsObservation(r, now)) ||
     (data.build && data.build.status !== "completed") ||
     (data.check && data.check.status !== "completed") ||
     recent;

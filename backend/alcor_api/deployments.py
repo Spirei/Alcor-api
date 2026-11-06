@@ -3,17 +3,17 @@
 import asyncio
 import hashlib
 import json
-import secrets
-import urllib.request
 import urllib.error
+import urllib.request
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__
+from . import deployment_watchtower as bridge
 from .models import InputModel
 from .security import Identity, administrator, lock_mutation_identity
 
@@ -34,11 +34,6 @@ class UpdateInput(InputModel):
     release: Release
 
 
-class FinishInput(InputModel):
-    id: UUID
-    status: Literal["succeeded", "failed", "unknown"]
-
-
 def schema_hash(directory):
     h = hashlib.sha256()
     for path in sorted(directory.glob("*.sql")):
@@ -51,31 +46,9 @@ def configured(settings):
 
 
 def already_running(settings, release):
-    if not release:
-        return False
-    if settings.source_revision:
-        return (release.revision == settings.source_revision and release.version == __version__
-                and release.schema_hash == schema_hash(settings.migration_dir))
-    return release.image == settings.deployment_running_image
-
-
-def wake_updater(settings):
-    """Best-effort wake after commit; the durable queue survives a lost HTTP notification."""
-    if not settings.deployment_updater_url or not settings.deployment_runner_token:
-        return
-
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, *args, **kwargs):
-            return None
-
-    req = urllib.request.Request(settings.deployment_updater_url + "/v1/update", data=b"{}", method="POST",
-                                 headers={"Authorization": "Bearer " + settings.deployment_runner_token.get_secret_value(),
-                                          "Content-Type": "application/json"})
-    try:
-        with urllib.request.build_opener(NoRedirect).open(req, timeout=1) as response:
-            response.read(1024)
-    except (OSError, ValueError):
-        pass
+    return bool(release and bridge.runtime_matches(
+        settings, release.model_dump(), version=__version__, schema=schema_hash(settings.migration_dir),
+    ))
 
 
 def github_json(settings, path, body=None):
@@ -131,6 +104,7 @@ async def status(request: Request, who: Admin):
     from .deployment_config import effective
 
     settings, db = await effective(request), request.app.state.db
+    await bridge.reconcile(db, settings, version=__version__, schema=schema_hash(settings.migration_dir))
     from .deployment_observations import observation, package_page
 
     release, release_error = None, None
@@ -161,7 +135,8 @@ async def status(request: Request, who: Admin):
     async with db.connection() as conn:
         rows = await (
             await conn.execute(
-                "SELECT id,request_id,image,version,status,created_at,claimed_at,finished_at FROM deployment_requests ORDER BY created_at DESC LIMIT 20"
+                "SELECT id,request_id,image,version,revision,schema_hash,status,created_at,claimed_at,finished_at FROM deployment_requests WHERE owner_id=%s ORDER BY created_at DESC LIMIT 20",
+                (who.id,),
             )
         ).fetchall()
         builds = await (
@@ -170,11 +145,10 @@ async def status(request: Request, who: Admin):
                 (settings.deployment_repository, who.id),
             )
         ).fetchall()
-        runner = await (
-            await conn.execute(
-                "SELECT observed_at,observed_at>clock_timestamp()-interval '3 minutes' AS online FROM deployment_runner WHERE singleton"
-            )
-        ).fetchone()
+        active = await (await conn.execute(
+            "SELECT 1 FROM deployment_requests WHERE status IN ('queued','running','unknown') LIMIT 1",
+        )).fetchone()
+    runner = await asyncio.to_thread(bridge.probe, settings)
     compatible = bool(release and release.schema_hash == schema_hash(settings.migration_dir))
     return {
         "configured": configured(settings),
@@ -197,11 +171,10 @@ async def status(request: Request, who: Admin):
         "can_update": bool(
             release
             and compatible
-            and runner
+            and runner["configured"]
             and runner["online"]
-            and settings.deployment_runner_token
             and not already_running(settings, release)
-            and not any(r["status"] in {"queued", "running"} for r in rows)
+            and not active
         ),
     }
 
@@ -211,6 +184,7 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
     from .deployment_config import effective, guard_generation
 
     settings, db = await effective(request), request.app.state.db
+    await bridge.reconcile(db, settings, version=__version__, schema=schema_hash(settings.migration_dir))
     # An accepted UUID remains queryable even when GitHub is unavailable or the process restarted.
     async with db.connection() as conn:
         old = await (
@@ -230,8 +204,11 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
         raise HTTPException(409, "此版本需要单独执行数据库迁移")
     if already_running(settings, release):
         raise HTTPException(409, "此镜像已在运行")
-    if not settings.deployment_runner_token:
-        raise HTTPException(409, "尚未配置群晖更新执行器")
+    if not bridge.configured(settings):
+        raise HTTPException(409, "尚未配置独立 Watchtower")
+    runner = await asyncio.to_thread(bridge.probe, settings)
+    if not runner["online"]:
+        raise HTTPException(409, "无法连接独立 Watchtower")
     async with db.connection() as conn, conn.transaction():
         await lock_mutation_identity(conn, who, require_admin=True)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.deployment',0))")
@@ -246,15 +223,8 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
             if any(old[k] != getattr(release, k) for k in ("image", "version", "revision", "schema_hash")):
                 raise HTTPException(409, "此请求编号已用于不同版本")
             return public_receipt(old)
-        online = await (
-            await conn.execute(
-                "SELECT 1 FROM deployment_runner WHERE singleton AND observed_at>clock_timestamp()-interval '3 minutes'"
-            )
-        ).fetchone()
-        if not online:
-            raise HTTPException(409, "群晖更新执行器未连接")
         active = await (
-            await conn.execute("SELECT 1 FROM deployment_requests WHERE status IN ('queued','running')")
+            await conn.execute("SELECT 1 FROM deployment_requests WHERE status IN ('queued','running','unknown')")
         ).fetchone()
         if active:
             raise HTTPException(409, "已有更新请求，请先核对回执")
@@ -276,20 +246,24 @@ async def submit(data: UpdateInput, request: Request, who: Admin):
             "INSERT INTO audit_events (actor_id,action,target_id,request_id) VALUES (%s,'deployment.requested',%s,%s)",
             (who.id, str(row["id"]), data.request_id),
         )
-    await asyncio.to_thread(wake_updater, settings)
-    return public_receipt(row)
+    outcome = await bridge.dispatch(db, settings, row["id"])
+    return {**public_receipt(outcome["receipt"]), "message": outcome["message"]}
 
 
 def public_receipt(row):
     return {
         k: row[k]
-        for k in ("id", "request_id", "image", "version", "status", "created_at", "claimed_at", "finished_at")
+        for k in ("id", "request_id", "image", "version", "revision", "schema_hash", "status", "created_at", "claimed_at", "finished_at")
     }
 
 
 @router.get("/requests/{request_id}")
 async def receipt(request_id: UUID, request: Request, who: Admin):
-    async with request.app.state.db.connection() as conn:
+    from .deployment_config import effective
+
+    settings, db = await effective(request), request.app.state.db
+    await bridge.reconcile(db, settings, version=__version__, schema=schema_hash(settings.migration_dir))
+    async with db.connection() as conn:
         row = await (
             await conn.execute(
                 "SELECT * FROM deployment_requests WHERE owner_id=%s AND request_id=%s", (who.id, request_id)
@@ -300,72 +274,48 @@ async def receipt(request_id: UUID, request: Request, who: Admin):
     return public_receipt(row)
 
 
-def runner_auth(request):
-    token = request.app.state.settings.deployment_runner_token
-    if not token or not secrets.compare_digest(
-        request.headers.get("authorization", ""), "Bearer " + token.get_secret_value()
-    ):
-        raise HTTPException(403, "执行器认证失败")
+class CloseInput(InputModel):
+    release: Release
+
+
+@router.post("/requests/{request_id}/close")
+async def close_request(request_id: UUID, data: CloseInput, request: Request, who: Admin):
+    """Explicitly close observation; never cancels or repeats a Watchtower action."""
+    async with request.app.state.db.connection() as conn, conn.transaction():
+        await lock_mutation_identity(conn, who, require_admin=True)
+        await conn.execute(bridge.LOCK)
+        row = await (await conn.execute(
+            "SELECT * FROM deployment_requests WHERE owner_id=%s AND request_id=%s FOR UPDATE",
+            (who.id, request_id),
+        )).fetchone()
+        if not row:
+            raise HTTPException(404, "未查到此更新请求")
+        if any(row[k] != getattr(data.release, k) for k in ("image", "version", "revision", "schema_hash")):
+            raise HTTPException(409, "原更新目标不符，请重新读取原回执")
+        if row["status"] == "cancelled":
+            return {**public_receipt(row), "message": "原更新记录已关闭"}
+        if row["status"] not in {"queued", "running", "unknown"}:
+            raise HTTPException(409, "此更新记录已有最终结果，请重新读取")
+        row = await (await conn.execute(
+            "UPDATE deployment_requests SET status='cancelled',finished_at=clock_timestamp() WHERE id=%s RETURNING *",
+            (row["id"],),
+        )).fetchone()
+        await conn.execute(
+            "INSERT INTO audit_events(actor_id,action,target_id,request_id) VALUES(%s,'deployment.observation_closed',%s,%s)",
+            (who.id, str(row["id"]), request_id),
+        )
+    return {**public_receipt(row), "message": "原更新记录已关闭；此操作不会中止已通知的 Watchtower"}
 
 
 @router.post("/runner/claim", include_in_schema=False)
-async def claim(request: Request):
-    runner_auth(request)
-    async with request.app.state.db.connection() as conn, conn.transaction():
-        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.deployment',0))")
-        await conn.execute(
-            "INSERT INTO deployment_runner (singleton) VALUES (true) ON CONFLICT(singleton) DO UPDATE SET observed_at=clock_timestamp()"
-        )
-        row = await (
-            await conn.execute(
-                "SELECT d.* FROM deployment_requests d JOIN users u ON u.id=d.owner_id WHERE d.status='queued' FOR UPDATE OF d"
-            )
-        ).fetchone()
-        if not row:
-            return {"request": None}
-        # Revoked administrators cannot leave a queued privilege behind.
-        owner = await (
-            await conn.execute("SELECT active,role FROM users WHERE id=%s FOR SHARE", (row["owner_id"],))
-        ).fetchone()
-        if not owner["active"] or owner["role"] != "admin":
-            await conn.execute(
-                "UPDATE deployment_requests SET status='cancelled',finished_at=clock_timestamp() WHERE id=%s",
-                (row["id"],),
-            )
-            return {"request": None}
-        await conn.execute(
-            "UPDATE deployment_requests SET status='running',claimed_at=clock_timestamp() WHERE id=%s",
-            (row["id"],),
-        )
-        return {"request": {k: row[k] for k in ("id", "image", "version", "revision", "schema_hash")}}
-
-
 @router.post("/runner/finish", include_in_schema=False)
-async def finish(data: FinishInput, request: Request):
-    runner_auth(request)
-    async with request.app.state.db.connection() as conn, conn.transaction():
-        row = await (
-            await conn.execute("SELECT * FROM deployment_requests WHERE id=%s FOR UPDATE", (data.id,))
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "更新请求不存在")
-        if row["status"] == data.status:
-            return {"status": data.status}
-        if row["status"] != "running":
-            raise HTTPException(409, "更新回执状态冲突")
-        await conn.execute(
-            "UPDATE deployment_requests SET status=%s,finished_at=clock_timestamp() WHERE id=%s",
-            (data.status, data.id),
-        )
-        await conn.execute(
-            "INSERT INTO audit_events (actor_id,action,target_id,request_id) VALUES (%s,%s,%s,%s)",
-            (row["owner_id"], "deployment." + data.status, str(data.id), row["request_id"]),
-        )
-    return {"status": data.status}
+async def retired_runner():
+    raise HTTPException(410, "自建更新执行器已停用，请使用独立 Watchtower")
 
 
 class BuildInput(InputModel):
     request_id: UUID
+    expected_revision: str | None = Field(default=None, pattern=r"^[a-f0-9]{40}$")
 
 
 @router.post("/builds", status_code=202)
@@ -375,30 +325,38 @@ async def build_source(data: BuildInput, request: Request, who: Admin):
     settings, db = await effective(request), request.app.state.db
     if not configured(settings) or not settings.deployment_github_token:
         raise HTTPException(409, "尚未配置发布权限")
+    # Replay needs no provider connectivity; never hold PG identity locks while
+    # waiting for independent GitHub reads.
+    async with db.connection() as conn, conn.transaction():
+        await lock_mutation_identity(conn, who, require_admin=True)
+        await guard_generation(conn, settings)
+        old = await (await conn.execute(
+            "SELECT request_id,status,created_at FROM deployment_builds WHERE owner_id=%s AND request_id=%s",
+            (who.id, data.request_id),
+        )).fetchone()
+        if old:
+            return old
+    from .deployment_publication import preflight
+    revision = await asyncio.to_thread(preflight, settings, github_json, Release)
+    if data.expected_revision is not None and data.expected_revision != revision:
+        raise HTTPException(409, "main 已变化，请刷新后重新确认构建目标")
     async with db.connection() as conn, conn.transaction():
         await lock_mutation_identity(conn, who, require_admin=True)
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.build',0))")
         await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('alcor.deployment',0))")
         await guard_generation(conn, settings)
-        old = await (
-            await conn.execute(
-                "SELECT request_id,status,created_at FROM deployment_builds WHERE owner_id=%s AND request_id=%s",
-                (who.id, data.request_id),
-            )
-        ).fetchone()
+        old = await (await conn.execute(
+            "SELECT request_id,status,created_at FROM deployment_builds WHERE owner_id=%s AND request_id=%s",
+            (who.id, data.request_id),
+        )).fetchone()
         if old:
             return old
-        active = await (
-            await conn.execute(
-                "SELECT 1 FROM deployment_builds WHERE repository=%s AND status<>'failed' AND created_at>clock_timestamp()-interval '5 minutes'",
-                (settings.deployment_repository,),
-            )
-        ).fetchone()
+        active = await (await conn.execute(
+            "SELECT 1 FROM deployment_builds WHERE repository=%s AND status<>'failed' AND created_at>clock_timestamp()-interval '5 minutes'",
+            (settings.deployment_repository,),
+        )).fetchone()
         if active:
             raise HTTPException(409, "刚刚已有构建请求，请核对 GitHub 构建状态")
-        from .deployment_publication import preflight
-
-        await asyncio.to_thread(preflight, settings, github_json, Release)
         await conn.execute(
             "INSERT INTO deployment_builds (owner_id,request_id,status,repository) VALUES (%s,%s,'dispatching',%s)",
             (who.id, data.request_id, settings.deployment_repository),
@@ -415,7 +373,7 @@ async def build_source(data: BuildInput, request: Request, who: Admin):
             github_json,
             settings,
             "/actions/workflows/docker-publish.yml/dispatches",
-            {"ref": "main", "inputs": {"request_id": str(data.request_id)}},
+            {"ref": "main", "inputs": {"request_id": str(data.request_id), "expected_revision": revision}},
         )
     except urllib.error.HTTPError as exc:
         # An explicit rejection is different from losing the dispatch response.
@@ -454,19 +412,22 @@ async def build_receipt(request_id: UUID, request: Request, who: Admin):
         ).fetchone()
     if not row:
         raise HTTPException(404, "未查到此构建请求")
-    if row["status"] in {"unknown", "dispatching"}:
+    if row["status"] in {"unknown", "dispatching", "submitted"}:
+        from .deployment_build_receipts import lookup_run
         from .deployment_config import effective
-        from .deployment_build_receipts import find_run
 
         settings = await effective(request)
         try:
-            matched = await asyncio.to_thread(find_run, settings, github_json, request_id)
+            matched = await asyncio.to_thread(lookup_run, settings, github_json, request_id)
         except (OSError, ValueError, KeyError, TypeError):
             matched = False
         if matched:
+            status = "failed" if matched.get("status") == "completed" and matched.get("conclusion") != "success" else "submitted"
             async with request.app.state.db.connection() as conn:
                 row = await (await conn.execute(
-                    "UPDATE deployment_builds SET status='submitted' WHERE owner_id=%s AND request_id=%s AND status IN ('unknown','dispatching') RETURNING request_id,status,created_at",
-                    (who.id, request_id),
+                    "UPDATE deployment_builds SET status=%s WHERE owner_id=%s AND request_id=%s AND status IN ('unknown','dispatching','submitted') RETURNING request_id,status,created_at",
+                    (status, who.id, request_id),
                 )).fetchone() or row
+            if status == "failed":
+                row = {**row, "message": "GitHub 镜像构建未成功，请查看对应运行日志"}
     return row

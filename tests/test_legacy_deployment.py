@@ -7,6 +7,7 @@ from uuid import uuid4
 import httpx
 import pytest_asyncio
 from alcor_api import deployment_config as configuration
+from alcor_api import deployment_watchtower as bridge
 from alcor_api import deployments
 from alcor_api.backups import tables_and_hashes
 from alcor_api.cli import create_user
@@ -33,7 +34,7 @@ async def legacy(app, admin, monkeypatch):
         raise AssertionError("test may not call GitHub, OAuth, or updater")
 
     monkeypatch.setattr(deployments, "github_json", offline)
-    monkeypatch.setattr(deployments, "wake_updater", offline)
+    monkeypatch.setattr(bridge, "notify", offline)
     monkeypatch.setattr(configuration, "oauth_json", offline)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -245,7 +246,9 @@ async def test_durable_build_and_update_commands_only_dispatch_fake_targets_once
 
     release, calls, _ = configure(app, monkeypatch)
     wakes = []
-    monkeypatch.setattr(deployments, "wake_updater", lambda settings: wakes.append(settings.deployment_image))
+    app.state.settings.deployment_updater_url = "http://alcor-watchtower:8080/v1/update"
+    monkeypatch.setattr(bridge, "probe", lambda _settings: {"configured": True, "online": True, "kind": "watchtower", "observed_at": None, "reason": "synthetic port"})
+    monkeypatch.setattr(bridge, "notify", lambda settings: wakes.append(settings.deployment_image) or {"status": "running", "message": "notified"})
     identifier = str(uuid4())
     results = await asyncio.gather(*(legacy.post(P, json={"request_id": identifier}) for _ in range(2)))
     assert all(result.status_code == 202 for result in results), [result.text for result in results]
@@ -254,10 +257,6 @@ async def test_durable_build_and_update_commands_only_dispatch_fake_targets_once
     stored = await legacy.get(results[0].json()["receiptUrl"])
     assert stored.status_code == 200 and stored.json()["request_id"] == identifier
     assert stored.json()["status"] == "submitted"
-    async with db.connection() as conn:
-        await conn.execute(
-            "INSERT INTO deployment_runner(singleton,observed_at) VALUES(true,clock_timestamp())"
-        )
     command = {"request_id": str(uuid4()), "release": release.model_dump()}
     update = await legacy.post(P + "/container-update", json=command)
     assert update.status_code == 202 and update.json()["pending"] is True and update.json()["ok"] is False, (
@@ -265,7 +264,7 @@ async def test_durable_build_and_update_commands_only_dispatch_fake_targets_once
     )
     assert len(wakes) == 1
     receipt = await legacy.get(update.json()["receiptUrl"])
-    assert receipt.status_code == 200 and receipt.json()["status"] == "queued"
+    assert receipt.status_code == 200 and receipt.json()["status"] == "running"
     again = await legacy.post(P + "/container-update", json=command)
     assert again.status_code == 202 and len(wakes) == 1
     changed = await legacy.post(

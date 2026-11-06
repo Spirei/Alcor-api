@@ -7,7 +7,7 @@ import time
 import urllib.parse
 import urllib.request
 
-EXPECTED = {*(f"foundation ({index})" for index in range(8)), "updater"}
+EXPECTED = {f"foundation ({index})" for index in range(8)}
 
 
 def select_run(runs, repository, revision):
@@ -31,8 +31,7 @@ def passed(run, jobs):
         if job.get("status") != "completed" or job.get("conclusion") != "success":
             raise ValueError("检查任务尚未全部成功")
         steps = job.get("steps", [])
-        required = ("Run ALCOR_TEST_DOCKER=1 uv run pytest" if job["name"] == "updater"
-                    else "Run uv run python tools/test-shard.py --index "
+        required = ("Run uv run python tools/test-shard.py --index "
                     + job["name"].removeprefix("foundation (").removesuffix(")") + " --count 8")
         if not any(s.get("name", "").startswith(required) and s.get("conclusion") == "success"
                    and s.get("status") == "completed" for s in steps):

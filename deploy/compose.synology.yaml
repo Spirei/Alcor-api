@@ -15,7 +15,7 @@ services:
     env_file:
       - .env
     environment:
-      ALCOR_DEPLOYMENT_UPDATER_URL: http://alcor-api-updater:8081
+      ALCOR_DEPLOYMENT_UPDATER_URL: ${ALCOR_DEPLOYMENT_UPDATER_URL:-}
       ALCOR_CONNECTION_SECRET_DIR: /var/lib/alcor/state/connection-secrets
       ALCOR_FILE_ROOT: /var/lib/alcor/uploads
       ALCOR_ASSET_ROOT: /var/lib/alcor/assets
@@ -35,10 +35,8 @@ services:
       - ${ALCOR_DATA_DIR}/backup-key:/var/lib/alcor/backup-key
     networks:
       - existing-data
-      - update-control
     labels:
-      com.alcor.update.scope: alcor-api
-      com.centurylinklabs.watchtower.enable: "false"
+      com.centurylinklabs.watchtower.enable: "true"
       com.centurylinklabs.watchtower.scope: alcor-api
     read_only: true
     tmpfs:
@@ -56,30 +54,7 @@ services:
       retries: 3
       start_period: 45s
     stop_grace_period: 45s
-  alcor-api-updater:
-    image: ${ALCOR_DEPLOYMENT_IMAGE:?请填写应用镜像仓库名}-updater:latest
-    platform: linux/amd64
-    container_name: alcor-api-updater
-    restart: unless-stopped
-    environment:
-      ALCOR_UPDATER_ORIGIN: http://app:8080
-      ALCOR_UPDATER_TOKEN: ${ALCOR_DEPLOYMENT_RUNNER_TOKEN:?请设置独立更新器随机密钥}
-      ALCOR_UPDATER_APP_IMAGE: ${ALCOR_DEPLOYMENT_IMAGE:?请填写应用镜像仓库名}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOCKER_CONFIG_DIR:?请填写GHCR登录配置目录}:/config:ro
-      - updater-state:/state
-    networks: [update-control]
-    read_only: true
-    tmpfs: ["/tmp:mode=1777"]
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    labels:
-      com.centurylinklabs.watchtower.enable: "false"
-      com.centurylinklabs.watchtower.scope: alcor-api
 networks:
-  update-control:
-    internal: true
   existing-data:
     external: true
     name: ${ALCOR_EXISTING_NETWORK:?请填写现有PG和Redis所在网络}
@@ -87,7 +62,4 @@ networks:
 # images中素材文件属主同上、权限0600，使用平铺文件名；不放凭据或密钥。
 # 容器启动不会执行数据库迁移，也不会迁移已有 state/files 或 PG 头像。
 # 首次部署后若配置网页更新执行器，固定compose.yaml应使用此模板的同一份配置。
-# 更新器状态使用独立持久卷，root 所有、0700；不挂入应用，不包含数据库卷。
-
-volumes:
-  updater-state:
+# Watchtower 单独部署并加入同一私有网络；本项目不创建或更新 Watchtower。
